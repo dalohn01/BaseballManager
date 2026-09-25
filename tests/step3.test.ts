@@ -8,7 +8,7 @@ import type { GameState } from '../src/domain/state';
 import { absoluteRound, SCHEMA_VERSION } from '../src/domain/state';
 import { getTemplate } from '../src/events/registry';
 import { lossExpectation } from '../src/simulation/round';
-import { expiringPlayers } from '../src/simulation/season';
+import { expiringPlayers, renewalTerms } from '../src/simulation/season';
 import { newGame, playSeason, run, T0 } from './helpers';
 
 function force(s: GameState, templateId: string): GameState {
@@ -198,9 +198,14 @@ describe('contracts', () => {
     const exp = expiringPlayers(s, 'hfx');
     exp[0].satisfaction = 20; // will refuse
     const willing = exp.slice(1).filter((p) => p.satisfaction >= BALANCE.offseason.renewalMinSatisfaction);
-    const salaries = new Map(willing.map((p) => [p.id, p.contract.salary]));
+    const asks = new Map(willing.map((p) => [p.id, renewalTerms(p).salary]));
+    for (const p of willing) {
+      const ratio = asks.get(p.id)! / p.contract.salary;
+      expect(ratio).toBeGreaterThanOrEqual(BALANCE.offseason.renewalBand[0] - 0.02);
+      expect(ratio).toBeLessThanOrEqual(BALANCE.offseason.renewalBand[1] * (1 + BALANCE.offseason.renewalMoneyPremium) + 0.02);
+    }
     s = ack(resolve(s, 'all'));
-    for (const p of willing) expect(s.players[p.id].contract.salary).toBeGreaterThan(salaries.get(p.id)!);
+    for (const p of willing) expect(s.players[p.id].contract.salary).toBe(asks.get(p.id));
     while (s.calendar.season === 1) s = calmStep(s);
     expect(s.players[exp[0].id].clubId).toBe('');
     for (const p of willing) expect(s.players[p.id].clubId).toBe('hfx');

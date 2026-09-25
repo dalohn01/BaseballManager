@@ -140,8 +140,10 @@ export const BALANCE = {
   },
 
   offseason: {
-    renewalRaise: 0.1,
-    renewalRaiseMoneyPriority: 0.2,
+    /** Market value per rating point above 30, and the allowed band around the current salary. */
+    renewalPerRatingPoint: 1_400,
+    renewalBand: [0.85, 1.3] as const,
+    renewalMoneyPremium: 0.1,
     renewalSeasons: 2,
     /** Players below this satisfaction refuse to re-sign. */
     renewalMinSatisfaction: 45,

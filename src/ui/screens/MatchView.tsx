@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { EventInstance } from '../../domain/state';
 import { clubName, shortName } from '../../domain/state';
 import type { MatchResult, PlayRecord } from '../../domain/types';
@@ -22,6 +22,9 @@ export function MatchView({ ev }: { ev: EventInstance }) {
   const reduced = useReducedMotion();
   const [shown, setShown] = useState(0);
   const [auto, setAuto] = useState(false);
+  const nextRef = useRef<HTMLButtonElement>(null);
+  // Keep keyboard focus on the playback's primary action after confirming the lineup.
+  useEffect(() => nextRef.current?.focus({ preventScroll: true }), []);
   const done = shown >= plays.length;
 
   useEffect(() => {
@@ -63,7 +66,7 @@ export function MatchView({ ev }: { ev: EventInstance }) {
             <Icon name="chat" size={18} /> {current ? current.text : 'Players take the field. Step through the highlights or skip to the result.'}
           </p>
           <div className="playback">
-            <button className="btn btn-primary" onClick={() => setShown((n) => n + 1)}>
+            <button ref={nextRef} className="btn btn-primary" onClick={() => setShown((n) => n + 1)}>
               Next highlight <Icon name="play" size={18} />
             </button>
             <button className="btn btn-secondary" onClick={() => setShown(plays.length)}>

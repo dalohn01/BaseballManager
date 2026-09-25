@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { optionBlocker, totalCost } from '../../application/engine';
 import { effectiveRating } from '../../domain/lineup';
 import type { EventInstance, EventOption } from '../../domain/state';
@@ -146,6 +146,12 @@ function EventDecision({ ev }: { ev: EventInstance }) {
   const cost = totalCost(selected, activeBoost);
   const unlimited = s.time.mode === 'unlimited';
 
+  const titleRef = useRef<HTMLHeadingElement>(null);
+  // A new event replaced the Continue button: move focus to its title (screen readers announce it; Tab reaches the options).
+  useEffect(() => {
+    if (document.activeElement === document.body) titleRef.current?.focus({ preventScroll: true });
+  }, []);
+
   const confirm = () => {
     void c.dispatch({ type: 'resolveEvent', eventId: ev.id, revision: s.revision, optionId: selected.id, boostId: activeBoost?.id ?? null });
   };
@@ -153,7 +159,7 @@ function EventDecision({ ev }: { ev: EventInstance }) {
   return (
     <section className="event-card" aria-labelledby="event-title">
       <Ribbon>Next event</Ribbon>
-      <h1 className="event-title" id="event-title">
+      <h1 className="event-title" id="event-title" tabIndex={-1} ref={titleRef}>
         {ev.type === 'leagueGame' ? 'League Game' : ev.title}
       </h1>
       {ev.type === 'leagueGame' ? <PreMatch ev={ev} choice={selected.id as LeagueGameChoice} /> : <EventArt type={ev.type} club={club} />}
@@ -344,15 +350,11 @@ export function ContinueButton({ ev }: { ev: EventInstance }) {
   const next = s.nextEvent;
   const label = next ? (next.type === 'leagueGame' ? 'League game' : SLOT_LABELS[next.templateId] ?? next.title) : 'Finish';
   const onClick = () => void c.dispatch({ type: 'acknowledgeEvent', eventId: ev.id });
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'BODY') onClick();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  });
+  const ref = useRef<HTMLButtonElement>(null);
+  // The confirm button that had focus is gone; keep keyboard users on the primary action.
+  useEffect(() => ref.current?.focus({ preventScroll: true }), []);
   return (
-    <button className="btn btn-primary btn-confirm" onClick={onClick} disabled={snap.busy}>
+    <button ref={ref} className="btn btn-primary btn-confirm" onClick={onClick} disabled={snap.busy}>
       <span>Continue</span>
       <span className="btn-cost">
         <small>Next: {label}</small>

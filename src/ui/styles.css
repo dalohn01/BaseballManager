@@ -457,3 +457,9 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .commitments li { padding: 6px 0; border-bottom: 1px solid var(--line); }
 .title-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
 .club-goal { margin-bottom: 14px; }
+/* Step 4: comfortable touch targets for text links on touch-sized screens */
+@media (max-width: 1000px), (pointer: coarse) {
+  .link, .back, .player-link, .notes a { min-height: 44px; display: inline-flex; align-items: center; }
+  .notes a { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
+}
+.event-title:focus { outline: none; }

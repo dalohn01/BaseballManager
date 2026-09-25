@@ -9,11 +9,46 @@ Kräver Node 20.19+ (utvecklat med Node 24 LTS).
 ```bash
 npm install
 npm run dev        # utvecklingsserver, http://localhost:5173
-npm test           # domän-, simulerings- och sparningstester (vitest)
+npm test           # alla automattester (cirka 1,5 minut, varav stabilitetstestet står för den största delen)
+npx vitest run tests/e2e.test.tsx   # bara end-to-end-flödet
 npm run typecheck
 npm run build      # produktionsbygge till dist/ (statiska filer, relativ base)
 npm run preview    # servera produktionsbygget
 ```
+
+Produktionsbygget är en statisk webbapp (cirka 430 kB JS, 132 kB gzip). Typsnitten ligger lokalt i bygget, så appen gör inga externa anrop och kräver inga hemligheter, konton eller betaltjänster. Allt kan läggas på valfri statisk webbhost.
+
+Under **Settings** finns testläget "Unlimited Time", som gör det möjligt att spela hela säsonger utan väntan. Testläget visas som "∞ TEST" i toppraden och med en gul banner. I ekonomiläget är taket 12 Time, med +1 var 20:e minut.
+
+## Acceptanskriterier (brief §16) och hur de verifieras
+
+| Kriterium | Verifiering |
+| --- | --- |
+| Nytt spel har giltig trupp och ett genomförbart första event | `engine.test` "new game", `e2e.test` |
+| Nästa event och primärknappen är tydliga på dator och mobil | Manuellt i webbläsare vid 390, 768 och 1440 px (se nedan) |
+| Grundval utan Influence finns; otillgängliga val förklaras | `engine.test`, `stability.test` (varje event i 20 karriärer × 4 säsonger), blocker-text i UI:t |
+| Genomfört beslut visar faktiska förändringar och finns i historiken | `engine.test`, `e2e.test` ("What changed" och History) |
+| Samma seed och kommandon ger samma resultat, även över sparning och laddning | `engine.test` "determinism" |
+| Omladdning, dubbelklick, omrullning och sparfel ger aldrig dubbel kostnad | `controller.test`, `step2.test` (omrullning), `e2e.test` (omladdning) |
+| Time vid offlinefrånvaro, full mätare och bakåtklocka; säsongen avancerar inte av frånvaro | `time.test` |
+| Giltiga matcher och inningsummor; varje match räknas en gång | `match.test`, `engine.test` "full season" |
+| Lineup, fatigue och färdigheter ger mätbara skillnader | `match.test` (400 seedade matcher per variant) |
+| Ekonomin stämmer mot ekonomiloggen | `engine.test` "reconciles club cash with the ledger" |
+| Byten bevarar identitet, flyttar kontrakt och lämnar giltiga trupper | `step2.test` "trades", invarianter i `step2`, `step3` och `stability` |
+| Tre uppföljningskedjor reagerar på verkliga val, inklusive brutna löften | `step3.test` kedja 1 (hållet och brutet), 2 och 3 |
+| Låga värden hos spelare, ägare och fans ger olika effekter och kan hanteras utan betalning | `step3.test` "low values" |
+| Två säsonger kan avslutas, med kontrakt, draft och ny giltig trupp | `step3.test` (50 seedade karriärer), `stability.test` (4 säsonger) |
+| Fungerar vid 390, 768 och 1440 px med mus, tangentbord och touch | Manuellt, se nedan |
+| Export och import utan förlust; felaktig import förstör inget | `controller.test` |
+| Produktionsbygge som webbapp utan hemligheter eller betaltjänster | `npm run build`, `npm run preview` (inga externa anrop) |
+
+### Manuell webbtest (Steg 4)
+
+- **Bredder 390, 768 och 1440 px:** Home, Team, spelarprofil, Club, League, History och Settings med ett spel i gång. Ingen horisontell sidscroll förekommer, och breda tabeller scrollar inuti sin egen ruta.
+- **Touch:** alla knappar, länkar och listor är minst 32 px (textlänkar 44 px på touchskärmar). Lineupen ändras med listor och upp/ned-knappar, inte med drag-and-drop.
+- **Tangentbord:** piltangenter byter val, Tab går till bekräftelseknappen och Enter bekräftar. Efter ett resultat hamnar fokus på Continue, och efter Continue på det nya eventets rubrik. Synlig fokusmarkering finns överallt.
+- **Status visas med text** utöver färg: "Met", "Behind", "Needs rest", tecken på förändringar och "Error:" och "Note:" i lineupen.
+- **Migrering:** en riktig sparfil från Steg 1 har laddats (v1 → v3) och spelats vidare in i säsong 3.
 
 ## Arkitektur
 
@@ -40,7 +75,21 @@ Spelmotorn är ren TypeScript utan React, DOM, lagring eller systemklocka. UI sk
 - Export och import av validerad JSON. En okänd sparversion avvisas och raderas aldrig.
 - Äldre sparfiler uppgraderas steg för steg i `application/migrations.ts` (v1 → v2 → v3). Den lagrade kopian ersätts först vid nästa lyckade sparning. En v2-sparfil som stannat vid "Season Complete" förs vidare till nästa säsongs försäsong.
 
-## Status: Steg 3 (långsiktigt ägarskap) klart
+## Steg 4 (balans och webbtest)
+
+- **Kontraktskrav följer marknaden:** kravet baseras på nivå och ålder, inom −15 % till +30 % av nuvarande lön (+10 % om spelaren prioriterar pengar). Tidigare gav varje förlängning en fast ökning.
+- **Ekonomi över fyra säsonger** (seeds 1–3):
+  - En *försiktig* strategi (förnya unga, sällan värvningar) håller kassan positiv och sänker lönekostnaden.
+  - En *vårdslös* strategi (förnya alla, värva ofta) ligger kring noll med en lönekostnad runt $750K. Kriseventen räddar den varje gång.
+
+  Ingen ekonomisk låsning uppstår.
+- **`stability.test`:** 20 slumpade karriärer över 4 säsonger. Det finns alltid ett genomförbart val, alltid ett gratis grundval, alla trupper och lineuper är giltiga, kassan är aldrig negativ i mer än 6 omgångar i följd, och sparfilen är under 3 MB.
+- **`e2e.test`:** det riktiga React-UI:t, controllern och IndexedDB-adaptern (mot fake-indexeddb) i jsdom. Flödet är nytt spel → säsongsplan → resultat → Continue → "omladdning" (ny controller och nytt UI mot samma databas) → samma event → spela vidare genom en ligamatch → History.
+- **Tillgänglighet:** fokus flyttas efter beslut och Continue, och textlänkar har touchstora ytor.
+
+Testerna visar stabilitet, inte att spelet är balanserat eller roligt (brief §16). Balansen bygger på slumpade och enkla strategier. En riktig speltest med människor återstår.
+
+## Steg 3 (långsiktigt ägarskap)
 
 ### Säsongscykel
 
@@ -162,13 +211,15 @@ Steg 3 lägger till:
 
 Alla siffror är testvärden: startkassa $245K, biljettpriser $5–10, lönefördelning 1/20 per omgång (exakt avrundning), fatigue-belastning och återhämtning, träningsprogress, boost +50 % för 2 Influence.
 
-## Kvar enligt briefen
+## Kvar och kända begränsningar
 
-- **Steg 4:**
-  - Balans. Lönerna stiger vid varje förnyelse, och en slumpspelad karriär tappar kassa över tid. Rebuild-målet (60 unga starter) nås i 29 % av säsongerna när övriga val slumpas. Unga spelare får redan cirka 51 starter utan avsikt, så målet kräver ett aktivt val.
-  - End-to-end-test i webbläsare för nytt spel, event, sparning, laddning och fortsatt spel.
-  - Test vid 768 px och manuell genomspelning.
-  - Pensionering, skador och AI-klubbarnas egna värvningar ligger utanför MVP.
+MVP-stegen 1–4 är klara. Kvar och medvetet utanför MVP:
+
+- **Speltest med människor.** Balansen är bara kontrollerad med slumpade och enkla strategier. Rebuild-målet (60 unga starter) nås i 29 % av de slumpade säsongerna och kräver ett aktivt val.
+- **End-to-end i riktig webbläsare** (till exempel Playwright). Dagens E2E-test kör det riktiga UI:t i jsdom. Riktiga webbläsare har testats manuellt.
+- **Ljud** saknas. Settings har bara "minskad rörelse", och det finns inga ljudeffekter att slå av.
+- **Senare enligt briefen:** pensionering, skador, AI-klubbarnas egna värvningar och ekonomi, slutspel, Medical och Analytics, global räckvidd, akademier, verkliga köp, konton och molnsparning.
+- Klientbaserad tid och ekonomi är inte fusksäker. Det är accepterat för en lokal prototyp (brief §14).
 
 ### Kända begränsningar i Steg 2
 

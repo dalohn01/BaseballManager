@@ -16,10 +16,17 @@ export function expiringPlayers(state: GameState, clubId: ClubId): Player[] {
   return clubPlayers(state, clubId).filter((p) => p.contract.seasonsLeft <= 1 && p.contract.startRound <= seasonEnd);
 }
 
+/**
+ * A renewing player asks for his market value (level and age), within a band
+ * around his current salary; players who prioritise money ask a bit more.
+ */
 export function renewalTerms(p: Player): { salary: number; willing: boolean } {
-  const raise = p.priority === 'money' ? O.renewalRaiseMoneyPriority : O.renewalRaise;
+  const level = p.isPitcher ? p.ratings.pitching : Math.max(p.ratings.contact, p.ratings.fielding);
+  const market = Math.max(8, level - 30) * O.renewalPerRatingPoint * (p.age >= 33 ? 0.85 : 1);
+  const [lo, hi] = O.renewalBand;
+  const ask = Math.min(p.contract.salary * hi, Math.max(p.contract.salary * lo, market)) * (p.priority === 'money' ? 1 + O.renewalMoneyPremium : 1);
   return {
-    salary: Math.round((p.contract.salary * (1 + raise)) / 1000) * 1000,
+    salary: Math.round(ask / 1000) * 1000,
     willing: p.satisfaction >= O.renewalMinSatisfaction,
   };
 }
