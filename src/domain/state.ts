@@ -1,16 +1,16 @@
 import type {
+  Player,
   Club,
   ClubId,
   EventInstanceId,
   GameId,
   MatchResult,
-  Player,
   PlayerId,
   ScheduledGame,
 } from './types';
 import { BALANCE } from '../balance/config';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 export type EventType =
   | 'leagueGame'
@@ -50,6 +50,8 @@ export interface EventOption {
   uncertain: EffectPreview[];
   cost: Cost;
   primary?: boolean;
+  /** Recruitment options point at a frozen candidate in `EventInstance.candidates`. */
+  candidateId?: string;
 }
 
 export interface BoostOption {
@@ -104,12 +106,16 @@ export interface EventInstance {
   data: Record<string, string | number | boolean | null>;
   options: EventOption[];
   boosts: BoostOption[];
+  /** Frozen recruitment candidates (not yet part of any club). */
+  candidates: Player[];
+  /** Influence cost of re-scouting candidates, or null if this event cannot be rerolled. */
+  rerollCost: number | null;
   rerolled: boolean;
   resolution: Resolution | null;
 }
 
 export interface QueuedSlot {
-  kind: 'management' | 'match' | 'seasonReview';
+  kind: 'management' | 'match' | 'seasonEnd';
   templateId: string;
   gameId: GameId | null;
 }

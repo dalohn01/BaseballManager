@@ -1,11 +1,12 @@
 import { BALANCE } from '../balance/config';
 import { AI_CLUBS, GENERATED_ROSTER_SHAPE, USER_CLUB, USER_ROSTER, type ClubSeed, type PlayerSeed } from '../content/clubs';
 import { FIRST_NAMES, LAST_NAMES } from '../content/names';
+import { emptyStats, PRIORITIES, scoutEstimate } from '../content/playerFactory';
 import { autoLineup } from '../domain/lineup';
 import { clamp, createRng, type Rng } from '../domain/rng';
 import type { GameState } from '../domain/state';
 import { SCHEMA_VERSION } from '../domain/state';
-import type { Club, PersonalPriority, Player, SeasonStats } from '../domain/types';
+import type { Club, Player } from '../domain/types';
 import { buildEvent, planRound } from '../events/planner';
 import { generateSchedule } from '../simulation/schedule';
 
@@ -17,18 +18,6 @@ export interface NewGameOptions {
   primaryColor?: string;
   secondaryColor?: string;
   timeMode?: 'economy' | 'unlimited';
-}
-
-export const emptyStats = (): SeasonStats => ({
-  games: 0, starts: 0, pa: 0, ab: 0, h: 0, doubles: 0, triples: 0, hr: 0, rbi: 0, r: 0, bb: 0, so: 0, sb: 0,
-  pitchingApps: 0, pitchingStarts: 0, outsPitched: 0, hitsAllowed: 0, runsAllowed: 0, walksAllowed: 0, strikeouts: 0,
-});
-
-function scoutEstimate(potential: number, rating: number, rng: Rng) {
-  // Scouting level 1: ±6 error around the truth, shown as a 16-point range.
-  const centre = potential + rng.int(-6, 6);
-  const low = clamp(Math.max(rating, centre - 8), 1, 99);
-  return { low, high: clamp(Math.max(low + 4, centre + 8), 1, 99) };
 }
 
 function playerFromSeed(seed: PlayerSeed, id: string, clubId: string, rng: Rng): Player {
@@ -48,13 +37,13 @@ function playerFromSeed(seed: PlayerSeed, id: string, clubId: string, rng: Rng):
     ratings,
     progress: { contact: 0, power: 0, speed: 0, fielding: 0, pitching: 0 },
     potential: seed.potential,
-    potentialEstimate: scoutEstimate(seed.potential, main, rng),
+    potentialEstimate: scoutEstimate(seed.potential, main, 1, rng),
     fatigue: seed.fatigue,
     satisfaction: seed.satisfaction,
     popularity: seed.popularity,
     priority: seed.priority,
     role: seed.role,
-    contract: { salary: seed.salary, seasonsLeft: seed.seasonsLeft },
+    contract: { salary: seed.salary, seasonsLeft: seed.seasonsLeft, startRound: 0 },
     joinedSeason: 1,
     bio: seed.bio,
     stats: emptyStats(),
@@ -62,8 +51,6 @@ function playerFromSeed(seed: PlayerSeed, id: string, clubId: string, rng: Rng):
     lastReaction: null,
   };
 }
-
-const PRIORITIES: PersonalPriority[] = ['playingTime', 'titles', 'money', 'loyalty'];
 
 function generatePlayer(shape: (typeof GENERATED_ROSTER_SHAPE)[number], club: ClubSeed, index: number, rng: Rng, usedNames: Set<string>): PlayerSeed {
   let first = '';
@@ -126,8 +113,10 @@ function makeClub(seed: ClubSeed, isUser: boolean): Club {
     fanBase: seed.fanBase,
     brand: { local: 55, commercial: 40 },
     ticketPriceLevel: 3,
-    sponsor: { ...seed.sponsor },
+    sponsor: { ...seed.sponsor, kind: 'standard', bonus: null },
     facilities: { training: 1, scouting: 1, stadium: 1 },
+    project: null,
+    publicStance: null,
     reasons: { fanSupport: [], ownerConfidence: [] },
   };
 }

@@ -2,7 +2,7 @@ import { useRef, useState } from 'react';
 import { BALANCE } from '../../balance/config';
 import { moodLabel } from '../../domain/mood';
 import { clubName, userClub } from '../../domain/state';
-import { payrollPerSeason, projectedAttendance, projectedTicketRevenue, seasonForecast, ticketPrice, upkeepPerRound } from '../../simulation/economy';
+import { FACILITY_LABELS, payrollPerSeason, projectedAttendance, projectedTicketRevenue, seasonForecast, ticketPrice, upkeepPerRound } from '../../simulation/economy';
 import { computeStandings } from '../../simulation/standings';
 import { Crest } from '../components/art';
 import { EffectList, Meter, Panel } from '../components/common';
@@ -40,7 +40,14 @@ export function ClubScreen() {
             </div>
             <div>
               <dt>Sponsor</dt>
-              <dd>{club.sponsor ? `${club.sponsor.name}, ${money(club.sponsor.perSeason)}/season, ${club.sponsor.seasonsLeft} season(s) left` : 'None'}</dd>
+              <dd>
+                {club.sponsor ? `${club.sponsor.name}, ${money(club.sponsor.perSeason)}/season, ${club.sponsor.seasonsLeft} season(s) left` : 'None'}
+                {club.sponsor?.bonus && (
+                  <small className="block muted">
+                    Bonus {money(club.sponsor.bonus.amount)} for a top-3 finish · {club.sponsor.bonus.paid ? 'paid' : 'not yet earned'}
+                  </small>
+                )}
+              </dd>
             </div>
           </dl>
           <h3 className="subhead">Rest of season forecast</h3>
@@ -72,13 +79,24 @@ export function ClubScreen() {
           <Meter label="Fan support" value={club.fanSupport} caption={`${moodLabel('fans', club.fanSupport)} · fan base ${club.fanBase.toLocaleString('en-US')} (size ≠ happiness)`} reasons={club.reasons.fanSupport} />
           <h3 className="subhead">Brand</h3>
           <Meter label="Local roots" value={club.brand.local} caption="Patience from the community, gate demand" tone="blue" />
-          <Meter label="Commercial reach" value={club.brand.commercial} caption="Sponsor appeal (used from Step 2)" tone="blue" />
+          <Meter label="Commercial reach" value={club.brand.commercial} caption="Size of sponsor offers" tone="blue" />
+          {club.publicStance && (
+            <p className="small">
+              <strong>Public stance:</strong> {club.publicStance.stance === 'contend' ? '“Going for the title”' : '“Building something”'} (said in round {club.publicStance.round})
+            </p>
+          )}
           <h3 className="subhead">Facilities</h3>
           <ul className="plain">
-            <li>Training Center — level {club.facilities.training}</li>
-            <li>Scouting Department — level {club.facilities.scouting}</li>
+            <li>Training Center — level {club.facilities.training} (training progress ×{(1 + (club.facilities.training - 1) * 0.2).toFixed(1)})</li>
+            <li>Scouting Department — level {club.facilities.scouting} (potential estimates ±{BALANCE.recruitment.scoutRangeHalfWidth[club.facilities.scouting - 1]})</li>
             <li>Stadium &amp; Fan Facilities — level {club.facilities.stadium} (capacity {BALANCE.economy.stadiumCapacity[club.facilities.stadium - 1].toLocaleString('en-US')})</li>
           </ul>
+          {club.project && (
+            <p className="small">
+              <strong>Under construction:</strong> {FACILITY_LABELS[club.project.facility]} → level {club.project.toLevel}, ready after round{' '}
+              {club.project.completesRound - (s.calendar.season - 1) * BALANCE.season.rounds}.
+            </p>
+          )}
         </Panel>
         <Panel title="Economy log">
           {ledger.length === 0 ? (

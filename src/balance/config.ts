@@ -19,6 +19,40 @@ export const BALANCE = {
     start: 10,
     trainingBoostCost: 2,
     trainingBoostMultiplier: 1.5,
+    /** Re-scouting recruitment candidates: Influence only, no Time, once per event. */
+    rerollCost: 2,
+  },
+
+  roster: {
+    max: 18,
+    minPitchers: 3,
+    minHitters: 10,
+    /** Releasing a player pays this share of his remaining salary this season. */
+    releaseBuyoutShare: 0.5,
+  },
+
+  recruitment: {
+    /** Signing fee as a share of the season salary. */
+    freeAgentFeeShare: 0.25,
+    tryoutFee: 2_000,
+    draftBonus: 10_000,
+    /** Scouting error (±) and shown range half-width per Scouting Department level. */
+    scoutError: [6, 4, 2],
+    scoutRangeHalfWidth: [8, 5, 3],
+  },
+
+  facilities: {
+    /** Cost to reach level 2 and level 3. */
+    cost: { training: [80_000, 140_000], scouting: [60_000, 110_000], stadium: [120_000, 200_000] },
+    buildRounds: { training: 3, scouting: 2, stadium: 4 },
+    minOwnerConfidence: 50,
+  },
+
+  board: {
+    investmentFunds: 40_000,
+    investmentMinConfidence: 60,
+    emergencyInjection: 60_000,
+    emergencyAdDeal: 35_000,
   },
 
   economy: {

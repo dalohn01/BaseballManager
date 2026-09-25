@@ -76,6 +76,29 @@ const OPTION_ICON: Record<string, 'bat' | 'glove' | 'recovery' | 'fans' | 'perso
   autographs: 'fans',
   statement: 'chat',
   quiet: 'chat',
+  pass: 'clipboard',
+  accept: 'person',
+  counter: 'chat',
+  funds: 'trophy',
+  cuts: 'clipboard',
+  brief: 'chat',
+  injection: 'trophy',
+  ads: 'stadium',
+  build: 'stadium',
+  commercial: 'stadium',
+  local: 'fans',
+  contend: 'trophy',
+  patience: 'chat',
+  deflect: 'chat',
+  young: 'person',
+  start: 'person',
+  program: 'bat',
+  keep: 'clipboard',
+  extra: 'bat',
+  trust: 'chat',
+  scrimmage: 'bat',
+  video: 'clipboard',
+  off: 'recovery',
 };
 
 function EventDecision({ ev }: { ev: EventInstance }) {
@@ -87,7 +110,8 @@ function EventDecision({ ev }: { ev: EventInstance }) {
   const firstAvailable = ev.options.find((o) => optionBlocker(s, ev, o, null, now) === null);
   const [selectedId, setSelectedId] = useState<string>((ev.options.find((o) => o.primary && !optionBlocker(s, ev, o, null, now)) ?? firstAvailable ?? ev.options[0]).id);
   const [boostOn, setBoostOn] = useState(false);
-  const selected = ev.options.find((o) => o.id === selectedId)!;
+  // After a re-scout the old candidate options are gone; fall back to the first available one.
+  const selected = ev.options.find((o) => o.id === selectedId) ?? firstAvailable ?? ev.options[0];
   const boost = ev.boosts.find((b) => b.appliesTo.includes(selected.id)) ?? null;
   const activeBoost = boostOn && boost ? boost : null;
   const blocker = optionBlocker(s, ev, selected, activeBoost, now);
@@ -110,13 +134,18 @@ function EventDecision({ ev }: { ev: EventInstance }) {
         <div className="subjects">
           {ev.subjects.playerIds.map((id) => {
             const p = s.players[id];
+            const theirs = p.clubId !== s.userClubId;
             return (
               <a key={id} className="subject" href={href(`team/${id}`)}>
-                <Avatar player={p} club={s.clubs[p.clubId]} size={36} />
+                <Avatar player={p} club={s.clubs[p.clubId] ?? club} size={36} />
                 <span>
-                  <strong>{shortName(p)}</strong>
+                  <strong>
+                    {shortName(p)}
+                    {theirs && s.clubs[p.clubId] ? ` (${s.clubs[p.clubId].abbreviation})` : ''}
+                  </strong>
                   <small>
-                    Sat. {p.satisfaction} · Fatigue {p.fatigue}
+                    {p.isPitcher ? `PIT ${p.ratings.pitching}` : `CON ${p.ratings.contact} · POW ${p.ratings.power}`} · age {p.age}
+                    {theirs ? '' : ` · Sat. ${p.satisfaction}`}
                   </small>
                 </span>
               </a>
@@ -130,6 +159,20 @@ function EventDecision({ ev }: { ev: EventInstance }) {
           <OptionRow key={o.id} option={o} ev={ev} checked={o.id === selected.id} onSelect={() => setSelectedId(o.id)} now={now} unlimited={unlimited} />
         ))}
       </fieldset>
+      {ev.rerollCost !== null && (
+        <div className="reroll">
+          <button
+            className="btn btn-small btn-secondary"
+            disabled={ev.rerolled || s.influence < ev.rerollCost || snap.busy}
+            onClick={() => void c.dispatch({ type: 'rerollCandidates', eventId: ev.id, revision: s.revision })}
+          >
+            <Icon name="influence" size={16} className="ico-influence" /> Scout new candidates · {ev.rerollCost}
+          </button>
+          <small className="muted">
+            {ev.rerolled ? 'Already re-scouted for this event.' : s.influence < ev.rerollCost ? 'Not enough Influence.' : 'Costs Influence only, no Time. Once per event; the new list replaces this one.'}
+          </small>
+        </div>
+      )}
       {boost && (
         <label className={`boost ${optionBlocker(s, ev, selected, boost, now) && !boostOn ? 'boost-disabled' : ''}`}>
           <input
@@ -170,10 +213,15 @@ function OptionRow({ option: o, ev, checked, onSelect, now, unlimited }: { optio
   const s = useGame();
   const blocker = optionBlocker(s, ev, o, null, now);
   const forecast = ev.type === 'leagueGame' ? leagueGameForecast(s, String(ev.data.gameId), o.id as LeagueGameChoice) : null;
+  const candidate = o.candidateId ? ev.candidates.find((c) => c.id === o.candidateId) : undefined;
   return (
     <label className={`option ${checked ? 'option-checked' : ''} ${blocker ? 'option-blocked' : ''}`}>
       <input type="radio" name={`opt-${ev.id}`} value={o.id} checked={checked} onChange={onSelect} className="sr-only" />
-      <Icon name={OPTION_ICON[o.id] ?? 'clipboard'} size={30} className="option-icon" />
+      {candidate ? (
+        <Avatar player={candidate} club={userClub(s)} size={40} />
+      ) : (
+        <Icon name={OPTION_ICON[o.id] ?? OPTION_ICON[o.id.split(':')[0]] ?? 'clipboard'} size={30} className="option-icon" />
+      )}
       <span className="option-main">
         <span className="option-label">{o.label}</span>
         <span className="option-summary">{o.summary}</span>

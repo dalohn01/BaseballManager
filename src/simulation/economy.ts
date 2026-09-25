@@ -1,7 +1,8 @@
 import { BALANCE } from '../balance/config';
 import type { EffectSink } from '../domain/effects';
 import type { GameState } from '../domain/state';
-import type { Club, ClubId } from '../domain/types';
+import { absoluteRound } from '../domain/state';
+import type { Club, ClubId, FacilityId } from '../domain/types';
 
 const ROUNDS = BALANCE.season.rounds;
 
@@ -43,6 +44,7 @@ export interface RoundSettlement {
   sponsor: number;
   salaries: number;
   upkeep: number;
+  completed?: FacilityId;
 }
 
 /** Charges/credits one round of club finances. Called exactly once per round, at the league game. */
@@ -60,11 +62,32 @@ export function settleRound(state: GameState, clubId: ClubId, isHome: boolean, s
     out.sponsor = roundShare(club.sponsor.perSeason, round);
     sink.cash(clubId, out.sponsor, 'sponsor', `Sponsor: ${club.sponsor.name}`);
   }
-  out.salaries = club.roster.reduce((sum, id) => sum + roundShare(state.players[id].contract.salary, round), 0);
+  out.salaries = club.roster.reduce((sum, id) => sum + salaryDue(state, id, state.calendar.season, round), 0);
   sink.cash(clubId, -out.salaries, 'salaries', 'Player salaries');
   out.upkeep = upkeepPerRound(club);
   sink.cash(clubId, -out.upkeep, 'upkeep', 'Facility running costs');
+
+  const p = club.project;
+  if (p && absoluteRound(state.calendar.season, round) >= p.completesRound) {
+    const before = club.facilities[p.facility];
+    club.facilities[p.facility] = p.toLevel;
+    club.project = null;
+    out.completed = p.facility;
+    sink.record({ targetKind: 'club', targetId: clubId, targetLabel: FACILITY_LABELS[p.facility], stat: `facility.${p.facility}`, statLabel: 'Level', before, after: p.toLevel });
+  }
   return out;
+}
+
+export const FACILITY_LABELS: Record<FacilityId, string> = {
+  training: 'Training Center',
+  scouting: 'Scouting Department',
+  stadium: 'Stadium & Fan Facilities',
+};
+
+/** This round's salary share for a player, respecting when his contract started paying. */
+export function salaryDue(state: GameState, playerId: string, season: number, round: number): number {
+  const c = state.players[playerId].contract;
+  return absoluteRound(season, round) >= c.startRound ? roundShare(c.salary, round) : 0;
 }
 
 export interface SeasonForecast {
@@ -88,7 +111,7 @@ export function seasonForecast(state: GameState, clubId: ClubId): SeasonForecast
   const homeGamesLeft = remaining.filter((g) => g.homeId === clubId).length;
   const roundsLeft = remaining.length;
   const rounds = remaining.map((g) => g.round);
-  const salaries = rounds.reduce((s, r) => s + club.roster.reduce((a, id) => a + roundShare(state.players[id].contract.salary, r), 0), 0);
+  const salaries = rounds.reduce((s, r) => s + club.roster.reduce((a, id) => a + salaryDue(state, id, season, r), 0), 0);
   const sponsorIncome = club.sponsor ? rounds.reduce((s, r) => s + roundShare(club.sponsor!.perSeason, r), 0) : 0;
   const ticketIncome = homeGamesLeft * projectedTicketRevenue(club);
   const upkeep = roundsLeft * upkeepPerRound(club);

@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import type { Club, Player } from '../../domain/types';
 
 /** Club crest drawn locally: shield in club colours with the club initial and a stitched ball. */
@@ -108,6 +109,86 @@ export function EventArt({ type, club }: { type: string; club: Club }) {
         <path d="M175 30h50v30a25 25 0 0 1-50 0z" fill="#f2c233" stroke="#b88a12" strokeWidth="3" />
         <rect x="192" y="85" width="16" height="14" fill="#b88a12" />
         <rect x="178" y="99" width="44" height="10" rx="2" fill={primary} />
+      </svg>
+    );
+  }
+  const indoor = (children: ReactNode) => (
+    <svg viewBox="0 0 400 150" className="event-art" aria-hidden="true">
+      <rect width="400" height="150" fill="#e6edf7" />
+      <rect y="112" width="400" height="38" fill="#cfd9e8" />
+      <rect x="20" y="16" width="360" height="8" rx="4" fill={primary} opacity="0.85" />
+      {children}
+    </svg>
+  );
+  if (type === 'media') {
+    return indoor(
+      <>
+        <rect x="120" y="44" width="160" height="62" rx="6" fill="#fff" stroke="#9aa9bb" strokeWidth="2" />
+        <text x="200" y="66" textAnchor="middle" fontFamily="'Barlow Condensed', sans-serif" fontWeight="800" fontStyle="italic" fontSize="16" fill={primary}>
+          THE HARBOR HERALD
+        </text>
+        {[76, 84, 92].map((y) => (
+          <rect key={y} x="134" y={y} width="132" height="4" rx="2" fill="#c6d1e0" />
+        ))}
+        <rect x="60" y="60" width="14" height="40" rx="7" fill="#2c3e55" />
+        <rect x="64" y="96" width="6" height="18" fill="#2c3e55" />
+        <rect x="326" y="60" width="14" height="40" rx="7" fill="#2c3e55" />
+        <rect x="330" y="96" width="6" height="18" fill="#2c3e55" />
+      </>,
+    );
+  }
+  if (type === 'boardMeeting') {
+    return indoor(
+      <>
+        <ellipse cx="200" cy="100" rx="130" ry="18" fill="#8a5a33" />
+        {[100, 160, 240, 300].map((x, i) => (
+          <g key={x}>
+            <circle cx={x} cy="62" r="11" fill={SKIN[(i + 2) % SKIN.length]} />
+            <path d={`M${x - 16} 96c0-16 7-24 16-24s16 8 16 24z`} fill={i % 2 ? '#2c3e55' : primary} />
+          </g>
+        ))}
+        <rect x="186" y="40" width="28" height="36" rx="3" fill="#fff" stroke="#9aa9bb" />
+        <path d="M192 66l6-8 6 4 6-12" stroke={secondary} strokeWidth="2.5" fill="none" />
+      </>,
+    );
+  }
+  if (type === 'facility') {
+    return (
+      <svg viewBox="0 0 400 150" className="event-art" aria-hidden="true">
+        {sky}
+        <rect x="150" y="50" width="120" height="55" fill="#f4f7fb" stroke="#9aa9bb" strokeWidth="2" />
+        <path d="M140 50h140l-70-24z" fill={primary} />
+        <path d="M300 105V20h6v85 M306 24h60 M360 24v30" stroke="#f2b01e" strokeWidth="5" fill="none" />
+        <rect x="350" y="54" width="20" height="12" fill="#8a9bb0" />
+      </svg>
+    );
+  }
+  if (type === 'sponsor') {
+    return (
+      <svg viewBox="0 0 400 150" className="event-art" aria-hidden="true">
+        {sky}
+        <rect x="90" y="30" width="220" height="60" rx="4" fill="#fff" stroke={primary} strokeWidth="4" />
+        <text x="200" y="68" textAnchor="middle" fontFamily="'Barlow Condensed', sans-serif" fontWeight="800" fontStyle="italic" fontSize="26" fill={primary}>
+          YOUR BRAND HERE
+        </text>
+        <rect x="120" y="90" width="6" height="15" fill="#9aa9bb" />
+        <rect x="274" y="90" width="6" height="15" fill="#9aa9bb" />
+      </svg>
+    );
+  }
+  if (type === 'trade' || type === 'freeAgent' || type === 'tryouts' || type === 'draft') {
+    return (
+      <svg viewBox="0 0 400 150" className="event-art" aria-hidden="true">
+        {sky}
+        {[140, 260].map((x, i) => (
+          <g key={x} transform={`translate(${x} 58)`}>
+            <circle r="15" fill={SKIN[(i * 3) % SKIN.length]} />
+            <path d="M-15 -4c0-9 7-15 15-15s15 6 15 15z" fill={i === 0 ? primary : '#7a1f2b'} />
+            <path d="M-26 62c0-28 10-44 26-44s26 16 26 44z" fill="#f7f9fc" stroke={i === 0 ? primary : '#7a1f2b'} strokeWidth="3" />
+          </g>
+        ))}
+        <path d="M168 96h64" stroke="#2c3e55" strokeWidth="6" strokeLinecap="round" />
+        <path d="M222 88l12 8-12 8 M178 88l-12 8 12 8" stroke="#2c3e55" strokeWidth="4" fill="none" strokeLinecap="round" />
       </svg>
     );
   }

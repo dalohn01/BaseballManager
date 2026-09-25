@@ -2,6 +2,7 @@ import { BALANCE } from '../balance/config';
 import { EffectSink } from '../domain/effects';
 import { autoLineup, validateLineup } from '../domain/lineup';
 import { createRng } from '../domain/rng';
+import { releasePlayer, remainingSeasonSalary, repairLineup, squadProblem } from '../domain/roster';
 import type { BoostOption, Cost, EventInstance, EventOption, GameState } from '../domain/state';
 import { userClub } from '../domain/state';
 import { canAffordTime, regenerate, spendTime } from '../domain/time';
@@ -14,7 +15,9 @@ export type Command =
   | { type: 'acknowledgeEvent'; eventId: string }
   | { type: 'setLineup'; lineup: Lineup }
   | { type: 'autoLineup'; mode: 'strongest' | 'rest' }
-  | { type: 'setTimeMode'; mode: 'economy' | 'unlimited' };
+  | { type: 'setTimeMode'; mode: 'economy' | 'unlimited' }
+  | { type: 'rerollCandidates'; eventId: string; revision: number }
+  | { type: 'releasePlayer'; playerId: string };
 
 export type CommandError = { ok: false; code: 'stale' | 'duplicate' | 'invalid' | 'unaffordable'; error: string };
 export type CommandResult = { ok: true; state: GameState } | CommandError;
@@ -88,7 +91,64 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       next.revision += 1;
       return { ok: true, state: next };
     }
+    case 'rerollCandidates':
+      return rerollCandidates(state, cmd);
+    case 'releasePlayer': {
+      const blocker = releaseBlocker(state, cmd.playerId);
+      if (blocker) return fail('invalid', blocker);
+      const next = structuredClone(state);
+      const p = next.players[cmd.playerId];
+      const buyout = releaseCost(next, cmd.playerId);
+      const sink = new EffectSink(next, null);
+      if (buyout > 0) sink.cash(next.userClubId, -buyout, 'salaries', `Released ${p.firstName} ${p.lastName} (buyout)`);
+      releasePlayer(next, p.id);
+      repairLineup(next, next.userClubId);
+      next.revision += 1;
+      return { ok: true, state: next };
+    }
   }
+}
+
+export const releaseCost = (state: GameState, playerId: string) =>
+  Math.round(remainingSeasonSalary(state, state.players[playerId]) * BALANCE.roster.releaseBuyoutShare);
+
+export function releaseBlocker(state: GameState, playerId: string): string | null {
+  const p = state.players[playerId];
+  const club = userClub(state);
+  if (!p || p.clubId !== club.id) return 'He is not on your roster.';
+  if (state.currentEvent?.status === 'resolved' || state.calendar.phase !== 'regular') return 'Finish the current event first.';
+  const problem = squadProblem(state, club.roster.filter((id) => id !== playerId));
+  if (problem) return problem;
+  const cost = releaseCost(state, playerId);
+  if (cost > 0 && club.cash < cost) return `The buyout costs $${cost.toLocaleString('en-US')}.`;
+  return null;
+}
+
+/**
+ * Re-scouting is a separate paid action: Influence only, no Time, once per
+ * event instance. New candidates are saved immediately; nothing else changes.
+ */
+function rerollCandidates(state: GameState, cmd: Extract<Command, { type: 'rerollCandidates' }>): CommandResult {
+  const ev = state.currentEvent;
+  if (!ev || ev.id !== cmd.eventId) return fail('stale', 'That event is no longer current.');
+  if (ev.status !== 'pending') return fail('duplicate', 'This decision has already been made.');
+  if (cmd.revision !== state.revision) return fail('stale', 'The game changed since this screen was opened.');
+  if (ev.rerolled) return fail('duplicate', 'Candidates can only be re-scouted once.');
+  const t = getTemplate(ev.templateId);
+  if (!t.reroll || ev.rerollCost === null) return fail('invalid', 'This event cannot be re-scouted.');
+  if (state.influence < ev.rerollCost) return fail('unaffordable', `Needs ${ev.rerollCost} Influence.`);
+  const next = structuredClone(state);
+  const nev = next.currentEvent!;
+  const rng = createRng(next.rngState);
+  const fresh = t.reroll({ state: next, rng, season: nev.season, round: nev.round, gameId: null, event: nev });
+  nev.candidates = fresh.candidates ?? [];
+  nev.options = fresh.options;
+  nev.context = fresh.context;
+  nev.rerolled = true;
+  next.influence -= nev.rerollCost!;
+  next.rngState = rng.getState();
+  next.revision += 1;
+  return { ok: true, state: next };
 }
 
 function resolveEvent(state: GameState, cmd: Extract<Command, { type: 'resolveEvent' }>, now: number): CommandResult {

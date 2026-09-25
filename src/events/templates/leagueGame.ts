@@ -3,7 +3,7 @@ import { autoLineup, isLineupValid } from '../../domain/lineup';
 import type { GameState } from '../../domain/state';
 import { clubName, userClub } from '../../domain/state';
 import type { Lineup } from '../../domain/types';
-import { projectedTicketRevenue } from '../../simulation/economy';
+import { FACILITY_LABELS, projectedTicketRevenue } from '../../simulation/economy';
 import { teamStrength, winProbability } from '../../simulation/match';
 import { lineupFor, playRound } from '../../simulation/round';
 import type { EventTemplate } from '../types';
@@ -46,7 +46,7 @@ export const leagueGame: EventTemplate = {
       kicker: 'League Game',
       title: `${isHome ? 'vs' : '@'} ${clubName(opp)}`,
       context: isHome
-        ? `Home game at Harbor Park. Expected gate ≈ $${gate.toLocaleString('en-US')}.`
+        ? `Home game at ${club.city} Park. Expected gate ≈ $${gate.toLocaleString('en-US')}.`
         : `Road game in ${opp.city}. No gate income this round.`,
       prompt: 'Who takes the field?',
       subjects: { playerIds: [], clubIds: [opp.id] },
@@ -96,7 +96,8 @@ export const leagueGame: EventTemplate = {
     const extra = m.decidedBy === 'suddenDeath' ? ' (sudden-death)' : m.decidedBy === 'extraInnings' ? ` in ${m.innings}` : '';
     const headline = won ? `${userClub(state).name} beat the ${opp.name} ${us}–${them}${extra}` : `${userClub(state).name} fall to the ${opp.name} ${us}–${them}${extra}`;
     narrative.push(`Pre-game forecast gave you a ${Math.round(out.expectedWin * 100)}% win chance.`);
-    if (out.settlement.attendance) narrative.push(`${out.settlement.attendance.toLocaleString('en-US')} fans at Harbor Park.`);
+    if (out.settlement.attendance) narrative.push(`${out.settlement.attendance.toLocaleString('en-US')} fans at ${userClub(state).city} Park.`);
+    if (out.settlement.completed) narrative.push(`Construction finished: the ${FACILITY_LABELS[out.settlement.completed]} is now level ${userClub(state).facilities[out.settlement.completed]}.`);
     return { headline, narrative, reactions: out.reactions, matchId: m.id };
   },
 };

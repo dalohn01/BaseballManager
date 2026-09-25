@@ -5,6 +5,7 @@ import { execute, type Command } from './engine';
 import { createNewGame, type NewGameOptions } from './newGame';
 import { exportSave, parseSaveFile } from './saveFormat';
 import { SCHEMA_VERSION } from '../domain/state';
+import { canMigrate, migrate } from './migrations';
 
 export interface Snapshot {
   status: 'loading' | 'noGame' | 'ready' | 'conflict' | 'loadError';
@@ -60,15 +61,15 @@ export class GameController {
     try {
       const env = await this.repo.loadCurrent();
       if (!env) return this.set({ status: 'noGame' });
-      if (env.schemaVersion !== SCHEMA_VERSION) {
-        this.persistedRevision = env.revision;
+      this.persistedRevision = env.revision;
+      if (!canMigrate(env.state.schemaVersion)) {
         return this.set({
           status: 'loadError',
-          loadError: `Your save uses format v${env.schemaVersion}; this build reads v${SCHEMA_VERSION}. It has not been changed or deleted.`,
+          loadError: `Your save uses format v${env.schemaVersion}; this build reads up to v${SCHEMA_VERSION}. It has not been changed or deleted.`,
         });
       }
-      this.persistedRevision = env.revision;
-      this.set({ status: 'ready', state: env.state });
+      // Older saves are upgraded in memory; the stored copy is only replaced on the next successful save.
+      this.set({ status: 'ready', state: migrate(env.state as unknown as Parameters<typeof migrate>[0]) });
     } catch (e) {
       this.set({ status: 'loadError', loadError: `Could not open local storage: ${(e as Error).message}` });
     }

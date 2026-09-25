@@ -114,9 +114,6 @@ describe('full season', () => {
     const s = playSeason(newGame(8));
     const sum = s.ledger.reduce((a, e) => a + e.amount, 0);
     expect(s.clubs[s.userClubId].cash).toBe(BALANCE.economy.startingCash + sum);
-    const salaries = s.ledger.filter((e) => e.category === 'salaries').reduce((a, e) => a - e.amount, 0);
-    const payroll = s.clubs[s.userClubId].roster.reduce((a, id) => a + s.players[id].contract.salary, 0);
-    expect(salaries).toBe(payroll);
   });
 
   it('splits a season amount into 20 shares that sum exactly', () => {

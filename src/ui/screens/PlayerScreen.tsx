@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { releaseBlocker, releaseCost } from '../../application/engine';
 import { effectiveRating } from '../../domain/lineup';
 import { fatigueLabel, moodLabel, moodThresholds } from '../../domain/mood';
 import { playerName, userClub } from '../../domain/state';
@@ -6,7 +8,7 @@ import { Avatar } from '../components/art';
 import { Meter, Panel, RatingBar, ReasonList, Ribbon } from '../components/common';
 import { Icon } from '../components/icons';
 import { avg3, era, ip, moneyExact, potentialLabel, PRIORITY_LABEL, PRIORITY_TEXT, ROLE_LABEL } from '../format';
-import { href, useGame } from '../hooks';
+import { href, useController, useGame, useSnapshot } from '../hooks';
 
 const HITTER_KEYS: RatingKey[] = ['contact', 'power', 'speed', 'fielding'];
 const PITCHER_KEYS: RatingKey[] = ['pitching', 'fielding'];
@@ -29,7 +31,8 @@ export function PlayerScreen({ id }: { id: string }) {
       </div>
     );
   }
-  const club = s.clubs[p.clubId];
+  const club = s.clubs[p.clubId] as (typeof s.clubs)[string] | undefined;
+  const look = club ?? userClub(s);
   const keys = p.isPitcher ? PITCHER_KEYS : HITTER_KEYS;
   const development = s.history
     .flatMap((h) => h.effects.filter((e) => e.targetId === p.id && (keys as string[]).includes(e.stat)).map((e) => ({ ...e, round: h.round, title: h.title, choice: h.choice })))
@@ -46,8 +49,8 @@ export function PlayerScreen({ id }: { id: string }) {
       </a>
       <div className="profile-grid">
         <Panel className="profile-card">
-          <div className="profile-portrait" style={{ background: `linear-gradient(160deg, ${club.colors.primary}22, #dfe9f6)` }}>
-            <Avatar player={p} club={club} size={180} />
+          <div className="profile-portrait" style={{ background: `linear-gradient(160deg, ${look.colors.primary}22, #dfe9f6)` }}>
+            <Avatar player={p} club={look} size={180} />
           </div>
           <dl className="facts">
             <div>
@@ -72,6 +75,10 @@ export function PlayerScreen({ id }: { id: string }) {
           <h3 className="subhead">Contract</h3>
           <dl className="facts">
             <div>
+              <dt>Club</dt>
+              <dd>{club ? `${club.city} ${club.name}` : 'Free agent'}</dd>
+            </div>
+            <div>
               <dt>Salary</dt>
               <dd>{moneyExact(p.contract.salary)} / season</dd>
             </div>
@@ -82,6 +89,7 @@ export function PlayerScreen({ id }: { id: string }) {
               </dd>
             </div>
           </dl>
+          {p.clubId === s.userClubId && <ReleaseControl id={p.id} />}
         </Panel>
 
         <div className="profile-main">
@@ -198,6 +206,47 @@ export function PlayerScreen({ id }: { id: string }) {
             </div>
           )}
         </Panel>
+      </div>
+    </div>
+  );
+}
+
+function ReleaseControl({ id }: { id: string }) {
+  const s = useGame();
+  const c = useController();
+  const snap = useSnapshot();
+  const [confirming, setConfirming] = useState(false);
+  const blocker = releaseBlocker(s, id);
+  const buyout = releaseCost(s, id);
+  const p = s.players[id];
+  if (!confirming) {
+    return (
+      <div className="release">
+        <button className="btn btn-small btn-secondary" onClick={() => setConfirming(true)} disabled={!!blocker || snap.busy}>
+          Release player…
+        </button>
+        {blocker && <small className="muted">{blocker}</small>}
+      </div>
+    );
+  }
+  return (
+    <div className="release">
+      <p className="blocker">
+        Release {p.lastName}? Buyout {moneyExact(buyout)} now. He leaves the club for good. No Time cost.
+      </p>
+      <div className="lineup-actions">
+        <button
+          className="btn btn-small btn-secondary"
+          onClick={async () => {
+            if (await c.dispatch({ type: 'releasePlayer', playerId: id })) location.hash = '#/team';
+          }}
+          disabled={snap.busy}
+        >
+          Yes, release
+        </button>
+        <button className="btn btn-small btn-secondary" onClick={() => setConfirming(false)}>
+          Cancel
+        </button>
       </div>
     </div>
   );

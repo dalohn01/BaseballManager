@@ -18,6 +18,8 @@ export interface Contract {
   /** Salary per season, whole dollars. Paid 1/20 per round. */
   salary: number;
   seasonsLeft: number;
+  /** Absolute round from which the salary is paid (players who join are paid from the next round). */
+  startRound: number;
 }
 
 export interface SeasonStats {
@@ -95,11 +97,23 @@ export interface Lineup {
 
 export interface SponsorDeal {
   name: string;
+  kind: 'standard' | 'commercial' | 'local';
   perSeason: number;
   seasonsLeft: number;
+  /** One-off bonus, paid at most once. */
+  bonus: { condition: 'top3'; amount: number; paid: boolean } | null;
 }
 
 export type FacilityId = 'training' | 'scouting' | 'stadium';
+
+export interface FacilityProject {
+  facility: FacilityId;
+  toLevel: number;
+  startedRound: number;
+  /** Absolute round whose league game completes the project. */
+  completesRound: number;
+  cost: number;
+}
 
 export interface Club {
   id: ClubId;
@@ -119,6 +133,9 @@ export interface Club {
   ticketPriceLevel: number;
   sponsor: SponsorDeal | null;
   facilities: Record<FacilityId, number>;
+  project: FacilityProject | null;
+  /** What the club has said publicly about its ambitions (used by follow-ups). */
+  publicStance: { stance: 'contend' | 'patience'; season: number; round: number; eventId: string } | null;
   reasons: { fanSupport: ReasonEntry[]; ownerConfidence: ReasonEntry[] };
 }
 

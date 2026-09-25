@@ -1,5 +1,6 @@
 import { SCHEMA_VERSION, type GameState } from '../domain/state';
 import type { SaveEnvelope } from '../platform/saveRepository';
+import { canMigrate, migrate } from './migrations';
 
 export type ImportResult = { ok: true; envelope: SaveEnvelope } | { ok: false; error: string };
 
@@ -17,11 +18,15 @@ export function parseSaveFile(text: string): ImportResult {
   if (!isObject(data) || data.format !== 'baseball-manager-save') return { ok: false, error: 'This is not a Baseball Manager save file.' };
   if (typeof data.schemaVersion !== 'number') return { ok: false, error: 'The save file has no version.' };
   if (data.schemaVersion > SCHEMA_VERSION) return { ok: false, error: `This save was made by a newer version (v${data.schemaVersion}). Update the game first.` };
-  if (data.schemaVersion < SCHEMA_VERSION) return { ok: false, error: `Save version v${data.schemaVersion} cannot be migrated yet.` };
-  const s = data.state;
-  const problem = checkState(s);
+  if (!canMigrate(data.schemaVersion)) return { ok: false, error: `Save version v${data.schemaVersion} cannot be migrated.` };
+  const problem = checkState(data.state);
   if (problem) return { ok: false, error: `The save file is damaged: ${problem}` };
-  return { ok: true, envelope: data as unknown as SaveEnvelope };
+  try {
+    const state = migrate(data.state as Record<string, unknown> & { schemaVersion: number });
+    return { ok: true, envelope: { ...(data as unknown as SaveEnvelope), schemaVersion: SCHEMA_VERSION, state } };
+  } catch (e) {
+    return { ok: false, error: (e as Error).message };
+  }
 }
 
 function checkState(s: unknown): string | null {

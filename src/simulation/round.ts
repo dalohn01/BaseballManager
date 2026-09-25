@@ -33,7 +33,7 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
   const userGame = games.find((g) => g.homeId === state.userClubId || g.awayId === state.userClubId);
   if (!userGame) throw new Error('User has no game this round');
 
-  state.clubs[state.userClubId].lineup = userLineup;
+  state.clubs[state.userClubId].lineup = structuredClone(userLineup);
   const fatigueBefore = Math.round(avg(clubPlayers(state, state.userClubId).map((p) => p.fatigue)));
   let userMatch: MatchResult | null = null;
   let expectedWin = 0.5;
