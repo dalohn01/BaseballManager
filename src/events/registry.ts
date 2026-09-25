@@ -1,9 +1,10 @@
 import { boardCheckin, boardEmergency, facilityExpansion, mediaExpectations, mediaSpotlight, sponsorOffer } from './templates/club';
 import { fansAfterLoss, fansCommunityDay, fansTicketPrices } from './templates/fanInteraction';
+import { fansProtest, mediaStanceReview, promiseFollowUp, tradeRequest } from './templates/followUps';
 import { individualProspect, individualVeteran, teamScrimmage } from './templates/individualTraining';
 import { leagueGame } from './templates/leagueGame';
 import { draft, freeAgent, tryouts } from './templates/recruitment';
-import { seasonReview } from './templates/seasonReview';
+import { boardCourseChange, boardUltimatum, contracts, seasonPlan, seasonReview } from './templates/season';
 import { teamTraining } from './templates/teamTraining';
 import { tradePitching, tradeVeteran } from './templates/trade';
 import type { EventTemplate } from './types';
@@ -16,18 +17,26 @@ export const TEMPLATES: EventTemplate[] = [
   fansTicketPrices,
   fansCommunityDay,
   fansAfterLoss,
+  fansProtest,
   mediaExpectations,
   mediaSpotlight,
   boardCheckin,
   boardEmergency,
+  boardCourseChange,
+  boardUltimatum,
   facilityExpansion,
   freeAgent,
   tryouts,
   tradeVeteran,
   tradePitching,
+  tradeRequest,
   sponsorOffer,
   leagueGame,
+  seasonPlan,
+  promiseFollowUp,
+  mediaStanceReview,
   draft,
+  contracts,
   seasonReview,
 ];
 

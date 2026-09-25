@@ -38,9 +38,57 @@ Spelmotorn är ren TypeScript utan React, DOM, lagring eller systemklocka. UI sk
 - Dubbelklick och upprepade kommandon ger `duplicate`, som är en no-op.
 - IndexedDB-sparningen gör revisionskontroll, backup-rotation och skrivning i en och samma transaktion. En annan flik som har sparat upptäcks, både via revision och via `BroadcastChannel`.
 - Export och import av validerad JSON. En okänd sparversion avvisas och raderas aldrig.
-- Äldre sparfiler uppgraderas steg för steg i `application/migrations.ts` (v1 → v2). Den lagrade kopian ersätts först vid nästa lyckade sparning.
+- Äldre sparfiler uppgraderas steg för steg i `application/migrations.ts` (v1 → v2 → v3). Den lagrade kopian ersätts först vid nästa lyckade sparning. En v2-sparfil som stannat vid "Season Complete" förs vidare till nästa säsongs försäsong.
 
-## Status: Steg 2 (hel säsong) klart
+## Status: Steg 3 (långsiktigt ägarskap) klart
+
+### Säsongscykel
+
+Försäsong (omgång 0) → 20 omgångar → draft → kontraktsbeslut → säsongsgenomgång → nästa försäsong. Spelet fortsätter i obegränsat antal säsonger.
+
+- **Säsongsplan med ägarna** (försäsong). Varje inriktning har mätbara mål som beräknas ur faktiska resultat:
+  - *Win now*: minst 12 vinster. Ger +$60K direkt, men fansen reagerar ×1,5 på förluster.
+  - *Rebuild*: minst 60 starter av spelare ≤23 år. Fansen reagerar ×0,5 på förluster.
+  - *Hållbar utmanare*: minst 10 vinster och säsongens slutkassa minst lika stor som startkassan.
+  - Målet utvärderas vid säsongsslut: ägarförtroende ±, Influence och fanbonus.
+- **Kursändring:** om laget ligger efter i omgång 7–14 kan planen bytas till rebuild. Den tidigare planen och fansens reaktion på ett övergivet titellöfte ligger kvar i historiken.
+- **Säsongsgenomgång:**
+  - sponsorbonus och målutvärdering
+  - en säsongssammanfattning
+  - kontrakt räknas ner, och de som går ut lämnar klubben
+  - AI-klubbar förnyar spelare under 33 år
+  - åldrande med måttlig nedgång från 31 år
+  - billiga ersättare fyller truppen till minst 15 giltiga spelare
+  - sponsoravtal räknas ner
+  - statistik arkiveras och ett nytt schema skapas
+- **Kontraktsbeslut:** förnya alla som vill, bara de ≤28 år, eller ingen. Spelare med nöjdhet under 45 vägrar förnya. Förnyelse ger 10 % löneökning, 20 % för spelare med pengar som prioritet.
+
+### Löften och uppföljningar
+
+- `PromiseRecord` innehåller spelare, mätetal, tröskel, fönster i speltid, ursprungsevent och status. Utvärderingen görs efter varje ligamatch mot de sparade matchlineuperna, aldrig mot text.
+- `FollowUp` är en schemalagd uppföljning med ID-referens till ett tidigare event. Kalendern prioriterar i ordningen kris → förfallna uppföljningar → viktade kontextevent, med **högst en prioriterad plats per omgång**. Övriga väntar på nästa lediga plats.
+
+### Tre verifierbara kedjor (automattestade)
+
+1. **Prospect-löfte:** "Lova 2 starter på 3 matcher" → matcherna räknas → hållet (+4) eller brutet (−8, och fansen reagerar om spelaren är populär) → ett uppföljningsevent nästa omgång med nya val: behåll honom i laget, lova igen, erbjud ett program eller stå fast.
+2. **Offentligt uttalande:** "Vi bygger något" eller "Vi går för titeln" → fansens reaktion på förluster ändras direkt (×0,5 eller ×1,5, och resultatvyn förklarar varför) → tidningen utvärderar uttalandet mot faktiska resultat fyra omgångar senare.
+3. **Träningsinvestering:** Training Center byggs → färdigställs efter byggtiden → nästa omgång börjar med "Training in the New Center", där resultatet visar hur många utvecklingspoäng anläggningen bidrog med.
+
+### Låga värden ger olika effekter (alla hanterbara utan Influence)
+
+- **Spelare** med nöjdhet under 30 → trade request: prata, lova starter, byt bort honom eller vägra. Nöjdhet under 45 → vägrar kontraktsförlängning.
+- **Ägare** med förtroende under 35 → ultimatum: utgiftsstopp i 5 omgångar, återhämtningsplan (högre mål) eller att säga emot. Under 50 blockeras byggprojekt, och under 60 går det inte att be om investeringar.
+- **Fans** med stöd under 35 → protest: möte, kraftig prissänkning eller att ignorera. Stödet påverkar publiken direkt.
+
+### Strategijämförelse (12 seeds × 2 säsonger, slumpade övriga val)
+
+| Plan | Vinster/säsong | Slutkassa | Ägare | Fans | Mål nått |
+| --- | --- | --- | --- | --- | --- |
+| Win now | 10,8 | $158K | 66 | 68 | 38 % |
+| Rebuild | 10,8 | $152K | 66 | 89 | 29 % |
+| Hållbar utmanare | 10,6 | $166K | 69 | 76 | 33 % |
+
+## Steg 2 (hel säsong)
 
 - **20 eventmallar** som täcker alla 12 ursprungliga eventtyper samt säsongsgenomgången:
   - Team Training (standard och "Midweek Session")
@@ -74,7 +122,7 @@ Spelmotorn är ren TypeScript utan React, DOM, lagring eller systemklocka. UI sk
 - Skärmar: Home, Team (roster och lineup-editor utan drag-and-drop), spelarprofil, Club, League, History och Settings.
 - Testat i webbläsare vid 390 och 1440 px utan horisontell scroll.
 
-### Tester (36 st, alla gröna)
+### Tester (46 st, alla gröna)
 
 Idempotens, stale revision, oföränderlig input, grundval utan Influence/Cash, Influence debiteras en gång, hel säsong, ekonomilogg = kassa, lönefördelning summerar exakt, 50 seedade säsonger utan fel, determinism över save/load, Time-regenerering (offline, tak, bakåtklocka, testläge), matchkonsistens (inningsummor, walk-off, ingen sista hemmahalva), mätbar effekt av fatigue och förmåga, sparfel/retry, dubbelklick, konflikt mellan flikar, export/import och IndexedDB-backup.
 
@@ -89,6 +137,17 @@ Steg 2 lägger till:
 - att byggprojekt färdigställs
 - buyout vid frisläppning och skydd av sista catchern
 - migrering v1 → v2
+
+Steg 3 lägger till:
+- 50 seedade karriärer över två hela säsonger (kontrakt, draft, giltig nästa trupp, inga spelare i två trupper)
+- löfte hållet och löfte brutet, med uppföljning inom en omgång
+- mediakedjan (fanreaktion och utvärdering)
+- facilitetskedjan (bidrag i träningsresultatet)
+- olika konsekvenser för olika säsongsplaner
+- att målutvärderingen matchar de faktiska siffrorna
+- låga värden som ger betalbara, olika event samt utgiftsstopp
+- kontraktsförnyelse och vägran
+- migrering v2 → v3
 
 ## Dokumenterade förenklingar (prototypregler)
 
@@ -105,8 +164,11 @@ Alla siffror är testvärden: startkassa $245K, biljettpriser $5–10, löneför
 
 ## Kvar enligt briefen
 
-- **Steg 3:** löften (bland annat "lova starter" i prospect-eventet) och tre verifierbara uppföljningskedjor. Utvärdering av uttalandet i media ("contend" eller "patience" sparas redan). Ägarmöte med säsongsinriktning och mätbara mål, ålder, kontraktsutgång och säsong 2 (draftade spelare väntar redan på den).
-- **Steg 4:** balans, end-to-end-test i webbläsare, test vid 768 px och manuell genomspelning.
+- **Steg 4:**
+  - Balans. Lönerna stiger vid varje förnyelse, och en slumpspelad karriär tappar kassa över tid. Rebuild-målet (60 unga starter) nås i 29 % av säsongerna när övriga val slumpas. Unga spelare får redan cirka 51 starter utan avsikt, så målet kräver ett aktivt val.
+  - End-to-end-test i webbläsare för nytt spel, event, sparning, laddning och fortsatt spel.
+  - Test vid 768 px och manuell genomspelning.
+  - Pensionering, skador och AI-klubbarnas egna värvningar ligger utanför MVP.
 
 ### Kända begränsningar i Steg 2
 

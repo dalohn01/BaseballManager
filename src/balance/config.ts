@@ -116,6 +116,53 @@ export const BALANCE = {
     ownerLoss: -1,
   },
 
+  seasonPlan: {
+    winNow: { winsTarget: 12, budget: 60_000, lossFanMultiplier: 1.5, met: { owners: 8, influence: 3 }, missed: { owners: -12 } },
+    rebuild: { prospectStartsTarget: 60, prospectMaxAge: 23, lossFanMultiplier: 0.5, met: { owners: 6, influence: 3, fans: 3 }, missed: { owners: -8 } },
+    balanced: { winsTarget: 10, met: { owners: 6, influence: 2 }, missed: { owners: -6 } },
+    seasonEndInfluence: 1,
+  },
+
+  promises: {
+    startsThreshold: 2,
+    windowGames: 3,
+    madeProspect: 8,
+    madeRival: -4,
+    kept: 4,
+    broken: -8,
+    brokenPopularPlayerFans: -2,
+  },
+
+  stance: {
+    reviewAfterRounds: 4,
+    contendLossMultiplier: 1.5,
+    patienceLossMultiplier: 0.5,
+  },
+
+  offseason: {
+    renewalRaise: 0.1,
+    renewalRaiseMoneyPriority: 0.2,
+    renewalSeasons: 2,
+    /** Players below this satisfaction refuse to re-sign. */
+    renewalMinSatisfaction: 45,
+    aiRenewMaxAge: 33,
+    minRosterSize: 15,
+    ageingFrom: 31,
+    fatigueAfterBreak: [0, 15] as const,
+    moodDriftToward: 62,
+    moodDriftShare: 0.3,
+    fanDriftToward: 70,
+    fanDriftShare: 0.25,
+    pastSeasonsKept: 3,
+  },
+
+  lowMood: {
+    tradeRequestBelow: 30,
+    ultimatumBelow: 35,
+    protestBelow: 35,
+    freezeRounds: 5,
+  },
+
   /** 0–19 critical, 20–39 unhappy, 40–69 neutral, 70–89 positive, 90–100 very positive. */
   moodBands: [20, 40, 70, 90] as const,
 } as const;

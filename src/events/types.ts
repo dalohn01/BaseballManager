@@ -1,6 +1,6 @@
 import type { EffectSink } from '../domain/effects';
 import type { Rng } from '../domain/rng';
-import type { BoostOption, EventInstance, EventOption, EventType, GameState } from '../domain/state';
+import type { BoostOption, EventInstance, EventOption, EventType, FollowUp, GameState } from '../domain/state';
 import type { GameId, Player, PlayerId } from '../domain/types';
 
 export type EventDraft = Pick<EventInstance, 'kicker' | 'title' | 'context' | 'prompt' | 'subjects' | 'data' | 'options' | 'boosts'> & {
@@ -14,6 +14,8 @@ export interface BuildContext {
   season: number;
   round: number;
   gameId: GameId | null;
+  /** Present when this event delivers a scheduled follow-up. */
+  followUp?: FollowUp;
 }
 
 export interface ResolveContext {
@@ -40,8 +42,10 @@ export interface EventTemplate {
   id: string;
   version: number;
   type: EventType;
-  slot: 'management' | 'match' | 'seasonEnd';
+  slot: 'management' | 'match' | 'seasonEnd' | 'preseason' | 'followUp';
   cooldownRounds: number;
+  /** For follow-up templates: can this follow-up still be delivered? (e.g. the player is still here) */
+  followUpValid?(state: GameState, fu: FollowUp): boolean;
   /** 0 means not eligible in the current state. */
   weight(state: GameState): number;
   /** If true, this event takes the first management slot of the round (e.g. a cash crisis). */

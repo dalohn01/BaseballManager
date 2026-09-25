@@ -1,7 +1,7 @@
 import { BALANCE } from '../balance/config';
 import type { EffectSink } from '../domain/effects';
 import type { GameState } from '../domain/state';
-import { absoluteRound } from '../domain/state';
+import { absoluteRound, nextId } from '../domain/state';
 import type { Club, ClubId, FacilityId } from '../domain/types';
 
 const ROUNDS = BALANCE.season.rounds;
@@ -73,6 +73,16 @@ export function settleRound(state: GameState, clubId: ClubId, isHome: boolean, s
     club.facilities[p.facility] = p.toLevel;
     club.project = null;
     out.completed = p.facility;
+    // Chain: the first training session in a new Training Center shows its contribution.
+    if (p.facility === 'training') {
+      state.followUps.push({
+        id: nextId(state, 'fu'),
+        templateId: 'team_training',
+        dueRound: absoluteRound(state.calendar.season, round) + 1,
+        originEventId: null,
+        data: { facilityLevel: p.toLevel, completedRound: round },
+      });
+    }
     sink.record({ targetKind: 'club', targetId: clubId, targetLabel: FACILITY_LABELS[p.facility], stat: `facility.${p.facility}`, statLabel: 'Level', before, after: p.toLevel });
   }
   return out;

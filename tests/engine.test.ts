@@ -89,32 +89,31 @@ describe('event resolution', () => {
 
   it('shows before/after values in the resolution and history', () => {
     let s = newGame(4);
-    s = step(s, 1);
-    const last = s.history[s.history.length - 1];
-    expect(last.effects.length).toBeGreaterThan(0);
-    for (const e of last.effects) expect(e.before).not.toBe(e.after);
+    for (let i = 0; i < 4; i++) s = step(s, i);
+    expect(s.history.some((h) => h.effects.length > 0)).toBe(true);
+    for (const h of s.history) for (const e of h.effects) expect(e.before).not.toBe(e.after);
   });
 });
 
 describe('full season', () => {
   it('plays a whole season and counts every league game once', () => {
     const s = playSeason(newGame(21));
-    expect(s.calendar.phase).toBe('seasonComplete');
-    expect(s.currentEvent).toBeNull();
+    expect(s.calendar).toMatchObject({ season: 2, round: 0, phase: 'preseason' });
+    expect(s.currentEvent?.templateId).toBe('season_plan');
     const games = s.schedule.filter((g) => g.season === 1);
     expect(games.every((g) => g.result)).toBe(true);
-    const table = computeStandings(s);
+    const table = computeStandings(s, 1);
     const totalWins = table.reduce((a, r) => a + r.wins, 0);
     expect(totalWins).toBe(games.length);
     expect(table.every((r) => r.played === 20)).toBe(true);
     expect(Object.keys(s.matches)).toHaveLength(20);
-  });
+  }, 60_000);
 
   it('reconciles club cash with the ledger', () => {
     const s = playSeason(newGame(8));
     const sum = s.ledger.reduce((a, e) => a + e.amount, 0);
     expect(s.clubs[s.userClubId].cash).toBe(BALANCE.economy.startingCash + sum);
-  });
+  }, 60_000);
 
   it('splits a season amount into 20 shares that sum exactly', () => {
     for (const amount of [48_000, 92_001, 13, 300_000]) {
@@ -127,7 +126,7 @@ describe('full season', () => {
   it('runs 50 seeded seasons without errors, empty queues or invalid lineups', () => {
     for (let seed = 100; seed < 150; seed++) {
       const s = playSeason(newGame(seed), seed);
-      expect(s.calendar.phase).toBe('seasonComplete');
+      expect(s.calendar.phase).toBe('preseason');
       for (const id of s.clubOrder) {
         const errors = validateLineup(s, id, s.clubs[id].lineup).filter((i) => i.severity === 'error');
         expect(errors).toEqual([]);

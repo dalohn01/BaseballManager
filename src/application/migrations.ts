@@ -1,4 +1,7 @@
+import { createRng } from '../domain/rng';
 import { SCHEMA_VERSION, type GameState } from '../domain/state';
+import { buildEvent, planPreseason } from '../events/planner';
+import { startNextSeason } from '../simulation/season';
 
 type AnyState = Record<string, unknown> & { schemaVersion: number };
 
@@ -27,6 +30,31 @@ export function migrate(input: AnyState): GameState {
       }
     }
     s.schemaVersion = 2;
+  }
+  if (s.schemaVersion === 2) {
+    s.promises ??= [];
+    s.followUps ??= [];
+    s.seasonSummaries ??= [];
+    for (const p of Object.values(s.players)) p.pastSeasons ??= [];
+    for (const c of Object.values(s.clubs)) {
+      c.seasonPlan ??= null;
+      c.spendingFreezeUntil ??= 0;
+      c.seasonStartCash ??= c.cash;
+    }
+    // v2 ended a season with no further events; v3 continues into the next season.
+    const phase = s.calendar.phase as string;
+    const finished = phase === 'seasonComplete' || (s.currentEvent?.type === 'seasonReview' && s.currentEvent.status !== 'pending' && !s.nextEvent);
+    if (finished) {
+      const rng = createRng(s.rngState);
+      startNextSeason(s, rng);
+      s.queue = planPreseason(s, rng, s.calendar.season);
+      s.currentEvent = buildEvent(s, s.queue.shift()!, rng, s.calendar.season, 0, 0);
+      s.nextEvent = null;
+      s.rngState = rng.getState();
+    } else if (phase === 'seasonComplete') {
+      s.calendar.phase = 'regular';
+    }
+    s.schemaVersion = 3;
   }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;

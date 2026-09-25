@@ -1,3 +1,5 @@
+import type { SeasonPlan } from './state';
+
 export type PlayerId = string;
 export type ClubId = string;
 export type EventInstanceId = string;
@@ -80,6 +82,8 @@ export interface Player {
   joinedSeason: number;
   bio: string;
   stats: SeasonStats;
+  /** Archived seasons (most recent first, capped). */
+  pastSeasons: { season: number; clubId: ClubId; stats: SeasonStats }[];
   moodLog: ReasonEntry[];
   lastReaction: { text: string; context: string; season: number; round: number } | null;
 }
@@ -136,6 +140,11 @@ export interface Club {
   project: FacilityProject | null;
   /** What the club has said publicly about its ambitions (used by follow-ups). */
   publicStance: { stance: 'contend' | 'patience'; season: number; round: number; eventId: string } | null;
+  /** Season direction and measurable goals agreed with the owners. */
+  seasonPlan: SeasonPlan | null;
+  /** Owners' spending freeze: voluntary cash spending blocked through this absolute round. */
+  spendingFreezeUntil: number;
+  seasonStartCash: number;
   reasons: { fanSupport: ReasonEntry[]; ownerConfidence: ReasonEntry[] };
 }
 

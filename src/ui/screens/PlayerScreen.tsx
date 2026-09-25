@@ -154,6 +154,35 @@ export function PlayerScreen({ id }: { id: string }) {
               </div>
             )}
             {!p.isPitcher && <p className="small muted">{p.stats.ab} at-bats · {p.stats.bb} walks · {p.stats.so} strikeouts</p>}
+            {p.pastSeasons.length > 0 && (
+              <div className="table-wrap">
+                <table className="standings small">
+                  <caption className="sr-only">Previous seasons</caption>
+                  <thead>
+                    <tr>
+                      <th scope="col">Season</th>
+                      <th scope="col">Club</th>
+                      <th scope="col">GS</th>
+                      <th scope="col">{p.isPitcher ? 'IP' : 'AVG'}</th>
+                      <th scope="col">{p.isPitcher ? 'RA9' : 'HR'}</th>
+                      <th scope="col">{p.isPitcher ? 'K' : 'RBI'}</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {p.pastSeasons.map((ps) => (
+                      <tr key={ps.season}>
+                        <td>{ps.season}</td>
+                        <td>{s.clubs[ps.clubId]?.abbreviation ?? '—'}</td>
+                        <td>{p.isPitcher ? ps.stats.pitchingStarts : ps.stats.starts}</td>
+                        <td>{p.isPitcher ? ip(ps.stats.outsPitched) : avg3(ps.stats.h, ps.stats.ab)}</td>
+                        <td>{p.isPitcher ? era(ps.stats.runsAllowed, ps.stats.outsPitched) : ps.stats.hr}</td>
+                        <td>{p.isPitcher ? ps.stats.strikeouts : ps.stats.rbi}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </Panel>
 
           <Panel>
@@ -195,6 +224,30 @@ export function PlayerScreen({ id }: { id: string }) {
               <ReasonList reasons={p.moodLog} />
             </div>
           )}
+          {s.promises
+            .filter((pr) => pr.playerId === p.id)
+            .slice(-2)
+            .reverse()
+            .map((pr) => (
+              <div className="status-item" key={pr.id}>
+                <Icon name="clipboard" size={30} />
+                <div>
+                  <small>{pr.status === 'active' ? 'Active promise' : `Promise ${pr.status === 'void' ? 'lapsed' : pr.status}`}</small>
+                  <strong>
+                    Start {pr.threshold} of {pr.toRound - pr.fromRound + 1} games
+                  </strong>
+                  <span className="muted">
+                    {pr.progress} of {pr.threshold} starts · made in round {pr.madeAt.round}
+                    {pr.madeAt.season !== s.calendar.season ? `, season ${pr.madeAt.season}` : ''}
+                  </span>
+                  <span className="dots" aria-hidden="true">
+                    {Array.from({ length: pr.threshold }, (_, i) => (
+                      <span key={i} className={i < pr.progress ? 'dot on' : 'dot'} />
+                    ))}
+                  </span>
+                </div>
+              </div>
+            ))}
           {p.lastReaction && (
             <div className="status-item">
               <Icon name="chat" size={30} />

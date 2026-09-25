@@ -96,6 +96,7 @@ export function createPlayer(spec: PlayerSpec, rng: Rng): Player {
     joinedSeason: spec.joinedSeason,
     bio: spec.bio ?? '',
     stats: emptyStats(),
+    pastSeasons: [],
     moodLog: [],
     lastReaction: null,
   };

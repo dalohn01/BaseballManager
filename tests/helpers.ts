@@ -27,12 +27,18 @@ export function step(state: GameState, pickSeed: number, now = T0): GameState {
   return s;
 }
 
+/** Plays until the next season's preseason has begun (i.e. through draft, contracts and review). */
 export function playSeason(state: GameState, pickSeed = 1): GameState {
   let s = state;
+  const season = s.calendar.season;
   let i = 0;
-  while (s.currentEvent && i < 500) {
+  while (s.calendar.season === season && i < 500) {
     s = step(s, pickSeed * 1000 + i);
     i++;
   }
+  if (i >= 500) throw new Error('Season did not finish');
   return s;
 }
+
+/** The last completed season's state just before the review closed it is not kept; use summaries instead. */
+export const lastSummary = (s: GameState) => s.seasonSummaries[s.seasonSummaries.length - 1];

@@ -5,7 +5,7 @@ import { migrate } from '../src/application/migrations';
 import { createRng } from '../src/domain/rng';
 import { squadProblem } from '../src/domain/roster';
 import type { GameState } from '../src/domain/state';
-import { absoluteRound } from '../src/domain/state';
+import { absoluteRound, SCHEMA_VERSION } from '../src/domain/state';
 import { getTemplate, TEMPLATES } from '../src/events/registry';
 import { roundShare, salaryDue } from '../src/simulation/economy';
 import { newGame, playSeason, run, step, T0 } from './helpers';
@@ -68,7 +68,9 @@ describe('content coverage', () => {
       s.history.forEach((h) => seen.add(h.templateId));
       checkInvariants(s);
     }
-    const expected = TEMPLATES.filter((t) => t.slot === 'management' && !t.urgent).map((t) => t.id);
+    // Conditional templates (low moods, off-track goals) are covered by forced tests in step3.test.ts.
+    const conditional = ['board_ultimatum', 'trade_request', 'fans_protest', 'board_course_change'];
+    const expected = TEMPLATES.filter((t) => t.slot === 'management' && !t.urgent && !conditional.includes(t.id)).map((t) => t.id);
     for (const id of expected) expect(seen.has(id), id).toBe(true);
     expect(seen.has('draft')).toBe(true);
   }, 120_000);
@@ -96,8 +98,9 @@ describe('recruitment', () => {
     const p = s.players[opt.candidateId!];
     expect(s.clubs.hfx.roster.filter((id) => id === p.id)).toHaveLength(1);
     expect(s.clubs.hfx.cash).toBe(cash - opt.cost.cash);
-    expect(salaryDue(s, p.id, 1, 1)).toBe(0);
-    expect(salaryDue(s, p.id, 1, 2)).toBe(roundShare(p.contract.salary, 2));
+    const r = s.calendar.round;
+    expect(salaryDue(s, p.id, 1, r)).toBe(0);
+    expect(salaryDue(s, p.id, 1, r + 1)).toBe(roundShare(p.contract.salary, r + 1));
     checkInvariants(s);
   });
 
@@ -129,7 +132,7 @@ describe('trades', () => {
     expect(s.players[inId].clubId).toBe('hfx');
     expect(s.clubs[partnerId].roster).toContain(outId);
     expect(Object.keys(s.players)).toHaveLength(total);
-    expect(s.players[inId].contract.startRound).toBe(absoluteRound(1, 1));
+    expect(s.players[inId].contract.startRound).toBe(absoluteRound(1, s.calendar.round));
     checkInvariants(s);
   });
 });
@@ -185,7 +188,7 @@ describe('migration', () => {
     }
     delete v1.currentEvent.candidates;
     const m = migrate(v1);
-    expect(m.schemaVersion).toBe(2);
+    expect(m.schemaVersion).toBe(SCHEMA_VERSION);
     expect(m.currentEvent!.candidates).toEqual([]);
     expect(m.history).toEqual(s.history);
     expect(step(m, 2).revision).toBe(s.revision + 2);

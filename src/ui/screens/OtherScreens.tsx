@@ -4,6 +4,8 @@ import { moodLabel } from '../../domain/mood';
 import { clubName, userClub } from '../../domain/state';
 import { FACILITY_LABELS, payrollPerSeason, projectedAttendance, projectedTicketRevenue, seasonForecast, ticketPrice, upkeepPerRound } from '../../simulation/economy';
 import { computeStandings } from '../../simulation/standings';
+import { DIRECTION_LABEL, goalProgress } from '../../simulation/goals';
+import { spendingFrozen } from '../../application/engine';
 import { Crest } from '../components/art';
 import { EffectList, Meter, Panel } from '../components/common';
 import { money, moneyExact } from '../format';
@@ -75,6 +77,8 @@ export function ClubScreen() {
           </dl>
         </Panel>
         <Panel title="Stakeholders">
+          <ClubGoal />
+          {spendingFrozen(s) && <p className="blocker">Owners' spending freeze is active: voluntary spending is blocked for now.</p>}
           <Meter label="Owner confidence" value={club.ownerConfidence} caption={moodLabel('owners', club.ownerConfidence)} reasons={club.reasons.ownerConfidence} />
           <Meter label="Fan support" value={club.fanSupport} caption={`${moodLabel('fans', club.fanSupport)} · fan base ${club.fanBase.toLocaleString('en-US')} (size ≠ happiness)`} reasons={club.reasons.fanSupport} />
           <h3 className="subhead">Brand</h3>
@@ -135,13 +139,49 @@ export function ClubScreen() {
   );
 }
 
+function ClubGoal() {
+  const s = useGame();
+  const g = goalProgress(s);
+  if (!g) return <p className="small muted">No season plan agreed with the owners yet (set in preseason).</p>;
+  return (
+    <div className="club-goal">
+      <p>
+        <strong>Season plan: {DIRECTION_LABEL[g.direction]}</strong> — {g.met ? 'goal met' : g.onTrack ? 'on track' : 'behind'}
+      </p>
+      <ul className="plain small">
+        {g.items.map((i) => (
+          <li key={i.label}>
+            {i.label}: {i.format === 'cash' ? `${money(i.current)} / ${money(i.target)}` : `${i.current} / ${i.target}`} {i.met ? '✓' : ''}
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function LeagueScreen() {
   const s = useGame();
-  const table = computeStandings(s);
+  const seasons = [...new Set(s.schedule.map((g) => g.season))].sort((a, b) => b - a);
+  const [season, setSeason] = useState(s.calendar.season);
+  const table = computeStandings(s, season);
   const rounds = Array.from({ length: BALANCE.season.rounds }, (_, i) => i + 1);
   return (
     <div className="page">
-      <h1 className="page-title">League · Season {s.calendar.season}</h1>
+      <div className="title-row">
+        <h1 className="page-title">League · Season {season}</h1>
+        {seasons.length > 1 && (
+          <label className="season-pick">
+            <span className="sr-only">Season</span>
+            <select value={season} onChange={(e) => setSeason(Number(e.target.value))}>
+              {seasons.map((x) => (
+                <option key={x} value={x}>
+                  Season {x}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
       <div className="cols-2">
         <Panel title="Standings">
           <div className="table-wrap">
@@ -181,7 +221,7 @@ export function LeagueScreen() {
         <Panel title="Schedule & results">
           <div className="schedule">
             {rounds.map((r) => {
-              const games = s.schedule.filter((g) => g.season === s.calendar.season && g.round === r);
+              const games = s.schedule.filter((g) => g.season === season && g.round === r);
               return (
                 <div key={r} className={`sched-round ${r === (s.currentEvent?.round ?? 0) ? 'current' : ''}`}>
                   <h3>Round {r}</h3>
@@ -211,9 +251,90 @@ export function LeagueScreen() {
 export function HistoryScreen() {
   const s = useGame();
   const items = [...s.history].reverse();
+  const club = userClub(s);
+  const promises = [...s.promises].reverse();
+  const nameOf = (id: string) => (s.players[id] ? `${s.players[id].firstName} ${s.players[id].lastName}` : 'former player');
   return (
     <div className="page">
       <h1 className="page-title">History</h1>
+      {s.seasonSummaries.length > 0 && (
+        <Panel title="Seasons">
+          <div className="table-wrap">
+            <table className="standings">
+              <thead>
+                <tr>
+                  <th scope="col">Season</th>
+                  <th scope="col">Plan</th>
+                  <th scope="col">W–L</th>
+                  <th scope="col">Pos</th>
+                  <th scope="col">Goal</th>
+                  <th scope="col" className="num">
+                    Cash start → end
+                  </th>
+                  <th scope="col" className="num">
+                    Payroll
+                  </th>
+                  <th scope="col">Owners / Fans</th>
+                  <th scope="col">Champion</th>
+                </tr>
+              </thead>
+              <tbody>
+                {s.seasonSummaries.map((x) => (
+                  <tr key={x.season}>
+                    <td>{x.season}</td>
+                    <td>{x.direction ? DIRECTION_LABEL[x.direction] : '—'}</td>
+                    <td>
+                      {x.wins}–{x.losses}
+                    </td>
+                    <td>#{x.position}</td>
+                    <td className={x.goalMet ? 'good' : x.goalMet === false ? 'bad' : ''}>
+                      {x.goalMet === null ? '—' : x.goalMet ? 'Met' : 'Missed'} <small className="muted block">{x.goalText}</small>
+                    </td>
+                    <td className="num">
+                      {money(x.cashStart)} → {money(x.cashEnd)}
+                    </td>
+                    <td className="num">{money(x.payrollEnd)}</td>
+                    <td>
+                      {x.ownerConfidence} / {x.fanSupport}
+                    </td>
+                    <td>{s.clubs[x.championId]?.name}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Panel>
+      )}
+      <Panel title="Commitments">
+        <ul className="plain commitments">
+          {club.seasonPlan && (
+            <li>
+              <strong>Season plan:</strong> {DIRECTION_LABEL[club.seasonPlan.direction]} (agreed {club.seasonPlan.setAt.round === 0 ? 'in preseason' : `in round ${club.seasonPlan.setAt.round}`})
+              {club.seasonPlan.changes.map((ch, i) => (
+                <span key={i} className="block small muted">
+                  Round {ch.round}: changed from {DIRECTION_LABEL[ch.from]} to {DIRECTION_LABEL[ch.to]}
+                </span>
+              ))}
+            </li>
+          )}
+          {club.publicStance && (
+            <li>
+              <strong>Public message:</strong> {club.publicStance.stance === 'contend' ? '“Going for the title”' : '“Building something”'} (season {club.publicStance.season}, round {club.publicStance.round})
+            </li>
+          )}
+          {promises.map((pr) => (
+            <li key={pr.id}>
+              <strong>Promise to {nameOf(pr.playerId)}:</strong> {pr.threshold} starts in {pr.toRound - pr.fromRound + 1} games (season {pr.madeAt.season}, round {pr.madeAt.round}, “{pr.originTitle}”) —{' '}
+              <span className={pr.status === 'kept' ? 'good' : pr.status === 'broken' ? 'bad' : ''}>
+                {{ active: 'active', kept: 'kept', broken: 'broken', void: 'lapsed' }[pr.status]}
+              </span>{' '}
+              ({pr.progress}/{pr.threshold}){pr.closeReason ? <span className="small muted"> · {pr.closeReason}</span> : null}
+            </li>
+          ))}
+          {!club.seasonPlan && !club.publicStance && promises.length === 0 && <li className="muted">No open commitments.</li>}
+        </ul>
+      </Panel>
+      <h2 className="subhead">Decisions</h2>
       <p className="muted">Every decision you made, what it cost and what actually changed.</p>
       {items.length === 0 && <p className="muted">No decisions yet.</p>}
       <ol className="history">

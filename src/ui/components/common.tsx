@@ -28,6 +28,7 @@ export function Meter({
   max = 100,
   tone = 'slate',
   reasons,
+  display,
 }: {
   label: string;
   value: number;
@@ -35,13 +36,15 @@ export function Meter({
   max?: number;
   tone?: 'slate' | 'blue' | 'warn';
   reasons?: ReasonEntry[];
+  /** Text to show instead of the raw number (e.g. a cash amount). */
+  display?: string;
 }) {
   const pct = Math.max(0, Math.min(100, (value / max) * 100));
   const body = (
     <>
       <div className="meter-row">
         <span className="meter-label">{label}</span>
-        <span className="meter-value">{Math.round(value)}</span>
+        <span className="meter-value">{display ?? Math.round(value)}</span>
       </div>
       <div className="meter-track" role="meter" aria-valuemin={0} aria-valuemax={max} aria-valuenow={Math.round(value)} aria-label={label}>
         <div className={`meter-fill tone-${tone}`} style={{ width: `${pct}%` }} />

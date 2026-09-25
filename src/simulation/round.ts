@@ -6,6 +6,7 @@ import type { GameState } from '../domain/state';
 import { clubPlayers } from '../domain/state';
 import type { ClubId, Lineup, MatchResult, PlayerId, ScheduledGame } from '../domain/types';
 import { settleRound, type RoundSettlement } from './economy';
+import { evaluatePromises } from './promises';
 import { buildSimTeam, simulateMatch, winProbability } from './match';
 import { avg } from './training';
 
@@ -14,6 +15,7 @@ export interface RoundOutcome {
   settlement: RoundSettlement;
   expectedWin: number;
   reactions: { playerId: PlayerId; text: string }[];
+  notes: string[];
 }
 
 export function lineupFor(state: GameState, clubId: ClubId): Lineup {
@@ -69,9 +71,30 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
     before: fatigueBefore,
     after: Math.round(avg(clubPlayers(state, state.userClubId).map((p) => p.fatigue))),
   });
-  const reactions = applyUserMoods(state, userGame, match, expectedWin, sink);
+  const notes: string[] = [];
+  const reactions = applyUserMoods(state, userGame, match, expectedWin, sink, notes);
+  notes.push(...evaluatePromises(state, sink));
   const settlement = settleRound(state, state.userClubId, userGame.homeId === state.userClubId, sink);
-  return { userMatch: match, settlement, expectedWin, reactions };
+  return { userMatch: match, settlement, expectedWin, reactions, notes };
+}
+
+/**
+ * How strongly fans react to a loss, from the public message and the agreed
+ * season plan of this season. Returns the multiplier and a readable reason.
+ */
+export function lossExpectation(state: GameState): { multiplier: number; reason: string | null } {
+  const club = state.clubs[state.userClubId];
+  const season = state.calendar.season;
+  const stance = club.publicStance?.season === season ? club.publicStance.stance : null;
+  const plan = club.seasonPlan?.direction ?? null;
+  const cfg = BALANCE.stance;
+  if (stance === 'contend' || (plan === 'winNow' && stance !== 'patience')) {
+    return { multiplier: stance === 'contend' ? cfg.contendLossMultiplier : BALANCE.seasonPlan.winNow.lossFanMultiplier, reason: stance === 'contend' ? 'fans expect a title push' : 'a win-now season' };
+  }
+  if (stance === 'patience' || plan === 'rebuild') {
+    return { multiplier: stance === 'patience' ? cfg.patienceLossMultiplier : BALANCE.seasonPlan.rebuild.lossFanMultiplier, reason: stance === 'patience' ? 'fans accept the rebuild message' : 'a declared rebuild' };
+  }
+  return { multiplier: 1, reason: null };
 }
 
 function applyStats(state: GameState, m: MatchResult) {
@@ -128,6 +151,7 @@ function applyUserMoods(
   m: MatchResult,
   expectedWin: number,
   sink: EffectSink,
+  notes: string[],
 ): { playerId: PlayerId; text: string }[] {
   const mood = BALANCE.mood;
   const clubId = state.userClubId;
@@ -141,8 +165,14 @@ function applyUserMoods(
   const reactions: { playerId: PlayerId; text: string }[] = [];
 
   // Fans react to the result relative to expectation; owners only to the result.
-  const fanDelta = Math.round(((won ? 1 : 0) - expectedWin) * mood.fanExpectationScale);
-  if (fanDelta !== 0) sink.clubMood(clubId, 'fanSupport', fanDelta, `${won ? 'Beat' : 'Lost to'} ${opp.name} ${us}–${them}${won && expectedWin < 0.4 ? ' as underdogs' : !won && expectedWin > 0.6 ? ' as favourites' : ''}`);
+  // A loss hurts more or less depending on what the club has said and agreed this season.
+  const raw = ((won ? 1 : 0) - expectedWin) * mood.fanExpectationScale;
+  const exp = won ? { multiplier: 1, reason: null } : lossExpectation(state);
+  const fanDelta = Math.round(raw * exp.multiplier);
+  if (!won && exp.reason && Math.round(raw) !== fanDelta) {
+    notes.push(`Fan reaction ${fanDelta} instead of ${Math.round(raw)}: ${exp.reason}.`);
+  }
+  if (fanDelta !== 0) sink.clubMood(clubId, 'fanSupport', fanDelta, `${won ? 'Beat' : 'Lost to'} ${opp.name} ${us}–${them}${won && expectedWin < 0.4 ? ' as underdogs' : !won && expectedWin > 0.6 ? ' as favourites' : ''}${exp.reason ? ` (${exp.reason})` : ''}`);
   sink.clubMood(clubId, 'ownerConfidence', won ? mood.ownerWin : mood.ownerLoss, `${won ? 'Win' : 'Loss'} vs ${opp.name}`);
 
   for (const p of clubPlayers(state, clubId)) {

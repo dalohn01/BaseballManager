@@ -2,6 +2,7 @@ import { BALANCE } from '../../balance/config';
 import type { GameState } from '../../domain/state';
 import { clubPlayers, playerName, userClub } from '../../domain/state';
 import type { Player, RatingKey } from '../../domain/types';
+import { canPromiseStarts, makeStartsPromise } from '../../simulation/promises';
 import { applyProgress, recordProgress, runTeamTraining } from '../../simulation/training';
 import type { EventTemplate } from '../types';
 import { cost, fmt, isInLineup, neg, neutral, pos, substitute, weakestStarterFor } from './helpers';
@@ -45,11 +46,11 @@ export const individualProspect: EventTemplate = {
       data: { playerId: p.id, rivalId: rival.id },
       options: [
         {
-          id: 'start',
-          label: 'Start him next game',
-          summary: `${p.lastName} replaces ${rival.lastName} in the saved lineup.`,
-          certain: [pos(`${p.lastName} satisfaction +6`), neg(`${rival.lastName} satisfaction −4`)],
-          uncertain: [neutral('Weaker lineup today, more experience for him')],
+          id: 'promise',
+          label: `Promise ${BALANCE.promises.startsThreshold} starts in ${BALANCE.promises.windowGames} games`,
+          summary: `${p.lastName} replaces ${rival.lastName} in the saved lineup now.`,
+          certain: [pos(`${p.lastName} satisfaction +${BALANCE.promises.madeProspect}`), neg(`${rival.lastName} satisfaction ${BALANCE.promises.madeRival}`)],
+          uncertain: [neutral(`Kept: +${BALANCE.promises.kept}. Broken: ${BALANCE.promises.broken} (checked against actual lineups)`)],
           cost: cost(),
         },
         {
@@ -69,19 +70,26 @@ export const individualProspect: EventTemplate = {
   optionBlocker: (s, ev, id) => {
     const p = s.players[String(ev.data.playerId)];
     if (!p || p.clubId !== s.userClubId) return 'He is no longer with the club.';
-    if (id === 'start' && !isInLineup(s, s.userClubId, String(ev.data.rivalId)) && !isInLineup(s, s.userClubId, p.id)) return 'His rival is not in the lineup any more.';
+    if (id === 'promise') {
+      if (!canPromiseStarts(s)) return 'Too few games left this season for this promise.';
+      if (!isInLineup(s, s.userClubId, String(ev.data.rivalId)) && !isInLineup(s, s.userClubId, p.id)) return 'His rival is not in the lineup any more.';
+    }
     return null;
   },
   resolve: ({ state, rng, sink, option, event, boost: b }) => {
     const p = state.players[String(event.data.playerId)];
     const rival = state.players[String(event.data.rivalId)];
-    if (option.id === 'start') {
-      substitute(state, state.userClubId, rival.id, p.id);
-      sink.playerMood(p.id, 'satisfaction', 6, 'Promoted into the starting lineup');
-      sink.playerMood(rival.id, 'satisfaction', -4, `Lost his spot to ${p.lastName}`);
+    if (option.id === 'promise') {
+      if (!isInLineup(state, state.userClubId, p.id)) substitute(state, state.userClubId, rival.id, p.id);
+      const pr = makeStartsPromise(state, event, p.id, rival.id);
+      sink.playerMood(p.id, 'satisfaction', BALANCE.promises.madeProspect, 'Promised regular starts');
+      sink.playerMood(rival.id, 'satisfaction', BALANCE.promises.madeRival, `Lost his spot to ${p.lastName}`);
       return {
-        headline: `${p.lastName} gets his chance.`,
-        narrative: [`${playerName(p)} is in the saved lineup for the next game; ${rival.lastName} goes to the bench. Change it any time on the Team page.`],
+        headline: `${p.lastName} gets his promise.`,
+        narrative: [
+          `${pr.threshold} starts in the next ${pr.toRound - pr.fromRound + 1} games, starting with this round's game. It is checked against the actual lineups.`,
+          `${playerName(p)} is in the saved lineup; ${rival.lastName} goes to the bench. If you change the lineup, the promise may break.`,
+        ],
         reactions: [
           { playerId: p.id, text: 'Thanks for giving me a chance.' },
           { playerId: rival.id, text: 'I’ll be ready when you need me.' },

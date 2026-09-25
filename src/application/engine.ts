@@ -4,7 +4,7 @@ import { autoLineup, validateLineup } from '../domain/lineup';
 import { createRng } from '../domain/rng';
 import { releasePlayer, remainingSeasonSalary, repairLineup, squadProblem } from '../domain/roster';
 import type { BoostOption, Cost, EventInstance, EventOption, GameState } from '../domain/state';
-import { userClub } from '../domain/state';
+import { absoluteRound, userClub } from '../domain/state';
 import { canAffordTime, regenerate, spendTime } from '../domain/time';
 import type { Lineup } from '../domain/types';
 import { prepareNextEvent } from '../events/planner';
@@ -22,6 +22,8 @@ export type Command =
 export type CommandError = { ok: false; code: 'stale' | 'duplicate' | 'invalid' | 'unaffordable'; error: string };
 export type CommandResult = { ok: true; state: GameState } | CommandError;
 
+const POSTSEASON = new Set(['draft', 'contracts', 'seasonReview']);
+
 const fail = (code: CommandError['code'], error: string): CommandError => ({ ok: false, code, error });
 
 export function totalCost(option: EventOption, boost: BoostOption | null): Cost {
@@ -38,6 +40,7 @@ export function optionBlocker(state: GameState, event: EventInstance, option: Ev
   const club = userClub(state);
   if (cost.time > 0 && !canAffordTime(state.time, now, cost.time)) return 'Not enough Time. Wait for it to recover.';
   if (cost.cash > 0 && club.cash < 0) return 'Cash is negative: new voluntary spending is blocked.';
+  if (cost.cash > 0 && spendingFrozen(state)) return `Owners' spending freeze: no voluntary spending until after round ${club.spendingFreezeUntil - absoluteRound(state.calendar.season, 0)}.`;
   if (cost.cash > 0 && club.cash < cost.cash) return `Needs $${cost.cash.toLocaleString('en-US')} Club Cash.`;
   if (cost.influence > state.influence) return `Needs ${cost.influence} Influence.`;
   const t = getTemplate(event.templateId);
@@ -61,10 +64,12 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       next.currentEvent!.status = 'acknowledged';
       next.currentEvent = next.nextEvent;
       next.nextEvent = null;
-      if (next.currentEvent) {
-        next.calendar.season = next.currentEvent.season;
-        next.calendar.round = next.currentEvent.round;
-        next.calendar.slot = next.currentEvent.slot;
+      const cur = next.currentEvent;
+      if (cur) {
+        next.calendar.season = cur.season;
+        next.calendar.round = cur.round;
+        next.calendar.slot = cur.slot;
+        next.calendar.phase = cur.round === 0 ? 'preseason' : POSTSEASON.has(cur.type) ? 'postseason' : 'regular';
       }
       next.revision += 1;
       return { ok: true, state: next };
@@ -109,6 +114,11 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
   }
 }
 
+export const spendingFrozen = (state: GameState) => {
+  const until = userClub(state).spendingFreezeUntil;
+  return until > 0 && until >= absoluteRound(state.calendar.season, state.calendar.round);
+};
+
 export const releaseCost = (state: GameState, playerId: string) =>
   Math.round(remainingSeasonSalary(state, state.players[playerId]) * BALANCE.roster.releaseBuyoutShare);
 
@@ -116,7 +126,7 @@ export function releaseBlocker(state: GameState, playerId: string): string | nul
   const p = state.players[playerId];
   const club = userClub(state);
   if (!p || p.clubId !== club.id) return 'He is not on your roster.';
-  if (state.currentEvent?.status === 'resolved' || state.calendar.phase !== 'regular') return 'Finish the current event first.';
+  if (state.currentEvent?.status === 'resolved') return 'Continue past the current result first.';
   const problem = squadProblem(state, club.roster.filter((id) => id !== playerId));
   if (problem) return problem;
   const cost = releaseCost(state, playerId);

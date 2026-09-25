@@ -1,7 +1,10 @@
 import { useEffect, useRef } from 'react';
 import { fatigueLabel, moodLabel } from '../../domain/mood';
-import { clubName, clubPlayers, shortName, userClub } from '../../domain/state';
+import type { GameState } from '../../domain/state';
+import { absoluteRound, clubName, clubPlayers, shortName, userClub } from '../../domain/state';
 import { SLOT_LABELS } from '../../events/planner';
+import { DIRECTION_LABEL, goalProgress } from '../../simulation/goals';
+import { money } from '../format';
 import { computeStandings } from '../../simulation/standings';
 import { avg } from '../../simulation/training';
 import { Crest } from '../components/art';
@@ -22,13 +25,14 @@ export function HomeScreen() {
   return (
     <div className="home">
       <p className="crumb">
-        Season {s.calendar.season} · Round {s.currentEvent?.round ?? s.calendar.round}
+        Season {s.calendar.season} · {phaseLabel(s)}
       </p>
       <div className="home-grid">
         <div className="home-main" ref={mainRef}>
           <EventCard />
         </div>
         <aside className="home-left">
+          <SeasonGoal />
           <ClubStatus />
           <PlayerNotes />
         </aside>
@@ -39,6 +43,51 @@ export function HomeScreen() {
         </aside>
       </div>
     </div>
+  );
+}
+
+function phaseLabel(s: GameState): string {
+  const ev = s.currentEvent;
+  const round = ev?.round ?? s.calendar.round;
+  if (round === 0) return 'Preseason';
+  if (ev && ['draft', 'contracts', 'seasonReview'].includes(ev.type)) return 'Off-season';
+  return `Round ${round}`;
+}
+
+export function SeasonGoal() {
+  const s = useGame();
+  const g = goalProgress(s);
+  const active = s.promises.filter((p) => p.status === 'active');
+  if (!g && active.length === 0) return null;
+  return (
+    <Panel title="Season goal" action={<a className="link small" href={href('club')}>Details →</a>}>
+      {g ? (
+        <>
+          <p className="goal-direction">
+            <strong>{DIRECTION_LABEL[g.direction]}</strong>
+            <span className={`tag ${g.met ? 'tag-good' : g.onTrack ? 'tag-neutral' : 'tag-bad'}`}>{g.met ? 'Met' : g.onTrack ? 'On track' : 'Behind'}</span>
+          </p>
+          {g.items.map((i) => (
+            <Meter
+              key={i.label}
+              label={i.label}
+              value={i.format === 'cash' ? Math.max(0, i.current) : i.current}
+              max={Math.max(1, i.target)}
+              tone={i.met ? 'blue' : 'slate'}
+              display={i.format === 'cash' ? money(i.current) : undefined}
+              caption={i.format === 'cash' ? `${money(i.current)} of ${money(i.target)}` : `${i.current} of ${i.target}`}
+            />
+          ))}
+        </>
+      ) : (
+        <p className="muted small">No season plan agreed yet.</p>
+      )}
+      {active.map((pr) => (
+        <p key={pr.id} className="small promise-line">
+          <Icon name="clipboard" size={16} /> Promise: {shortName(s.players[pr.playerId])} {pr.progress}/{pr.threshold} starts (by round {pr.toRound - absoluteRound(s.calendar.season, 0)})
+        </p>
+      ))}
+    </Panel>
   );
 }
 

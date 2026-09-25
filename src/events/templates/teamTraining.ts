@@ -13,21 +13,25 @@ export const teamTraining: EventTemplate = {
   slot: 'management',
   cooldownRounds: 0,
   weight: () => 5,
-  build: ({ state }) => {
+  build: ({ state, followUp }) => {
     const players = clubPlayers(state, state.userClubId);
     const fatigue = Math.round(avg(players.map((p) => p.fatigue)));
     const tired = players.filter((p) => p.fatigue >= 55).sort((a, b) => b.fatigue - a.fatigue);
+    const facility = followUp?.data.facilityLevel
+      ? `First session in the upgraded Training Center (level ${followUp.data.facilityLevel}, finished after round ${followUp.data.completedRound}). `
+      : '';
     const context =
-      tired.length > 0
+      facility +
+      (tired.length > 0
         ? `Average squad fatigue is ${fatigue}. ${tired.slice(0, 2).map(shortName).join(' and ')} ${tired.length > 1 ? 'are' : 'is'} running low.`
-        : `Average squad fatigue is ${fatigue}. The group is ready to work.`;
+        : `Average squad fatigue is ${fatigue}. The group is ready to work.`);
     return {
       kicker: 'Team Training',
-      title: 'Team Training',
+      title: facility ? 'Training in the New Center' : 'Team Training',
       context,
       prompt: 'Where should we focus today?',
       subjects: { playerIds: tired.slice(0, 2).map((p) => p.id), clubIds: [] },
-      data: {},
+      data: { newFacility: !!facility },
       options: [
         {
           id: 'batting',
@@ -78,6 +82,9 @@ export const teamTraining: EventTemplate = {
       narrative.push(`Squad fatigue down from ${Math.round(summary.fatigueBefore)} to ${Math.round(summary.fatigueAfter)}.`);
     } else {
       narrative.push(`${summary.totalProgress} development points across the squad${boost ? ' (extra coaching +50%)' : ''}.`);
+      if (summary.facilityLevel > 1) {
+        narrative.push(`Training Center level ${summary.facilityLevel} contributed ${summary.facilityContribution} of those points compared with the old facility.`);
+      }
       if (summary.pointsGained.length > 0) {
         const names = summary.pointsGained.map((g) => `${shortName(state.players[g.playerId])} ${g.key} ${g.before}→${g.after}`);
         narrative.push(`Rating gains: ${names.join(', ')}.`);

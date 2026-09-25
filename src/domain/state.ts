@@ -10,7 +10,7 @@ import type {
 } from './types';
 import { BALANCE } from '../balance/config';
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export type EventType =
   | 'leagueGame'
@@ -25,6 +25,7 @@ export type EventType =
   | 'facility'
   | 'trade'
   | 'sponsor'
+  | 'contracts'
   | 'seasonReview';
 
 export type EventStatus = 'pending' | 'resolved' | 'acknowledged';
@@ -118,6 +119,68 @@ export interface QueuedSlot {
   kind: 'management' | 'match' | 'seasonEnd';
   templateId: string;
   gameId: GameId | null;
+  /** Set when this slot delivers a scheduled follow-up. */
+  followUpId?: string;
+}
+
+/** A checkable commitment. Evaluated from real data (e.g. actual starts), never from text. */
+export interface PromiseRecord {
+  id: string;
+  kind: 'starts';
+  playerId: PlayerId;
+  /** Starting player who lost out when the promise was made (reacts when it is kept). */
+  rivalId: PlayerId | null;
+  threshold: number;
+  /** Absolute rounds (inclusive) whose league games count. */
+  fromRound: number;
+  toRound: number;
+  originEventId: EventInstanceId;
+  originTitle: string;
+  madeAt: { season: number; round: number };
+  status: 'active' | 'kept' | 'broken' | 'void';
+  progress: number;
+  closedAt: { season: number; round: number } | null;
+  closeReason: string | null;
+}
+
+/** A consequence scheduled for a later calendar slot, referring back to real earlier events. */
+export interface FollowUp {
+  id: string;
+  templateId: string;
+  /** Absolute round from which it may be delivered. */
+  dueRound: number;
+  originEventId: EventInstanceId | null;
+  data: Record<string, string | number | boolean | null>;
+}
+
+export type SeasonDirection = 'winNow' | 'rebuild' | 'balanced';
+
+export interface SeasonPlan {
+  direction: SeasonDirection;
+  /** Goal targets; progress is always computed from actual results. */
+  winsTarget: number | null;
+  prospectStartsTarget: number | null;
+  cashTarget: number | null;
+  setAt: { season: number; round: number; eventId: EventInstanceId };
+  /** Earlier directions this season stay on record. */
+  changes: { from: SeasonDirection; to: SeasonDirection; round: number }[];
+}
+
+export interface SeasonSummary {
+  season: number;
+  direction: SeasonDirection | null;
+  goalMet: boolean | null;
+  goalText: string;
+  wins: number;
+  losses: number;
+  position: number;
+  championId: ClubId;
+  cashStart: number;
+  cashEnd: number;
+  payrollEnd: number;
+  fanSupport: number;
+  ownerConfidence: number;
+  prospectStarts: number;
 }
 
 export interface DecisionRecord {
@@ -155,9 +218,10 @@ export interface TimeState {
 
 export interface Calendar {
   season: number;
+  /** 0 = preseason. */
   round: number;
   slot: number;
-  phase: 'regular' | 'seasonComplete';
+  phase: 'preseason' | 'regular' | 'postseason';
 }
 
 export interface GameState {
@@ -184,6 +248,9 @@ export interface GameState {
   templateLastUsed: Record<string, number>;
   history: DecisionRecord[];
   ledger: LedgerEntry[];
+  promises: PromiseRecord[];
+  followUps: FollowUp[];
+  seasonSummaries: SeasonSummary[];
 }
 
 export const absoluteRound = (season: number, round: number) =>

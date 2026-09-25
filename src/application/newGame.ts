@@ -7,7 +7,7 @@ import { clamp, createRng, type Rng } from '../domain/rng';
 import type { GameState } from '../domain/state';
 import { SCHEMA_VERSION } from '../domain/state';
 import type { Club, Player } from '../domain/types';
-import { buildEvent, planRound } from '../events/planner';
+import { buildEvent, planPreseason } from '../events/planner';
 import { generateSchedule } from '../simulation/schedule';
 
 export interface NewGameOptions {
@@ -47,6 +47,7 @@ function playerFromSeed(seed: PlayerSeed, id: string, clubId: string, rng: Rng):
     joinedSeason: 1,
     bio: seed.bio,
     stats: emptyStats(),
+    pastSeasons: [],
     moodLog: [],
     lastReaction: null,
   };
@@ -117,6 +118,9 @@ function makeClub(seed: ClubSeed, isUser: boolean): Club {
     facilities: { training: 1, scouting: 1, stadium: 1 },
     project: null,
     publicStance: null,
+    seasonPlan: null,
+    spendingFreezeUntil: 0,
+    seasonStartCash: BALANCE.economy.startingCash,
     reasons: { fanSupport: [], ownerConfidence: [] },
   };
 }
@@ -141,7 +145,7 @@ export function createNewGame(opts: NewGameOptions): GameState {
     clubs: {},
     clubOrder: seeds.map((s) => s.id),
     players: {},
-    calendar: { season: 1, round: 1, slot: 0, phase: 'regular' },
+    calendar: { season: 1, round: 0, slot: 0, phase: 'preseason' },
     schedule: [],
     matches: {},
     time: { current: BALANCE.time.cap, lastRegenAt: opts.now, mode: opts.timeMode ?? 'economy' },
@@ -152,6 +156,9 @@ export function createNewGame(opts: NewGameOptions): GameState {
     templateLastUsed: {},
     history: [],
     ledger: [],
+    promises: [],
+    followUps: [],
+    seasonSummaries: [],
   };
 
   const usedNames = new Set(USER_ROSTER.map((p) => `${p.firstName} ${p.lastName}`));
@@ -169,9 +176,9 @@ export function createNewGame(opts: NewGameOptions): GameState {
     club.lineup = autoLineup(state, club.id);
   }
   state.schedule = generateSchedule(state.clubOrder, 1, rng);
-  state.queue = planRound(state, rng, 1, 1);
-  const first = state.queue.shift()!;
-  state.currentEvent = buildEvent(state, first, rng, 1, 1, 0);
+  // The career starts in preseason with the owners' season plan.
+  state.queue = planPreseason(state, rng, 1);
+  state.currentEvent = buildEvent(state, state.queue.shift()!, rng, 1, 0, 0);
   state.rngState = rng.getState();
   return state;
 }

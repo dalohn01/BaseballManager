@@ -443,3 +443,17 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
 }
+
+/* Step 3: goals, promises, commitments */
+.dots { display: flex; gap: 8px; margin-top: 6px; }
+.dot { width: 18px; height: 18px; border-radius: 50%; border: 2px solid var(--blue); }
+.dot.on { background: var(--blue); }
+.tag { font-size: 0.75rem; font-weight: 700; padding: 2px 8px; border-radius: 99px; text-transform: uppercase; }
+.tag-good { background: #e3f5e8; color: var(--good); }
+.tag-bad { background: #fde8e8; color: var(--bad); }
+.tag-neutral { background: var(--blue-soft); color: var(--navy); }
+.goal-direction { display: flex; justify-content: space-between; align-items: center; margin: 0 0 10px; font-size: 1.1rem; }
+.promise-line { display: flex; gap: 6px; align-items: center; margin: 4px 0 0; }
+.commitments li { padding: 6px 0; border-bottom: 1px solid var(--line); }
+.title-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.club-goal { margin-bottom: 14px; }

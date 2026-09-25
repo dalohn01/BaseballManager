@@ -1,7 +1,7 @@
 import { BALANCE } from '../../balance/config';
-import { clubPlayers, playerName, shortName, userClub } from '../../domain/state';
+import { absoluteRound, clubPlayers, nextId, playerName, shortName, userClub } from '../../domain/state';
+import type { GameState } from '../../domain/state';
 import type { FacilityId } from '../../domain/types';
-import { absoluteRound } from '../../domain/state';
 import { FACILITY_LABELS, seasonForecast, upkeepPerRound } from '../../simulation/economy';
 import type { EventOption } from '../../domain/state';
 import type { EventTemplate } from '../types';
@@ -196,8 +196,14 @@ export const sponsorOffer: EventTemplate = {
   version: 1,
   type: 'sponsor',
   slot: 'management',
-  cooldownRounds: 20,
-  weight: (s) => (s.calendar.round >= 5 && s.calendar.round <= 16 && userClub(s).sponsor?.kind === 'standard' ? 3 : 0),
+  cooldownRounds: 3,
+  weight: (s) => {
+    const sponsor = userClub(s).sponsor;
+    // Without a sponsor the offer is (almost) certain to come up; otherwise once per season mid-year.
+    if (!sponsor) return 10;
+    const offeredThisSeason = (s.templateLastUsed.sponsor_offer ?? -1) > absoluteRound(s.calendar.season, 0);
+    return s.calendar.round >= 5 && s.calendar.round <= 16 && sponsor.kind === 'standard' && !offeredThisSeason ? 3 : 0;
+  },
   build: ({ state }) => {
     const c = userClub(state);
     const commercial = Math.round((300_000 + c.brand.commercial * 1_500) / 10_000) * 10_000;
@@ -205,7 +211,9 @@ export const sponsorOffer: EventTemplate = {
     return {
       kicker: 'Sponsor Deal Offering',
       title: 'New Sponsor on the Line',
-      context: `Your current deal with ${c.sponsor?.name ?? 'nobody'} pays ${fmt(c.sponsor?.perSeason ?? 0)} per season. Two companies want the shirt.`,
+      context: c.sponsor
+        ? `Your current deal with ${c.sponsor.name} pays ${fmt(c.sponsor.perSeason)} per season. Two companies want the shirt.`
+        : 'The shirt has no sponsor, so no sponsor income is coming in. Two companies are interested.',
       prompt: 'Which deal do you take?',
       subjects: { playerIds: [], clubIds: [] },
       data: { commercial, local },
@@ -227,7 +235,7 @@ export const sponsorOffer: EventTemplate = {
           cost: cost(),
           primary: true,
         },
-        passOption('Keep the current sponsor', 'Loyalty to an existing partner.'),
+        c.sponsor ? passOption('Keep the current sponsor', 'Loyalty to an existing partner.') : passOption('Play without a sponsor', 'Wait for a better offer.'),
       ],
       boosts: [],
     };
@@ -252,6 +260,19 @@ export const sponsorOffer: EventTemplate = {
 };
 
 // ---------- Media ----------
+
+/** Chain 2: a public message is evaluated against real results a few rounds later. */
+function scheduleStanceReview(state: GameState, eventId: string) {
+  const { season, round } = state.calendar;
+  if (round + BALANCE.stance.reviewAfterRounds > BALANCE.season.rounds) return;
+  state.followUps.push({
+    id: nextId(state, 'fu'),
+    templateId: 'media_stance_review',
+    dueRound: absoluteRound(season, round + BALANCE.stance.reviewAfterRounds),
+    originEventId: eventId,
+    data: {},
+  });
+}
 
 export const mediaExpectations: EventTemplate = {
   id: 'media_expectations',
@@ -285,6 +306,7 @@ export const mediaExpectations: EventTemplate = {
       sink.clubMood(c.id, 'fanSupport', 4, 'Promised a title push in the press');
       sink.clubMood(c.id, 'ownerConfidence', 2, 'Ambitious public message');
       c.publicStance = { stance: 'contend', ...stamp };
+      scheduleStanceReview(state, event.id);
       return { headline: '"Title or bust," says the Herald.', narrative: ['The words are on record.'] };
     }
     if (option.id === 'patience') {
@@ -292,6 +314,7 @@ export const mediaExpectations: EventTemplate = {
       sink.brand(c.id, 'local', 2);
       sink.clubMood(c.id, 'ownerConfidence', -1, 'Lowered public expectations');
       c.publicStance = { stance: 'patience', ...stamp };
+      scheduleStanceReview(state, event.id);
       return { headline: '"A project, not a quick fix."', narrative: ['The words are on record.'] };
     }
     sink.clubMood(c.id, 'fanSupport', -1, 'Dodged questions from the press');

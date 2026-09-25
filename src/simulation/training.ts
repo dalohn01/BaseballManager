@@ -89,6 +89,9 @@ export type TeamTrainingFocus = 'batting' | 'defense' | 'recovery';
 export interface TeamTrainingSummary {
   pointsGained: { playerId: string; key: RatingKey; before: number; after: number }[];
   totalProgress: number;
+  /** Progress points that came from Training Center levels above 1. */
+  facilityContribution: number;
+  facilityLevel: number;
   fatigueBefore: number;
   fatigueAfter: number;
 }
@@ -105,8 +108,8 @@ export function runTeamTraining(
   const t = BALANCE.training;
   const players = club.roster.map((id) => state.players[id]);
   const fatigueBefore = avg(players.map((p) => p.fatigue));
-  const summary: TeamTrainingSummary = { pointsGained: [], totalProgress: 0, fatigueBefore, fatigueAfter: fatigueBefore };
   const level = club.facilities.training;
+  const summary: TeamTrainingSummary = { pointsGained: [], totalProgress: 0, facilityContribution: 0, facilityLevel: level, fatigueBefore, fatigueAfter: fatigueBefore };
 
   if (focus !== 'recovery') {
     for (const p of players) {
@@ -127,6 +130,7 @@ export function runTeamTraining(
     }
   }
 
+  summary.facilityContribution = summary.totalProgress - Math.round(summary.totalProgress / trainingFacilityFactor(level));
   const fatigueDelta = focus === 'batting' ? t.battingFatigue : focus === 'defense' ? t.defenseFatigue : t.recoveryFatigue;
   for (const p of players) sink.playerMood(p.id, 'fatigue', fatigueDelta, 'Team training', { record: false });
   summary.fatigueAfter = avg(players.map((p) => p.fatigue));
