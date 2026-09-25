@@ -1,0 +1,332 @@
+import { useEffect, useMemo, useState } from 'react';
+import { optionBlocker, totalCost } from '../../application/engine';
+import { effectiveRating } from '../../domain/lineup';
+import type { EventInstance, EventOption } from '../../domain/state';
+import { clubName, shortName, userClub } from '../../domain/state';
+import { leagueGameForecast, type LeagueGameChoice, lineupForChoice } from '../../events/templates/leagueGame';
+import { SLOT_LABELS } from '../../events/planner';
+import { Avatar, Crest, EventArt } from '../components/art';
+import { EffectList, Ribbon } from '../components/common';
+import { Icon } from '../components/icons';
+import { money } from '../format';
+import { href, useController, useGame, useNow, useSnapshot } from '../hooks';
+import { MatchView } from './MatchView';
+
+export function EventCard() {
+  const s = useGame();
+  const ev = s.currentEvent;
+  if (!ev) return <SeasonDone />;
+  if (ev.status === 'pending') return <EventDecision ev={ev} key={ev.id} />;
+  if (ev.type === 'leagueGame' && ev.resolution?.matchId) return <MatchView ev={ev} key={ev.id} />;
+  return <EventResult ev={ev} key={ev.id} />;
+}
+
+function SeasonDone() {
+  const s = useGame();
+  return (
+    <section className="event-card">
+      <Ribbon>Season {s.calendar.season}</Ribbon>
+      <h1 className="event-title">Season Complete</h1>
+      <p className="event-context">
+        Every league game has been played. Contracts, the draft, ageing and season two arrive in a later build step. Review the League table and History in the
+        meantime.
+      </p>
+      <a className="btn btn-secondary" href={href('league')}>
+        View final table
+      </a>
+    </section>
+  );
+}
+
+function CostTags({ cost, unlimited }: { cost: { time: number; cash: number; influence: number }; unlimited: boolean }) {
+  return (
+    <span className="cost-tags">
+      {cost.cash > 0 && (
+        <span className="cost-tag">
+          <Icon name="cash" size={16} className="ico-cash" /> {money(cost.cash)}
+        </span>
+      )}
+      {cost.influence > 0 && (
+        <span className="cost-tag">
+          <Icon name="influence" size={16} className="ico-influence" /> {cost.influence}
+        </span>
+      )}
+      {cost.time > 0 && (
+        <span className="cost-tag">
+          <Icon name="time" size={16} /> {unlimited ? '∞' : cost.time}
+        </span>
+      )}
+    </span>
+  );
+}
+
+const OPTION_ICON: Record<string, 'bat' | 'glove' | 'recovery' | 'fans' | 'person' | 'chat' | 'rest' | 'stadium' | 'trophy' | 'clipboard'> = {
+  batting: 'bat',
+  defense: 'glove',
+  recovery: 'recovery',
+  current: 'clipboard',
+  strongest: 'trophy',
+  rest: 'rest',
+  lower: 'fans',
+  forum: 'chat',
+  hold: 'stadium',
+  star: 'person',
+  prospect: 'person',
+  decline: 'chat',
+  autographs: 'fans',
+  statement: 'chat',
+  quiet: 'chat',
+};
+
+function EventDecision({ ev }: { ev: EventInstance }) {
+  const s = useGame();
+  const c = useController();
+  const snap = useSnapshot();
+  const now = useNow(5000);
+  const club = userClub(s);
+  const firstAvailable = ev.options.find((o) => optionBlocker(s, ev, o, null, now) === null);
+  const [selectedId, setSelectedId] = useState<string>((ev.options.find((o) => o.primary && !optionBlocker(s, ev, o, null, now)) ?? firstAvailable ?? ev.options[0]).id);
+  const [boostOn, setBoostOn] = useState(false);
+  const selected = ev.options.find((o) => o.id === selectedId)!;
+  const boost = ev.boosts.find((b) => b.appliesTo.includes(selected.id)) ?? null;
+  const activeBoost = boostOn && boost ? boost : null;
+  const blocker = optionBlocker(s, ev, selected, activeBoost, now);
+  const cost = totalCost(selected, activeBoost);
+  const unlimited = s.time.mode === 'unlimited';
+
+  const confirm = () => {
+    void c.dispatch({ type: 'resolveEvent', eventId: ev.id, revision: s.revision, optionId: selected.id, boostId: activeBoost?.id ?? null });
+  };
+
+  return (
+    <section className="event-card" aria-labelledby="event-title">
+      <Ribbon>Next event</Ribbon>
+      <h1 className="event-title" id="event-title">
+        {ev.type === 'leagueGame' ? 'League Game' : ev.title}
+      </h1>
+      {ev.type === 'leagueGame' ? <PreMatch ev={ev} choice={selected.id as LeagueGameChoice} /> : <EventArt type={ev.type} club={club} />}
+      {ev.type !== 'leagueGame' && <p className="event-context">{ev.context}</p>}
+      {ev.subjects.playerIds.length > 0 && ev.type !== 'leagueGame' && (
+        <div className="subjects">
+          {ev.subjects.playerIds.map((id) => {
+            const p = s.players[id];
+            return (
+              <a key={id} className="subject" href={href(`team/${id}`)}>
+                <Avatar player={p} club={s.clubs[p.clubId]} size={36} />
+                <span>
+                  <strong>{shortName(p)}</strong>
+                  <small>
+                    Sat. {p.satisfaction} · Fatigue {p.fatigue}
+                  </small>
+                </span>
+              </a>
+            );
+          })}
+        </div>
+      )}
+      <fieldset className="options">
+        <legend className="event-prompt">{ev.prompt}</legend>
+        {ev.options.map((o) => (
+          <OptionRow key={o.id} option={o} ev={ev} checked={o.id === selected.id} onSelect={() => setSelectedId(o.id)} now={now} unlimited={unlimited} />
+        ))}
+      </fieldset>
+      {boost && (
+        <label className={`boost ${optionBlocker(s, ev, selected, boost, now) && !boostOn ? 'boost-disabled' : ''}`}>
+          <input
+            type="checkbox"
+            className="switch"
+            checked={boostOn}
+            disabled={!boostOn && optionBlocker(s, ev, selected, boost, now) !== null}
+            onChange={(e) => setBoostOn(e.target.checked)}
+          />
+          <span>
+            <strong>{boost.label}</strong> · <Icon name="influence" size={16} className="ico-influence" /> {boost.cost.influence} Influence
+            <small className="muted"> — {boost.description}</small>
+          </span>
+        </label>
+      )}
+      {blocker && (
+        <p className="blocker" role="status">
+          <Icon name="warning" size={18} /> {blocker}
+        </p>
+      )}
+      {snap.commandError && !blocker && (
+        <p className="blocker" role="alert">
+          {snap.commandError}
+        </p>
+      )}
+      <button className="btn btn-primary btn-confirm" onClick={confirm} disabled={!!blocker || snap.busy}>
+        <span>{snap.busy ? 'Saving…' : `Confirm ${ev.type === 'leagueGame' ? 'lineup & play' : ev.kicker}`}</span>
+        <span className="btn-cost">
+          <CostTags cost={cost} unlimited={unlimited} />
+          <Icon name="chevron" />
+        </span>
+      </button>
+    </section>
+  );
+}
+
+function OptionRow({ option: o, ev, checked, onSelect, now, unlimited }: { option: EventOption; ev: EventInstance; checked: boolean; onSelect: () => void; now: number; unlimited: boolean }) {
+  const s = useGame();
+  const blocker = optionBlocker(s, ev, o, null, now);
+  const forecast = ev.type === 'leagueGame' ? leagueGameForecast(s, String(ev.data.gameId), o.id as LeagueGameChoice) : null;
+  return (
+    <label className={`option ${checked ? 'option-checked' : ''} ${blocker ? 'option-blocked' : ''}`}>
+      <input type="radio" name={`opt-${ev.id}`} value={o.id} checked={checked} onChange={onSelect} className="sr-only" />
+      <Icon name={OPTION_ICON[o.id] ?? 'clipboard'} size={30} className="option-icon" />
+      <span className="option-main">
+        <span className="option-label">{o.label}</span>
+        <span className="option-summary">{o.summary}</span>
+      </span>
+      <span className="option-effects">
+        {forecast && <span className="eff neutral">Win chance {Math.round(forecast.winChance * 100)}%</span>}
+        {o.certain.map((e, i) => (
+          <span key={i} className={`eff ${e.tone}`}>
+            {e.text}
+          </span>
+        ))}
+        {o.uncertain.map((e, i) => (
+          <span key={`u${i}`} className={`eff uncertain ${e.tone}`} title="Uncertain: depends on ability and chance">
+            ~ {e.text}
+          </span>
+        ))}
+        {(o.cost.cash > 0 || o.cost.influence > 0) && <CostTags cost={{ ...o.cost, time: 0 }} unlimited={unlimited} />}
+        {blocker && <span className="eff negative">{blocker}</span>}
+      </span>
+      <span className="radio-dot" aria-hidden="true">
+        {checked && <Icon name="check" size={18} />}
+      </span>
+    </label>
+  );
+}
+
+function PreMatch({ ev, choice }: { ev: EventInstance; choice: LeagueGameChoice }) {
+  const s = useGame();
+  const club = userClub(s);
+  const opp = s.clubs[String(ev.data.opponentId)];
+  const isHome = Boolean(ev.data.isHome);
+  const f = leagueGameForecast(s, String(ev.data.gameId), choice);
+  const lineup = useMemo(() => lineupForChoice(s, choice), [s, choice]);
+  const sp = s.players[lineup.pitcherId];
+  const [home, away] = isHome ? [club, opp] : [opp, club];
+  return (
+    <div className="prematch">
+      <div className="versus">
+        <div className="versus-team">
+          <Crest club={away} size={56} />
+          <span>{clubName(away)}</span>
+        </div>
+        <div className="versus-mid">
+          <span className="at">@</span>
+          <small>{isHome ? 'Home' : 'Away'} · Round {ev.round}</small>
+        </div>
+        <div className="versus-team">
+          <Crest club={home} size={56} />
+          <span>{clubName(home)}</span>
+        </div>
+      </div>
+      <div className="forecast" aria-label={`Forecast: ${Math.round(f.winChance * 100)} percent win chance`}>
+        <span>{club.abbreviation} {Math.round(f.winChance * 100)}%</span>
+        <div className="forecast-bar">
+          <div style={{ width: `${f.winChance * 100}%`, background: club.colors.primary }} />
+        </div>
+        <span>{Math.round((1 - f.winChance) * 100)}% {opp.abbreviation}</span>
+      </div>
+      <p className="event-context">{ev.context}</p>
+      <ol className="mini-lineup">
+        {lineup.battingOrder.map((slot, i) => {
+          const p = s.players[slot.playerId];
+          return (
+            <li key={slot.playerId} className={p.fatigue >= 55 ? 'tired' : ''}>
+              <span className="order">{i + 1}</span>
+              <span className="name">{shortName(p)}</span>
+              <span className="pos">{slot.position}</span>
+              <span className="fat" title="Fatigue">
+                {p.fatigue >= 55 ? '⚠ ' : ''}F{p.fatigue}
+              </span>
+            </li>
+          );
+        })}
+        <li className={sp && sp.fatigue >= 55 ? 'tired' : ''}>
+          <span className="order">SP</span>
+          <span className="name">{sp ? shortName(sp) : '—'}</span>
+          <span className="pos">{sp ? Math.round(effectiveRating(sp, 'pitching')) : ''}</span>
+          <span className="fat">F{sp?.fatigue}</span>
+        </li>
+      </ol>
+      <a className="link" href={href('team')}>
+        Edit lineup on the Team page →
+      </a>
+    </div>
+  );
+}
+
+export function ContinueButton({ ev }: { ev: EventInstance }) {
+  const c = useController();
+  const s = useGame();
+  const snap = useSnapshot();
+  const next = s.nextEvent;
+  const label = next ? (next.type === 'leagueGame' ? 'League game' : SLOT_LABELS[next.templateId] ?? next.title) : 'Finish';
+  const onClick = () => void c.dispatch({ type: 'acknowledgeEvent', eventId: ev.id });
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Enter' && (e.target as HTMLElement).tagName === 'BODY') onClick();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  });
+  return (
+    <button className="btn btn-primary btn-confirm" onClick={onClick} disabled={snap.busy}>
+      <span>Continue</span>
+      <span className="btn-cost">
+        <small>Next: {label}</small>
+        <Icon name="chevron" />
+      </span>
+    </button>
+  );
+}
+
+function EventResult({ ev }: { ev: EventInstance }) {
+  const s = useGame();
+  const r = ev.resolution!;
+  return (
+    <section className="event-card" aria-live="polite">
+      <Ribbon>{ev.kicker} · Result</Ribbon>
+      <h1 className="event-title result-title">{r.headline}</h1>
+      <p className="muted">
+        You chose <strong>{r.optionLabel}</strong>
+        {r.boostId ? ' with extra coaching' : ''}.
+      </p>
+      {r.narrative.map((n, i) => (
+        <p key={i} className="event-context">
+          {n}
+        </p>
+      ))}
+      {r.reactions.length > 0 && <Reactions reactions={r.reactions} />}
+      <h2 className="subhead">What changed</h2>
+      <EffectList effects={r.effects} />
+      <ContinueButton ev={ev} />
+      {s.nextEvent === null && ev.type !== 'seasonReview' && <p className="muted">No further events.</p>}
+    </section>
+  );
+}
+
+export function Reactions({ reactions }: { reactions: { playerId: string; text: string }[] }) {
+  const s = useGame();
+  return (
+    <ul className="reactions">
+      {reactions.map((r, i) => {
+        const p = s.players[r.playerId];
+        return (
+          <li key={i}>
+            <Avatar player={p} club={s.clubs[p.clubId]} size={44} />
+            <div>
+              <strong>{shortName(p)}</strong>
+              <q>{r.text}</q>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
+}

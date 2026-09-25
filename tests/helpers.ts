@@ -1,0 +1,38 @@
+import { execute, optionBlocker, type Command } from '../src/application/engine';
+import { createNewGame } from '../src/application/newGame';
+import { createRng } from '../src/domain/rng';
+import type { GameState } from '../src/domain/state';
+
+export const T0 = 1_760_000_000_000;
+
+export function newGame(seed = 42, mode: 'economy' | 'unlimited' = 'unlimited') {
+  return createNewGame({ seed, now: T0, timeMode: mode });
+}
+
+export function run(state: GameState, cmd: Command, now = T0): GameState {
+  const r = execute(state, cmd, now);
+  if (!r.ok) throw new Error(`${cmd.type} failed: ${r.error}`);
+  return r.state;
+}
+
+/** Resolves and acknowledges the current event with a (seeded) choice among available options. */
+export function step(state: GameState, pickSeed: number, now = T0): GameState {
+  const ev = state.currentEvent!;
+  const rng = createRng(pickSeed);
+  const available = ev.options.filter((o) => optionBlocker(state, ev, o, null, now) === null);
+  const option = rng.pick(available);
+  const boost = ev.boosts.find((b) => b.appliesTo.includes(option.id) && optionBlocker(state, ev, option, b, now) === null && rng.chance(0.3));
+  let s = run(state, { type: 'resolveEvent', eventId: ev.id, revision: state.revision, optionId: option.id, boostId: boost?.id ?? null }, now);
+  s = run(s, { type: 'acknowledgeEvent', eventId: ev.id }, now);
+  return s;
+}
+
+export function playSeason(state: GameState, pickSeed = 1): GameState {
+  let s = state;
+  let i = 0;
+  while (s.currentEvent && i < 500) {
+    s = step(s, pickSeed * 1000 + i);
+    i++;
+  }
+  return s;
+}

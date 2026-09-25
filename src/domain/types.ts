@@ -1,0 +1,209 @@
+export type PlayerId = string;
+export type ClubId = string;
+export type EventInstanceId = string;
+export type GameId = string;
+
+export const DEFENSIVE_POSITIONS = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF'] as const;
+export type DefensivePosition = (typeof DEFENSIVE_POSITIONS)[number];
+export type LineupPosition = DefensivePosition | 'DH';
+export const LINEUP_POSITIONS: LineupPosition[] = [...DEFENSIVE_POSITIONS, 'DH'];
+
+export type RatingKey = 'contact' | 'power' | 'speed' | 'fielding' | 'pitching';
+export type Ratings = Record<RatingKey, number>;
+
+export type PersonalPriority = 'playingTime' | 'titles' | 'money' | 'loyalty';
+export type SquadRole = 'starter' | 'reserve' | 'prospect';
+
+export interface Contract {
+  /** Salary per season, whole dollars. Paid 1/20 per round. */
+  salary: number;
+  seasonsLeft: number;
+}
+
+export interface SeasonStats {
+  games: number;
+  starts: number;
+  pa: number;
+  ab: number;
+  h: number;
+  doubles: number;
+  triples: number;
+  hr: number;
+  rbi: number;
+  r: number;
+  bb: number;
+  so: number;
+  sb: number;
+  pitchingApps: number;
+  pitchingStarts: number;
+  outsPitched: number;
+  hitsAllowed: number;
+  runsAllowed: number;
+  walksAllowed: number;
+  strikeouts: number;
+}
+
+export interface ReasonEntry {
+  season: number;
+  round: number;
+  delta: number;
+  text: string;
+}
+
+export interface Player {
+  id: PlayerId;
+  firstName: string;
+  lastName: string;
+  number: number;
+  age: number;
+  bats: 'R' | 'L' | 'S';
+  throws: 'R' | 'L';
+  clubId: ClubId;
+  isPitcher: boolean;
+  /** Eligible lineup positions, primary first. Empty for pitchers. */
+  positions: LineupPosition[];
+  ratings: Ratings;
+  /** Progress 0–99 toward the next point per rating, so small gains are never hidden by rounding. */
+  progress: Ratings;
+  /** True development ceiling (hidden). */
+  potential: number;
+  /** What the club's scouts believe, shown to the player. */
+  potentialEstimate: { low: number; high: number };
+  fatigue: number;
+  satisfaction: number;
+  popularity: number;
+  priority: PersonalPriority;
+  role: SquadRole;
+  contract: Contract;
+  joinedSeason: number;
+  bio: string;
+  stats: SeasonStats;
+  moodLog: ReasonEntry[];
+  lastReaction: { text: string; context: string; season: number; round: number } | null;
+}
+
+export interface LineupSlot {
+  playerId: PlayerId;
+  position: LineupPosition;
+}
+
+export interface Lineup {
+  /** Nine batters in batting order, each with a unique position (8 defensive + DH). */
+  battingOrder: LineupSlot[];
+  pitcherId: PlayerId;
+}
+
+export interface SponsorDeal {
+  name: string;
+  perSeason: number;
+  seasonsLeft: number;
+}
+
+export type FacilityId = 'training' | 'scouting' | 'stadium';
+
+export interface Club {
+  id: ClubId;
+  city: string;
+  name: string;
+  abbreviation: string;
+  colors: { primary: string; secondary: string };
+  isUser: boolean;
+  roster: PlayerId[];
+  lineup: Lineup;
+  cash: number;
+  ownerConfidence: number;
+  fanSupport: number;
+  /** Size of the potential crowd — separate from how satisfied the fans are. */
+  fanBase: number;
+  brand: { local: number; commercial: number };
+  ticketPriceLevel: number;
+  sponsor: SponsorDeal | null;
+  facilities: Record<FacilityId, number>;
+  reasons: { fanSupport: ReasonEntry[]; ownerConfidence: ReasonEntry[] };
+}
+
+export interface ScheduledGame {
+  id: GameId;
+  season: number;
+  round: number;
+  homeId: ClubId;
+  awayId: ClubId;
+  result: { homeRuns: number; awayRuns: number; innings: number; decidedBy: DecidedBy } | null;
+}
+
+export type DecidedBy = 'regulation' | 'extraInnings' | 'suddenDeath';
+
+export interface BattingLine {
+  pa: number;
+  ab: number;
+  h: number;
+  doubles: number;
+  triples: number;
+  hr: number;
+  rbi: number;
+  r: number;
+  bb: number;
+  so: number;
+  sb: number;
+}
+
+export interface PitchingLine {
+  battersFaced: number;
+  outs: number;
+  h: number;
+  r: number;
+  bb: number;
+  so: number;
+}
+
+export type PlayKind =
+  | 'single'
+  | 'double'
+  | 'triple'
+  | 'homeRun'
+  | 'walk'
+  | 'sacFly'
+  | 'groundOut'
+  | 'steal'
+  | 'caughtStealing'
+  | 'doublePlay'
+  | 'strikeout'
+  | 'pitchingChange'
+  | 'ghostRunner'
+  | 'walkOff'
+  | 'suddenDeath'
+  | 'final';
+
+export interface PlayRecord {
+  inning: number;
+  half: 'top' | 'bottom';
+  battingClubId: ClubId;
+  kind: PlayKind;
+  text: string;
+  runs: number;
+  outs: number;
+  score: { home: number; away: number };
+  batterId?: PlayerId;
+  pitcherId?: PlayerId;
+}
+
+export interface MatchResult {
+  id: GameId;
+  season: number;
+  round: number;
+  homeId: ClubId;
+  awayId: ClubId;
+  lineups: { home: Lineup; away: Lineup };
+  /** Runs per inning. For home, null = bottom half not played ("X"). Sudden-death adds one extra column. */
+  linescore: { home: (number | null)[]; away: number[] };
+  runs: { home: number; away: number };
+  hits: { home: number; away: number };
+  innings: number;
+  decidedBy: DecidedBy;
+  walkOff: boolean;
+  batting: Record<PlayerId, BattingLine>;
+  pitching: Record<PlayerId, PitchingLine>;
+  pitchersUsed: { home: PlayerId[]; away: PlayerId[] };
+  /** Highlights: only things that actually happened in the simulation. */
+  plays: PlayRecord[];
+}
