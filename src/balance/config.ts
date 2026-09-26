@@ -77,10 +77,17 @@ export const BALANCE = {
     fitnessPenaltyPerPoint: 0.3,
     satisfactionSwing: 0.06,
     outOfPositionFieldingPenalty: 15,
-    starterMaxBattersFaced: 27,
     starterTiresAfterBatters: 18,
-    pullAfterRunsAllowed: 6,
-    pullMinBattersFaced: 12,
+    /**
+     * When the starter is replaced (one change per game). The starter is pulled after
+     * `maxBatters` batters faced, or earlier once he has allowed `pullRuns` runs and
+     * faced at least `minBatters`. "balanced" equals the engine's earlier fixed rule.
+     */
+    hooks: {
+      early: { maxBatters: 22, pullRuns: 4, minBatters: 9 },
+      balanced: { maxBatters: 27, pullRuns: 6, minBatters: 12 },
+      long: { maxBatters: 32, pullRuns: 8, minBatters: 15 },
+    },
   },
 
   /**

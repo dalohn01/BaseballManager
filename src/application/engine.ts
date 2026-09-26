@@ -1,17 +1,25 @@
 import { BALANCE } from '../balance/config';
 import { EffectSink } from '../domain/effects';
-import { autoLineup, validateLineup } from '../domain/lineup';
+import { autoLineup, validateLineup, validatePitchingPlan } from '../domain/lineup';
 import { createRng } from '../domain/rng';
 import { releasePlayer, remainingSeasonSalary, repairLineup, squadProblem } from '../domain/roster';
 import type { BoostOption, Cost, EventInstance, EventOption, GameState } from '../domain/state';
 import { absoluteRound, userClub } from '../domain/state';
 import { canAffordTime, regenerate, spendTime } from '../domain/time';
-import type { Lineup } from '../domain/types';
+import type { Lineup, PitchingPlan } from '../domain/types';
 import { prepareNextEvent } from '../events/planner';
 import { getTemplate } from '../events/registry';
 
 export type Command =
-  | { type: 'resolveEvent'; eventId: string; revision: number; optionId: string; boostId: string | null }
+  | {
+      type: 'resolveEvent';
+      eventId: string;
+      revision: number;
+      optionId: string;
+      boostId: string | null;
+      /** League games only: the confirmed pre-match selection, applied atomically with the game. */
+      selection?: { lineup: Lineup; pitchingPlan: PitchingPlan };
+    }
   | { type: 'acknowledgeEvent'; eventId: string }
   | { type: 'setLineup'; lineup: Lineup }
   | { type: 'autoLineup'; mode: 'strongest' | 'rest' }
@@ -172,10 +180,23 @@ function resolveEvent(state: GameState, cmd: Extract<Command, { type: 'resolveEv
   if (cmd.boostId && (!boost || !boost.appliesTo.includes(option.id))) return fail('invalid', 'That boost does not apply to this choice.');
   const blocker = optionBlocker(state, current, option, boost, now);
   if (blocker) return fail('unaffordable', blocker);
+  if (cmd.selection) {
+    if (current.type !== 'leagueGame') return fail('invalid', 'A lineup can only be confirmed for a league game.');
+    const problems = [
+      ...validateLineup(state, state.userClubId, cmd.selection.lineup),
+      ...validatePitchingPlan(state, state.userClubId, cmd.selection.lineup.pitcherId, cmd.selection.pitchingPlan),
+    ].filter((i) => i.severity === 'error');
+    if (problems.length) return fail('invalid', problems[0].text);
+  }
 
   const next = structuredClone(state);
   const ev = next.currentEvent!;
   const club = userClub(next);
+  if (cmd.selection) {
+    // The confirmed draft becomes the lineup and plan that the simulator uses for this game.
+    club.lineup = structuredClone(cmd.selection.lineup);
+    club.pitchingPlan = structuredClone(cmd.selection.pitchingPlan);
+  }
   const sink = new EffectSink(next, ev.id);
   const cost = totalCost(option, boost);
 

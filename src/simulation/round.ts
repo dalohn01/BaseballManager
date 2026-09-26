@@ -65,6 +65,8 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
   // Rotation: the next start goes to the best-rested arm unless the manager changes it.
   const userClubState = state.clubs[state.userClubId];
   userClubState.lineup = { ...userClubState.lineup, pitcherId: bestRestedPitcher(state, state.userClubId) };
+  // Reliever and rest applied to this game only; the hook setting is a standing preference.
+  userClubState.pitchingPlan = { relieverId: null, rest: [], hook: userClubState.pitchingPlan.hook };
   sink.record({
     targetKind: 'team',
     targetId: state.userClubId,

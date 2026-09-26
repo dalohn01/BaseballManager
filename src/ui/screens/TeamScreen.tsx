@@ -63,7 +63,7 @@ export function TeamScreen() {
                   <th scope="col">POW</th>
                   <th scope="col">SPD</th>
                   <th scope="col">FLD</th>
-                  <th scope="col">Sat.</th>
+                  <th scope="col" title="Happiness">Happy</th>
                   <th scope="col" title="Fitness: match readiness, 100% = fully ready">Fit.</th>
                   <th scope="col">Stats</th>
                 </tr>

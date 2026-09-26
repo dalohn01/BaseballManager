@@ -21,7 +21,10 @@ type IconName =
   | 'person'
   | 'rest'
   | 'chart'
-  | 'warning';
+  | 'warning'
+  | 'mic'
+  | 'pause'
+  | 'list';
 
 const PATHS: Record<IconName, string> = {
   cash: 'M3 7h18v10H3z M12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M6 9.5v5 M18 9.5v5',
@@ -45,6 +48,9 @@ const PATHS: Record<IconName, string> = {
   rest: 'M10 12a3.5 3.5 0 1 0 0-7a3.5 3.5 0 1 0 0 7 M3 21c0-3.5 3-6 7-6 M15 4h4l-4 4h4 M16 12h3l-3 3h3',
   chart: 'M4 20V10 M10 20V4 M16 20v-7 M3 20h18',
   warning: 'M12 3l10 18H2z M12 10v5 M12 18h.01',
+  mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z M5.5 11a6.5 6.5 0 0 0 13 0 M12 17.5V21 M8.5 21h7',
+  pause: 'M8 5v14 M16 5v14',
+  list: 'M9 6h11 M9 12h11 M9 18h11 M4.5 6h.01 M4.5 12h.01 M4.5 18h.01',
 };
 
 const FILLED: Partial<Record<IconName, boolean>> = { influence: true, play: true, forward: true };

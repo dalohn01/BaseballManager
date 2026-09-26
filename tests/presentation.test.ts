@@ -1,177 +1,222 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchResult, MatchSequence } from '../src/domain/types';
-import { buildPresentation, isFirstOfHalf, type MatchContext } from '../src/presentation/adapter';
-import { frameAt } from '../src/presentation/frame';
-import { MatchPlayback } from '../src/presentation/playback';
+import { buildCommentary, gameSoFar, PACE, todayLine, type CommentaryStep } from '../src/presentation/commentary';
+import { CommentaryPlayback } from '../src/presentation/playback';
 import { simMatch } from './helpers';
 
-function ctxFor(m: MatchResult, s: ReturnType<typeof simMatch>['s']): MatchContext {
-  return { match: m, name: (id) => s.players[id]?.lastName ?? id, bats: (id) => s.players[id]?.bats ?? 'R' };
+function stepsFor(m: MatchResult, s: ReturnType<typeof simMatch>['s']) {
+  return buildCommentary({ match: m, name: (id) => s.players[id]?.lastName ?? id, clubName: (id) => s.clubs[id]?.name ?? id });
 }
 
-/** Finds a real simulated step matching `pred` across seeded games. */
-function find(pred: (st: MatchSequence, all: MatchSequence[], i: number) => boolean) {
+/** Finds a real simulated play matching `pred` across seeded games. */
+function find(pred: (st: MatchSequence) => boolean) {
   for (let seed = 1; seed <= 400; seed++) {
     const { m, s } = simMatch(seed);
-    const i = m.sequence!.findIndex((st, idx) => pred(st, m.sequence!, idx));
-    if (i >= 0) return { m, s, i, ctx: ctxFor(m, s) };
+    const i = m.sequence!.findIndex(pred);
+    if (i >= 0) {
+      const steps = stepsFor(m, s);
+      return { m, s, i, steps, play: steps.filter((x) => x.seqIndex === i), st: m.sequence![i] };
+    }
   }
   throw new Error('no fixture found');
 }
 
-function checkPresentation(ctx: MatchContext, i: number) {
-  const st = ctx.match.sequence![i];
-  const p = buildPresentation(ctx, i);
-  const end = frameAt(p, p.duration);
-  // The closing frame always matches the simulator's after-snapshot.
-  expect(end.state.outs).toBe(st.after.outs);
-  expect(end.state.bases).toEqual(st.after.bases);
-  expect(end.state.score).toEqual(st.after.score);
-  expect(end.commentary).toBe(st.text);
-  // Before the result moment, the commentary never reveals the result.
-  const early = frameAt(p, Math.max(0, p.resultAt - 1));
-  expect(early.commentary).not.toBe(st.text);
-  // Each player appears exactly once (batter → runner is the same figure).
-  const ids = p.actors.map((a) => a.id);
-  expect(new Set(ids).size).toBe(ids.length);
-  // Roles follow the half-inning: the batting club is on offense.
-  for (const a of p.actors) {
-    expect(a.clubId).toBe(a.role === 'offense' ? st.battingClubId : st.battingClubId === ctx.match.homeId ? ctx.match.awayId : ctx.match.homeId);
+const total = (sc: { home: number; away: number }) => sc.home + sc.away;
+
+function checkGame(m: MatchResult, steps: CommentaryStep[]) {
+  const seq = m.sequence!;
+  // Every recorded play is presented and its first finished step equals the engine's after-state.
+  for (let i = 0; i < seq.length; i++) {
+    const play = steps.filter((x) => x.seqIndex === i);
+    expect(play.length).toBeGreaterThan(0);
+    const done = play.find((x) => x.playDone && x.tone !== 'inning')!;
+    expect(done, `play ${i} (${seq[i].kind}/${seq[i].outcome})`).toBeTruthy();
+    if (seq[i].kind !== 'suddenDeath') {
+      expect(done.state.outs).toBe(Math.min(3, seq[i].after.outs));
+      expect(done.state.bases).toEqual(seq[i].after.bases);
+    }
+    expect(done.state.score).toEqual(seq[i].after.score);
+    // Nothing before the finished step shows more runs than the engine credited.
+    for (const x of play) expect(total(x.state.score)).toBeLessThanOrEqual(total(seq[i].after.score));
   }
-  // Labels only name visible actors in the scene, at most three at a time.
-  for (let t = 0; t <= p.duration; t += 100) {
-    const f = frameAt(p, t);
-    expect(f.labels.length).toBeLessThanOrEqual(3);
-    for (const id of f.labels) expect(ids).toContain(id);
-    // Score never runs ahead of the after-snapshot.
-    expect(f.state.score.home).toBeLessThanOrEqual(st.after.score.home);
-    expect(f.state.score.away).toBeLessThanOrEqual(st.after.score.away);
+  let prev: CommentaryStep | null = null;
+  for (const x of steps) {
+    const st = x.state;
+    // Nobody is shown twice: no runner on two bases, the batter is not also a runner, a scorer is not on base.
+    const onBase = st.bases.filter(Boolean);
+    expect(new Set(onBase).size).toBe(onBase.length);
+    if (st.batterId) expect(onBase).not.toContain(st.batterId);
+    if (st.scoredId) expect(onBase).not.toContain(st.scoredId);
+    for (const id of st.advancing) expect(onBase).toContain(id);
+    expect(st.outs).toBeLessThanOrEqual(3);
+    if (prev) {
+      // The score never goes backwards (no temporary run taken back).
+      expect(st.score.home).toBeGreaterThanOrEqual(prev.state.score.home);
+      expect(st.score.away).toBeGreaterThanOrEqual(prev.state.score.away);
+      expect(x.runs).toBe(total(st.score) - total(prev.state.score));
+      if (prev.state.inning === st.inning && prev.state.half === st.half) expect(st.outs).toBeGreaterThanOrEqual(prev.state.outs);
+    }
+    prev = x;
   }
-  return { p, st };
+  const last = steps[steps.length - 1];
+  expect(last.tone).toBe('final');
+  expect(last.state.score).toEqual(m.runs);
+  expect(new Set(steps.map((x) => x.id)).size).toBe(steps.length);
 }
 
-describe('presentation adapter', () => {
-  it('single with several runners on', () => {
-    const { ctx, i } = find((st) => st.outcome === 'single' && st.before.bases.filter(Boolean).length >= 2);
-    const { p, st } = checkPresentation(ctx, i);
-    const scorers = st.runners.filter((r) => r.to === 4).length;
-    const runUpdates = p.updates.filter((u, k) => k > 0 && u.state.score[st.half === 'top' ? 'away' : 'home'] > p.updates[k - 1].state.score[st.half === 'top' ? 'away' : 'home']).length;
-    expect(runUpdates).toBe(scorers);
-    expect(p.calls.map((c) => c.text)).toContain('SINGLE');
-  });
-
-  it('strikeout for the third out', () => {
-    const { ctx, i } = find((st) => st.outcome === 'strikeout' && st.after.outs === 3);
-    const { p } = checkPresentation(ctx, i);
-    expect(p.calls.map((c) => c.text)).toContain('STRIKEOUT');
-  });
-
-  it('walk with the bases loaded forces in a run', () => {
-    const { ctx, i } = find((st) => st.outcome === 'walk' && st.before.bases.every(Boolean));
-    const { st } = checkPresentation(ctx, i);
-    expect(st.runners.filter((r) => r.to === 4)).toHaveLength(1);
-  });
-
-  it('fly out, home run, double play, steals, pitching change and ghost runner', () => {
-    for (const pred of [
-      (st: MatchSequence) => st.outcome === 'flyOut',
-      (st: MatchSequence) => st.outcome === 'sacFly',
-      (st: MatchSequence) => st.outcome === 'homeRun' && st.before.bases.some(Boolean),
-      (st: MatchSequence) => st.outcome === 'doublePlay',
-      (st: MatchSequence) => st.outcome === 'groundOut',
-      (st: MatchSequence) => st.kind === 'steal',
-      (st: MatchSequence) => st.kind === 'caughtStealing',
-      (st: MatchSequence) => st.kind === 'pitchingChange',
-      (st: MatchSequence) => st.kind === 'ghostRunner',
-    ]) {
-      const { ctx, i } = find(pred);
-      checkPresentation(ctx, i);
-    }
-  });
-
-  it('a new half-inning swaps offense and defense and shows an intro', () => {
-    const { ctx, i } = find((st, all, idx) => idx > 0 && isFirstOfHalf(all, idx) && st.half === 'bottom');
-    const { p, st } = checkPresentation(ctx, i);
-    expect(p.calls[0].text).toMatch(/^BOTTOM /);
-    const prev = buildPresentation(ctx, i - 1);
-    const offPrev = prev.actors.find((a) => a.role === 'offense')!.clubId;
-    const offNow = p.actors.find((a) => a.role === 'offense')!.clubId;
-    expect(offNow).toBe(st.battingClubId);
-    expect(offNow).not.toBe(offPrev);
-  });
-
-  it('every step of 30 games is presentable and ends on its after-snapshot', () => {
-    for (let seed = 1; seed <= 30; seed++) {
+describe('commentary steps', () => {
+  it('50 games: every play ends on the engine state, no early runs, no duplicate markers', () => {
+    for (let seed = 1; seed <= 50; seed++) {
       const { m, s } = simMatch(seed);
-      const ctx = ctxFor(m, s);
-      for (let i = 0; i < m.sequence!.length; i++) checkPresentation(ctx, i);
+      checkGame(m, stepsFor(m, s));
     }
+  });
+
+  it('side panels count only plays already finished on screen', () => {
+    const { m, s } = simMatch(4);
+    const steps = stepsFor(m, s);
+    const seq = m.sequence!;
+    for (let k = 0; k < steps.length; k++) {
+      const finished = new Set(steps.slice(0, k + 1).filter((x) => x.playDone && x.tone !== 'inning' && x.seqIndex >= 0).map((x) => x.seqIndex));
+      const ks = [...finished].filter((i) => seq[i].outcome === 'strikeout');
+      const rows = gameSoFar(m, steps, k);
+      expect(rows[m.homeId].k + rows[m.awayId].k).toBe(ks.length);
+    }
+    // At the very first step (Top of the 1st) nothing has happened yet.
+    const first = gameSoFar(m, steps, 0);
+    expect(first[m.homeId].h + first[m.awayId].h + first[m.homeId].k + first[m.awayId].k + first[m.homeId].bb + first[m.awayId].bb).toBe(0);
+    expect(todayLine(m, steps, 0, seq[0].batterId!)).toEqual({ ab: 0, h: 0 });
+  });
+
+  it('are deterministic and stable across rebuilds (ids, texts, durations)', () => {
+    const { m, s } = simMatch(3);
+    expect(stepsFor(m, s)).toEqual(stepsFor(m, s));
+  });
+
+  it('a hit that drives in a run is told as hit → score → runners settle', () => {
+    const { play, st } = find(
+      (x) => x.outcome === 'single' && x.runners.some((r) => r.to === 4) && x.runners.some((r) => r.playerId !== x.batterId && r.to !== 4 && r.to !== r.from),
+    );
+    const kinds = play.filter((x) => x.tone !== 'build' && x.tone !== 'inning').map((x) => x.headline ?? x.tone);
+    expect(kinds[0]).toBe('BASE HIT!');
+    expect(kinds).toContain('SCORES!');
+    expect(kinds[kinds.length - 1]).toBe('routine');
+    const hit = play.find((x) => x.headline === 'BASE HIT!')!;
+    // The hit step does not show the run or the final bases yet; the batter is still at the plate.
+    expect(hit.state.score).toEqual(st.before.score);
+    expect(hit.state.batterId).toBe(st.batterId);
+    expect(hit.state.inProgress).toBe(true);
+    const score = play.find((x) => x.headline === 'SCORES!')!;
+    expect(score.runs).toBe(1);
+    expect(score.state.scoredId).not.toBeNull();
+    expect(score.state.bases).not.toContain(score.state.scoredId);
+    // A runner still moving is shown at his last confirmed base, marked as advancing.
+    expect(score.state.advancing.length).toBeGreaterThan(0);
+    const settle = play.find((x) => x.playDone)!;
+    expect(settle.state.bases).toEqual(st.after.bases);
+    expect(settle.state.batterId).toBeNull();
+  });
+
+  it('build-up steps show only the situation before the pitch', () => {
+    const { play, st } = find((x) => x.outcome === 'double' && x.before.bases.some(Boolean));
+    const build = play.find((x) => x.tone === 'build')!;
+    expect(build.state.score).toEqual(st.before.score);
+    expect(build.state.bases).toEqual(st.before.bases);
+    expect(build.state.outs).toBe(st.before.outs);
+    expect(build.text).not.toMatch(/double/i);
+  });
+
+  it('third out ends the half with its own step and the next half starts clean', () => {
+    const { steps, i, st } = find((x) => x.kind === 'plateAppearance' && x.after.outs === 3 && x.before.bases.some(Boolean));
+    const end = steps.find((x) => x.seqIndex === i && x.tone === 'inning')!;
+    expect(end.text).toMatch(/three outs/i);
+    expect(end.state.bases).toEqual([null, null, null]);
+    expect(end.state.score).toEqual(st.after.score);
+    const nextHalf = steps[end.index + 1];
+    expect(nextHalf.tone === 'inning' || nextHalf.tone === 'final').toBe(true);
+    if (nextHalf.tone === 'inning') expect(nextHalf.state.outs).toBe(0);
+  });
+
+  it('double play: lead runner first, then the batter, in the recorded order', () => {
+    const { play, st, s } = find((x) => x.outcome === 'doublePlay');
+    const outs = play.filter((x) => x.tone === 'out');
+    expect(outs[0].text).toContain(s.players[st.outOrder[0]].lastName);
+    expect(outs[0].state.outs).toBe(st.before.outs + 1);
+    expect(outs[1].headline).toBe('DOUBLE PLAY!');
+    expect(outs[1].state.outs).toBe(Math.min(3, st.before.outs + 2));
+  });
+
+  it('home run, walk, steal, caught stealing, pitching change and extra innings are presented', () => {
+    for (const [pred, headline] of [
+      [(x: MatchSequence) => x.outcome === 'homeRun' && x.before.bases.some(Boolean), /HOME RUN|GRAND SLAM/],
+      [(x: MatchSequence) => x.kind === 'steal', /SAFE/],
+      [(x: MatchSequence) => x.kind === 'caughtStealing', /CAUGHT STEALING/],
+      [(x: MatchSequence) => x.kind === 'pitchingChange', /PITCHING CHANGE/],
+      [(x: MatchSequence) => x.kind === 'ghostRunner', /EXTRA INNINGS/],
+      [(x: MatchSequence) => x.outcome === 'walk' && x.before.bases.every(Boolean), /BASES-LOADED WALK/],
+    ] as const) {
+      const { play } = find(pred);
+      expect(play.some((x) => headline.test(x.headline ?? ''))).toBe(true);
+    }
+  });
+
+  it('never names a fielder or a pitch speed the engine does not model', () => {
+    for (let seed = 1; seed <= 10; seed++) {
+      const { m, s } = simMatch(seed);
+      for (const x of stepsFor(m, s)) expect(x.text).not.toMatch(/mph|to (left|center|right)|line drive|pop[- ]up|count/i);
+    }
+  });
+
+  it('tempo: important moments stay longer than routine ones', () => {
+    expect(PACE.score).toBeGreaterThan(PACE.routine);
+    expect(PACE.big).toBeGreaterThan(PACE.build);
   });
 });
 
-describe('playback controller', () => {
+describe('commentary playback', () => {
   const { m, s } = simMatch(7);
-  const ctx = ctxFor(m, s);
-  const final = m.sequence![m.sequence!.length - 1].after;
+  const steps = stepsFor(m, s);
 
-  it('ignores repeated Next while a sequence plays and never reveals results early', () => {
-    const pb = new MatchPlayback(ctx, 'highlights');
-    expect(pb.next()).toBe(true);
-    const cursor = pb.cursor;
-    expect(pb.next()).toBe(false);
-    expect(pb.next()).toBe(false);
-    expect(pb.cursor).toBe(cursor);
-    expect(pb.logThrough).toBeLessThan(cursor);
-    pb.tick(pb.presentation!.resultAt);
-    expect(pb.logThrough).toBe(cursor);
-  });
-
-  it('plays from start to FINAL and matches the simulated result', () => {
-    const pb = new MatchPlayback(ctx, 'all', true);
-    pb.setAuto(true);
-    for (let i = 0; i < 100_000 && pb.phase !== 'finished'; i++) {
-      if (pb.phase === 'ready' && pb.cursor === -1) pb.next();
-      pb.tick(50);
-    }
-    expect(pb.phase).toBe('finished');
-    expect(pb.display()!.score).toEqual(m.runs);
-    expect(pb.display()!.score).toEqual(final.score);
-  });
-
-  it('highlight mode skips routine plays but keeps the scoreboard in sync', () => {
-    const pb = new MatchPlayback(ctx, 'highlights');
+  it('next moves one step, skip ends on the authoritative final step', () => {
+    const pb = new CommentaryPlayback(steps);
+    expect(pb.index).toBe(-1);
     pb.next();
-    const i = pb.cursor;
-    // The scoreboard at the start of the highlight equals that step's before-snapshot.
-    expect(pb.display()!.score).toEqual(m.sequence![i].before.score);
-    expect(pb.revealedThrough).toBe(i - 1);
-  });
-
-  it('skip mid-sequence ends on the authoritative result; turning auto off finishes the current step only', () => {
-    const pb = new MatchPlayback(ctx, 'highlights');
+    expect(pb.index).toBe(0);
     pb.next();
-    pb.tick(100);
+    expect(pb.index).toBe(1);
     pb.skip();
-    expect(pb.phase).toBe('finished');
-    expect(pb.display()!.score).toEqual(final.score);
+    expect(pb.finished).toBe(true);
+    expect(pb.step!.state.score).toEqual(m.runs);
     expect(pb.next()).toBe(false);
-
-    const pb2 = new MatchPlayback(ctx, 'highlights');
-    pb2.setAuto(true);
-    pb2.next();
-    pb2.setAuto(false);
-    pb2.tick(1_000_000);
-    const c = pb2.cursor;
-    pb2.tick(5_000);
-    expect(pb2.cursor).toBe(c);
-    expect(pb2.phase).toBe('ready');
+    expect(pb.delay()).toBeNull();
   });
 
-  it('can resume from a stored cursor', () => {
-    const pb = new MatchPlayback(ctx, 'all', false, 10);
-    expect(pb.cursor).toBe(10);
-    expect(pb.display()!.score).toEqual(m.sequence![10].after.score);
-    expect(pb.next()).toBe(true);
-    expect(pb.cursor).toBe(11);
+  it('autoplay delay follows the step and speed; pause stops scheduling', () => {
+    const pb = new CommentaryPlayback(steps, 0);
+    const d1 = pb.delay()!;
+    expect(d1).toBe(steps[0].duration);
+    pb.speed = 2;
+    expect(pb.delay()).toBe(Math.round(steps[0].duration / 2));
+    pb.auto = false;
+    expect(pb.delay()).toBeNull();
+  });
+
+  it('autoplay to the end and manual stepping reach the same final state', () => {
+    const auto = new CommentaryPlayback(steps, 0);
+    let guard = 0;
+    while (auto.delay() !== null && guard++ < 10_000) auto.next();
+    const manual = new CommentaryPlayback(steps);
+    while (manual.next());
+    const skipped = new CommentaryPlayback(steps, 5);
+    skipped.skip();
+    expect(auto.step!.state).toEqual(manual.step!.state);
+    expect(skipped.step!.state).toEqual(manual.step!.state);
+  });
+
+  it('resumes from a stored position with a consistent state', () => {
+    const pb = new CommentaryPlayback(steps, 40);
+    expect(pb.index).toBe(40);
+    expect(pb.step).toBe(steps[40]);
+    expect(new CommentaryPlayback(steps, 99_999).finished).toBe(true);
   });
 });

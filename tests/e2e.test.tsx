@@ -43,6 +43,11 @@ const click = async (el: Element) => {
 
 /** Resolves or continues whatever the Home screen currently offers. Returns what it clicked. */
 async function advance(): Promise<string> {
+  const intro = screen.queryByRole('button', { name: /Skip intro/i });
+  if (intro) {
+    await click(intro);
+    return 'intro';
+  }
   const skip = screen.queryByRole('button', { name: /Skip to result/i });
   if (skip) {
     await click(skip);
@@ -57,8 +62,8 @@ async function advance(): Promise<string> {
   const confirm = await screen.findByRole('button', { name: /^Confirm/ });
   await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
   await click(confirm);
-  // A normal event shows its result; a league game first shows the highlight playback.
-  await waitFor(() => expect(screen.queryByText('What changed') ?? screen.queryByRole('button', { name: /Skip to result/i })).toBeTruthy());
+  // A normal event shows its result; a league game goes straight into the arena intro.
+  await waitFor(() => expect(screen.queryByText('What changed') ?? screen.queryByRole('button', { name: /Skip intro/i })).toBeTruthy());
   return 'confirm';
 }
 
@@ -95,11 +100,13 @@ describe('end-to-end', () => {
 
     // Keep playing through the UI until the first league game has been played.
     const clicks: string[] = [];
-    // The visual match view ends on FINAL with the existing match summary underneath.
+    // Confirm lineup → intro → commentary; the match ends on FINAL with the existing match summary underneath.
     for (let i = 0; i < 30 && screen.queryAllByText(/^Final/i).length === 0; i++) clicks.push(await advance());
     expect(screen.getAllByText(/^Final/i).length).toBeGreaterThan(0);
     expect(screen.getByRole('table', { name: 'Line score' })).toBeTruthy();
     expect(clicks).toContain('confirm');
+    expect(clicks).toContain('intro');
+    expect(clicks).toContain('skip');
 
     // History lists the decisions made across the reload.
     await act(async () => {

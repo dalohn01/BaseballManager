@@ -14,6 +14,7 @@ import type {
   MatchSequence,
   PaOutcome,
   PitchingLine,
+  PitchingPlan,
   PlayKind,
   PlayRecord,
   Player,
@@ -24,7 +25,7 @@ import type {
 /**
  * Lightweight at-bat simulation. Documented simplifications (see README):
  * - no errors, hit-by-pitch, bunts, wild pitches or pinch hitters
- * - one pitching change at most (starter → best rested reliever)
+ * - one pitching change at most (starter → planned or best-rested reliever)
  * - from inning 10 a runner starts on second (prototype extra-innings rule)
  * - after inning 15 a clearly labelled sudden-death decides a tie
  * - on a walk-off, all runs of the deciding play count
@@ -49,6 +50,8 @@ export interface SimTeam {
   batters: SimBatter[];
   starter: SimPitcher;
   reliever: SimPitcher | null;
+  /** When this team's starter is replaced (from its pitching plan). */
+  hook: { maxBatters: number; pullRuns: number; minBatters: number };
   fielding: number;
   catcherFielding: number;
   strength: number;
@@ -73,13 +76,8 @@ export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): 
 
   const sp = state.players[lineup.pitcherId];
   const starter = { id: sp.id, name: sp.lastName, pitching: effectiveRating(sp, 'pitching') };
-  // Best-rested reliever; arms that are already tired are only used if nobody else is available.
-  const relieverValue = (p: Player) => effectiveRating(p, 'pitching') - (100 - p.fitness) * 1.5;
-  const relievers = club.roster
-    .map((id) => state.players[id])
-    .filter((p) => p.isPitcher && p.id !== sp.id)
-    .sort((a, b) => relieverValue(b) - relieverValue(a) || a.id.localeCompare(b.id));
-  const rp = relievers[0];
+  const plan = club.pitchingPlan;
+  const rp = chooseReliever(state, clubId, sp.id, plan);
   const reliever = rp ? { id: rp.id, name: rp.lastName, pitching: effectiveRating(rp, 'pitching') } : null;
 
   return {
@@ -89,10 +87,26 @@ export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): 
     batters,
     starter,
     reliever,
+    hook: BALANCE.match.hooks[plan.hook],
     fielding,
     catcherFielding,
     strength: teamStrength(state, lineup),
   };
+}
+
+/**
+ * The pitcher who comes in when the starter is replaced: the planned reliever if
+ * he is available, otherwise the best-rested pitcher who is not resting today.
+ * Pitchers marked "rest" are never used. Null = the starter pitches the whole game.
+ */
+export function chooseReliever(state: GameState, clubId: ClubId, starterId: PlayerId, plan: PitchingPlan): Player | null {
+  const available = state.clubs[clubId].roster
+    .map((id) => state.players[id])
+    .filter((p) => p.isPitcher && p.id !== starterId && !plan.rest.includes(p.id));
+  const planned = available.find((p) => p.id === plan.relieverId);
+  if (planned) return planned;
+  const value = (p: Player) => effectiveRating(p, 'pitching') - (100 - p.fitness) * 1.5;
+  return [...available].sort((a, b) => value(b) - value(a) || a.id.localeCompare(b.id))[0] ?? null;
 }
 
 /** Single comprehensible number (0–100-ish) used for forecasts and sudden-death. */
@@ -233,7 +247,7 @@ export function simulateMatch(input: MatchInput): MatchResult {
       if (
         !def.pulled &&
         def.team.reliever &&
-        (pl.battersFaced >= cfg.starterMaxBattersFaced || (pl.r >= cfg.pullAfterRunsAllowed && pl.battersFaced >= cfg.pullMinBattersFaced))
+        (pl.battersFaced >= def.team.hook.maxBatters || (pl.r >= def.team.hook.pullRuns && pl.battersFaced >= def.team.hook.minBatters))
       ) {
         def.pulled = true;
         const prev = def.pitcher;

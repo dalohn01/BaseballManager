@@ -13,6 +13,7 @@ import { Meter, Panel } from '../components/common';
 import { Icon } from '../components/icons';
 import { href, useGame } from '../hooks';
 import { MatchScene } from '../match/MatchScene';
+import { PreMatchScreen } from '../prematch/PreMatchScreen';
 import { EventCard } from './EventCard';
 
 export function HomeScreen() {
@@ -26,6 +27,17 @@ export function HomeScreen() {
   }, [eventKey]);
   const ev = s.currentEvent;
   const liveMatch = ev?.type === 'leagueGame' && ev.status === 'resolved' && ev.resolution?.matchId ? s.matches[ev.resolution.matchId] : null;
+  if (ev?.type === 'leagueGame' && ev.status === 'pending') {
+    // Pre-match team selection replaces the old three-option choice.
+    return (
+      <div className="home" ref={mainRef}>
+        <p className="crumb">
+          Season {s.calendar.season} · {phaseLabel(s)}
+        </p>
+        <PreMatchScreen key={ev.id} ev={ev} />
+      </div>
+    );
+  }
   if (ev && liveMatch?.sequence?.length) {
     // The visual match view takes over Home until the result has been continued past.
     return (

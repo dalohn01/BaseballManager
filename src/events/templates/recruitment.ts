@@ -1,4 +1,5 @@
 import { BALANCE } from '../../balance/config';
+import { ballparkName } from '../../content/ballparks';
 import { createPlayer, marketSalary } from '../../content/playerFactory';
 import type { Rng } from '../../domain/rng';
 import { joinClub, positionNeeds, repairLineup, squadProblem } from '../../domain/roster';
@@ -152,7 +153,7 @@ export const tryouts: EventTemplate = {
     return {
       kicker: 'Tryouts',
       title: 'Open Tryout Day',
-      context: `Local hopefuls showed up at Harbor Park. Scouting level ${userClub(state).facilities.scouting}: potential ranges are estimates.`,
+      context: `Local hopefuls showed up at ${ballparkName(userClub(state))}. Scouting level ${userClub(state).facilities.scouting}: potential ranges are estimates.`,
       prompt: 'Offer someone a contract?',
       subjects: { playerIds: [], clubIds: [] },
       data: {},

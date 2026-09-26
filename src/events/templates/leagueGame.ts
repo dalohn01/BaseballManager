@@ -1,8 +1,10 @@
 import { BALANCE } from '../../balance/config';
+import { ballparkName } from '../../content/ballparks';
 import { autoLineup, isLineupValid } from '../../domain/lineup';
 import type { EffectPreview, GameState } from '../../domain/state';
 import { absoluteRound, clubName, userClub } from '../../domain/state';
-import type { Lineup } from '../../domain/types';
+import { gamesWithoutStart } from '../../domain/playerStats';
+import type { Lineup, MatchResult, PitchingPlan } from '../../domain/types';
 import { FACILITY_LABELS, projectedTicketRevenue } from '../../simulation/economy';
 import { teamStrength, winProbability } from '../../simulation/match';
 import { lineupFor, playRound } from '../../simulation/round';
@@ -15,6 +17,16 @@ export function lineupForChoice(state: GameState, choice: LeagueGameChoice): Lin
   if (choice === 'current' && isLineupValid(state, club.id, club.lineup)) return club.lineup;
   if (choice === 'rest') return autoLineup(state, club.id, { restBelow: BALANCE.fitness.restBelow });
   return autoLineup(state, club.id);
+}
+
+/** Win chance for any candidate lineup (e.g. the pre-match draft), same model as the simulation. */
+export function forecastForLineup(state: GameState, gameId: string, lineup: Lineup): number {
+  const g = state.schedule.find((x) => x.id === gameId)!;
+  const isHome = g.homeId === state.userClubId;
+  const ours = teamStrength(state, lineup);
+  const theirs = teamStrength(state, lineupFor(state, isHome ? g.awayId : g.homeId));
+  const pHome = isHome ? winProbability(ours, theirs) : winProbability(theirs, ours);
+  return isHome ? pHome : 1 - pHome;
 }
 
 /** Live forecast for the pre-match view; uses the same strength model as the simulation. */
@@ -96,6 +108,30 @@ export function leagueGameOptionNotes(state: GameState, choice: LeagueGameChoice
   return notes;
 }
 
+/** Post-game feedback from actual participation: first starts, planned rest, the planned reliever. */
+function planFollowUp(state: GameState, m: MatchResult, plan: PitchingPlan, idleBefore: Map<string, number>, restFitness: Map<string, number>): string[] {
+  const notes: string[] = [];
+  const side = m.homeId === state.userClubId ? 'home' : 'away';
+  for (const [id, idle] of idleBefore) {
+    if (idle >= 3) notes.push(`${state.players[id].lastName} made his first start in ${idle + 1} games.`);
+  }
+  for (const [id, before] of restFitness) {
+    const p = state.players[id];
+    if (p && !m.pitchersUsed[side].includes(id)) notes.push(`${p.lastName} rested as planned (fitness ${before}% → ${p.fitness}%).`);
+  }
+  const used = m.pitchersUsed[side].slice(1);
+  if (plan.relieverId) {
+    const r = state.players[plan.relieverId];
+    if (used.includes(plan.relieverId)) notes.push(`${r.lastName} came on in relief as planned.`);
+    else if (used.length === 0) notes.push(`${r.lastName} was not needed: the starter went the distance.`);
+  } else if (used.length) {
+    notes.push(`${state.players[used[0]].lastName} was picked automatically as the reliever.`);
+  }
+  const starterLine = m.pitching[m.lineups[side].pitcherId];
+  if (starterLine && used.length) notes.push(`${state.players[m.lineups[side].pitcherId].lastName} left after facing ${starterLine.battersFaced} batters (${plan.hook === 'long' ? 'let him pitch' : plan.hook} hook).`);
+  return notes;
+}
+
 export const leagueGame: EventTemplate = {
   id: 'league_game',
   version: 1,
@@ -114,7 +150,7 @@ export const leagueGame: EventTemplate = {
       kicker: 'League Game',
       title: `${isHome ? 'vs' : '@'} ${clubName(opp)}`,
       context: isHome
-        ? `Home game at ${club.city} Park. Expected gate ≈ $${gate.toLocaleString('en-US')}.`
+        ? `Home game at ${ballparkName(club)}. Expected gate ≈ $${gate.toLocaleString('en-US')}.`
         : `Road game in ${opp.city}. No gate income this round.`,
       prompt: 'Who takes the field?',
       subjects: { playerIds: [], clubIds: [opp.id] },
@@ -154,7 +190,12 @@ export const leagueGame: EventTemplate = {
     const lineup = lineupForChoice(state, choice);
     const narrative: string[] = [];
     if (choice === 'current' && lineup !== userClub(state).lineup) narrative.push('Your saved lineup was invalid, so the strongest valid lineup was used.');
+    // Snapshot what the plan intended, to report afterwards what actually happened.
+    const plan = structuredClone(userClub(state).pitchingPlan);
+    const idleBefore = new Map(lineup.battingOrder.map((s) => [s.playerId, gamesWithoutStart(state, state.players[s.playerId])]));
+    const restFitness = new Map(plan.rest.map((id) => [id, state.players[id]?.fitness ?? 0]));
     const out = playRound(state, lineup, rng, sink);
+    narrative.push(...planFollowUp(state, out.userMatch, plan, idleBefore, restFitness));
     const m = out.userMatch;
     const isHome = m.homeId === state.userClubId;
     const us = isHome ? m.runs.home : m.runs.away;
@@ -164,7 +205,7 @@ export const leagueGame: EventTemplate = {
     const extra = m.decidedBy === 'suddenDeath' ? ' (sudden-death)' : m.decidedBy === 'extraInnings' ? ` in ${m.innings}` : '';
     const headline = won ? `${userClub(state).name} beat the ${opp.name} ${us}–${them}${extra}` : `${userClub(state).name} fall to the ${opp.name} ${us}–${them}${extra}`;
     narrative.push(`Pre-game forecast gave you a ${Math.round(out.expectedWin * 100)}% win chance.`);
-    if (out.settlement.attendance) narrative.push(`${out.settlement.attendance.toLocaleString('en-US')} fans at ${userClub(state).city} Park.`);
+    if (out.settlement.attendance) narrative.push(`${out.settlement.attendance.toLocaleString('en-US')} fans at ${ballparkName(userClub(state))}.`);
     if (out.settlement.completed) narrative.push(`Construction finished: the ${FACILITY_LABELS[out.settlement.completed]} is now level ${userClub(state).facilities[out.settlement.completed]}.`);
     return { headline, narrative, reactions: out.reactions, matchId: m.id };
   },

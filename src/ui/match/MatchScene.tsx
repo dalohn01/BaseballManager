@@ -1,235 +1,166 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { EventInstance } from '../../domain/state';
 import { clubName, shortName } from '../../domain/state';
-import type { MatchResult, MatchSequence, PlayerId } from '../../domain/types';
-import { isHighlight, type MatchContext } from '../../presentation/adapter';
-import { toView, VIEW } from '../../presentation/fieldConfig';
-import type { Frame } from '../../presentation/frame';
-import { ordinal } from '../../simulation/match';
+import type { ClubId, MatchResult, PlayerId } from '../../domain/types';
+import { buildCommentary, gameSoFar, ordinalOf, todayLine, type CommentaryStep } from '../../presentation/commentary';
 import { Avatar, Crest } from '../components/art';
-import { Ribbon } from '../components/common';
 import { Icon } from '../components/icons';
 import { useGame, useReducedMotion } from '../hooks';
 import { MatchSummary } from '../screens/MatchView';
-import { BallSprite, FieldBackground, kitFor, PlayerSprite } from './Field';
-import { useMatchPlayback } from './usePlayback';
+import { MatchIntro } from './MatchIntro';
+import { SchematicField } from './SchematicField';
+import { readPosition, useCommentaryPlayback } from './usePlayback';
 
-const HITS = new Set(['single', 'double', 'triple', 'homeRun']);
-
-/** Visual match view for a resolved league game: scoreboard, field, players, log and controls. */
+/**
+ * Commentary-driven match view for a resolved league game: arena intro, then
+ * one commentary step at a time with scoreboard, outs and the schematic field
+ * all driven by the same presented step.
+ */
 export function MatchScene({ ev, match }: { ev: EventInstance; match: MatchResult }) {
   const s = useGame();
   const reduced = useReducedMotion();
-  const ctx: MatchContext = useMemo(
-    () => ({ match, name: (id) => s.players[id]?.lastName ?? '?', bats: (id) => s.players[id]?.bats ?? 'R' }),
-    // The stored match never changes and names/bats are stable, so the context is built once per match.
+  const steps = useMemo(
+    () => buildCommentary({ match, name: (id) => s.players[id]?.lastName ?? '?', clubName: (id) => s.clubs[id]?.name ?? '?' }),
+    // The stored match never changes, so the steps are built once per match.
     [match.id],
   );
-  const { pb, next, skip, setAuto, setMode } = useMatchPlayback(ctx, match.id, reduced);
-  const seq = match.sequence!;
-  const frame = pb.frame();
-  const p = pb.presentation;
-  const current: MatchSequence | null = p ? seq[p.seqIndex] : null;
-  const display = frame?.state ?? { ...seq[seq.length - 1].after, inning: match.innings, half: 'bottom' as const };
-  const finished = pb.phase === 'finished';
-  const revealed = seq.slice(0, pb.logThrough + 1);
+  // Re-entering a match that has already started resumes it without the intro.
+  const [started, setStarted] = useState(() => readPosition(match.id) !== null);
+  const { pb, next, skip, setAuto, setSpeed } = useCommentaryPlayback(steps, match.id, started);
+  const [logOpen, setLogOpen] = useState(false);
+  const nextRef = useRef<HTMLButtonElement>(null);
+
+  const ready = started && pb.index >= 0;
+  // Keyboard focus lands on the primary action once the first comment is shown.
+  useEffect(() => {
+    if (ready) nextRef.current?.focus({ preventScroll: true });
+  }, [ready]);
+
+  if (!started) return <MatchIntro match={match} round={ev.round} reduced={reduced} onDone={() => setStarted(true)} />;
+
+  const step = pb.step;
+  if (!step) {
+    return (
+      <p className="match-loading" role="status">
+        Loading the match…
+      </p>
+    );
+  }
+  const finished = pb.finished;
+  const st = step.state;
   const home = s.clubs[match.homeId];
   const away = s.clubs[match.awayId];
-
-  const outsText = `${display.outs >= 3 ? 3 : display.outs} out${display.outs === 1 ? '' : 's'}`;
-  const status = finished
-    ? match.decidedBy === 'suddenDeath'
-      ? 'Final · prototype sudden-death'
-      : match.innings > 9
-        ? `Final · ${match.innings} innings`
-        : 'Final'
-    : `${display.half === 'top' ? 'Top' : 'Bottom'} ${ordinal(display.inning)} · ${outsText}`;
+  const prevScore = steps[pb.index - 1]?.state.score ?? st.score;
+  const scoredSide = st.score.home > prevScore.home ? 'home' : st.score.away > prevScore.away ? 'away' : null;
+  const inningText = `${st.half === 'top' ? 'Top' : 'Bottom'} ${ordinalOf(st.inning)}`;
+  const outs = Math.min(3, st.outs);
+  const statusText = finished ? finalLabel(match) : `${inningText} · ${outs} out${outs === 1 ? '' : 's'}`;
 
   return (
-    <div className="match-screen">
-      <aside className="match-left">
-        <GameStats match={match} revealed={revealed} />
-        <BattingOrder match={match} current={current} />
+    <div className={`cm-screen ${reduced ? 'reduced' : ''}`}>
+      <header className="cm-board" aria-label="Scoreboard">
+        <TeamScore club={away} runs={st.score.away} scored={scoredSide === 'away' ? step.runs : 0} />
+        <div className="cm-mid">
+          <span className="cm-status">{statusText}</span>
+          {!finished && <OutsDots outs={outs} />}
+        </div>
+        <TeamScore club={home} runs={st.score.home} scored={scoredSide === 'home' ? step.runs : 0} home />
+      </header>
+
+      <aside className="cm-left">
+        <BattingOrder match={match} steps={steps} index={pb.index} />
+        <GameSoFar match={match} steps={steps} index={pb.index} />
       </aside>
 
-      <section className="match-center" aria-label="Match">
-        <div className="match-board">
-          <Ribbon>League game</Ribbon>
-          <div className="scoreboard">
-            <div className="sb-team">
-              <Crest club={away} size={56} />
-              <span className="sb-name">{clubName(away)}</span>
-            </div>
-            <div className="sb-score" aria-live="polite" aria-label={`${away.name} ${display.score.away}, ${home.name} ${display.score.home}`}>
-              <span>{display.score.away}</span>
-              <span className="sb-sep" aria-hidden="true" />
-              <span>{display.score.home}</span>
-            </div>
-            <div className="sb-team">
-              <Crest club={home} size={56} />
-              <span className="sb-name">{clubName(home)}</span>
-            </div>
-          </div>
-          <div className="sb-strip">
-            <span className="sb-status">{status}</span>
-            {!finished && <OutsDots outs={Math.min(3, display.outs)} />}
-            {!finished && <BasesDiamond bases={display.bases} />}
-          </div>
-        </div>
+      <section className="cm-center panel" aria-label="Live commentary">
+        <header className="cm-head">
+          <h2>
+            <Icon name="mic" size={22} /> Live commentary
+          </h2>
+          <span className="muted">{finished ? 'Final' : `${inningText} · ${outs} out${outs === 1 ? '' : 's'}`}</span>
+          <button className="link cm-loglink" onClick={() => setLogOpen(true)}>
+            Full log
+          </button>
+        </header>
+        <Commentary steps={steps} index={pb.index} match={match} />
+        {!finished && <Players match={match} steps={steps} index={pb.index} />}
+      </section>
 
-        <FieldStage match={match} frame={frame} t={pb.t} current={current} finished={finished} />
+      <aside className="cm-right">
+        <section className="panel cm-field" aria-label="On the field">
+          <header className="cm-head">
+            <h2>On the field</h2>
+            <span className="muted small">{fieldCaption(step, s.players)}</span>
+          </header>
+          <SchematicField match={match} state={st} focus={step.focus} reduced={reduced} />
+          {st.advancing.length > 0 && <p className="cm-advancing small">Runners advancing…</p>}
+        </section>
+        <LastRun steps={steps} index={pb.index} match={match} />
+      </aside>
 
-        {!finished && current && <ActivePlayers match={match} current={current} revealed={revealed} />}
-
-        <p className="commentary" aria-live="polite">
-          <Icon name="chat" size={18} />
-          <span>{finished ? `Final: ${away.name} ${match.runs.away}, ${home.name} ${match.runs.home}.` : pb.cursor < 0 ? 'Players take the field.' : frame?.commentary}</span>
-        </p>
-
-        {!finished ? (
-          <div className="playback">
-            <button className="btn btn-primary" onClick={next} disabled={pb.phase !== 'ready'} aria-label="Next highlight">
-              {pb.mode === 'all' ? 'Next play' : 'Next highlight'} <Icon name="play" size={18} />
+      <footer className="cm-controls" aria-label="Playback">
+        <span className="cm-live">{finished ? 'Final' : 'Live play'}</span>
+        {!finished && (
+          <>
+            <button ref={nextRef} className="btn btn-primary cm-next" onClick={next}>
+              Next moment <Icon name="play" size={18} />
             </button>
-            <button className="btn btn-secondary" onClick={skip}>
-              Skip to result <Icon name="forward" size={18} />
+            <button className="btn btn-secondary cm-skip" onClick={skip} aria-label="Skip to result">
+              <span className="lbl">Skip to result</span> <Icon name="forward" size={18} />
             </button>
             <label className="auto-toggle">
               <input type="checkbox" className="switch" checked={pb.auto} onChange={(e) => setAuto(e.target.checked)} /> Auto play
             </label>
-            <label className="mode-pick">
-              <span className="sr-only">Show</span>
-              <select value={pb.mode} onChange={(e) => setMode(e.target.value as 'highlights' | 'all')}>
-                <option value="highlights">Highlights</option>
-                <option value="all">Every play</option>
-              </select>
-            </label>
-          </div>
-        ) : (
-          <div className="event-card match-summary">
-            <MatchSummary ev={ev} m={match} />
-          </div>
+            {/* Compact pause/play for narrow screens, same controller as the switch. */}
+            <button className="btn btn-secondary cm-autobtn" aria-pressed={pb.auto} aria-label={pb.auto ? 'Pause auto play' : 'Start auto play'} onClick={() => setAuto(!pb.auto)}>
+              <Icon name={pb.auto ? 'pause' : 'play'} size={18} />
+            </button>
+            <div className="segmented cm-speed" role="group" aria-label="Speed">
+              {([1, 2] as const).map((v) => (
+                <button key={v} className={pb.speed === v ? 'on' : ''} aria-pressed={pb.speed === v} onClick={() => setSpeed(v)}>
+                  {v}×
+                </button>
+              ))}
+            </div>
+          </>
         )}
-      </section>
+        <button className="btn btn-secondary btn-small cm-logbtn" onClick={() => setLogOpen(true)} aria-label="Full match log">
+          <Icon name="list" size={18} /> <span className="lbl">Full match log</span>
+        </button>
+      </footer>
 
-      <aside className="match-right">
-        <MatchLog match={match} revealed={revealed} />
-      </aside>
+      {finished && (
+        <section className="event-card match-summary cm-summary">
+          <MatchSummary ev={ev} m={match} />
+        </section>
+      )}
+
+      {logOpen && <FullLog steps={steps} index={pb.index} match={match} onClose={() => setLogOpen(false)} />}
     </div>
   );
 }
 
-function useWidth<T extends HTMLElement>() {
-  const ref = useRef<T>(null);
-  const [w, setW] = useState(0);
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const update = () => setW(el.clientWidth);
-    update();
-    if (typeof ResizeObserver === 'undefined') {
-      window.addEventListener('resize', update);
-      return () => window.removeEventListener('resize', update);
-    }
-    const ro = new ResizeObserver(update);
-    ro.observe(el);
-    return () => ro.disconnect();
-  }, []);
-  return { ref, w };
+function finalLabel(m: MatchResult) {
+  if (m.decidedBy === 'suddenDeath') return 'Final · prototype sudden-death';
+  return m.innings > 9 ? `Final · ${m.innings} innings` : 'Final';
 }
 
-function FieldStage({ match, frame, t, current, finished }: { match: MatchResult; frame: Frame | null; t: number; current: MatchSequence | null; finished: boolean }) {
-  const s = useGame();
-  const { ref, w } = useWidth<HTMLDivElement>();
-  const home = s.clubs[match.homeId];
-  const away = s.clubs[match.awayId];
-  const kits = { [home.id]: kitFor(home, true), [away.id]: kitFor(away, false) };
-  const actors = frame ? [...frame.actors].sort((a, b) => a.pos.y - b.pos.y) : [];
-  const labels = frame?.labels ?? [];
-  const scale = w / VIEW.width;
-
-  // Name plates in screen pixels (fixed readable size), positioned with the same transform as the figures.
-  const plates = placeLabels(
-    labels
-      .map((id) => actors.find((a) => a.id === id))
-      .filter((a): a is NonNullable<typeof a> => !!a)
-      .map((a) => {
-        const v = toView(a.pos);
-        const pl = s.players[a.id];
-        const text = pl ? (w < 520 ? pl.lastName : shortName(pl)) : '?';
-        return { id: a.id, x: v.x * scale, y: v.y * scale, text, color: s.clubs[a.clubId]?.colors.primary ?? '#0f2a5c' };
-      }),
-    w,
-    (w * VIEW.height) / VIEW.width,
-  );
-
+function TeamScore({ club, runs, scored, home }: { club: ReturnType<typeof useGame>['clubs'][string]; runs: number; scored: number; home?: boolean }) {
   return (
-    <div className="field-stage" ref={ref}>
-      <svg viewBox={`0 0 ${VIEW.width} ${VIEW.height}`} role="img" aria-label="Field view" preserveAspectRatio="xMidYMid meet">
-        <FieldBackground />
-        {actors.map((a) => {
-          const pl = s.players[a.id];
-          return (
-            <PlayerSprite
-              key={a.id}
-              a={a}
-              t={t}
-              kit={kits[a.clubId] ?? kitFor(home, true)}
-              withBat={!!current && a.id === current.batterId && a.role === 'offense' && a.pos.y > 0.8 && (a.pose === 'ready' || a.pose === 'swing')}
-              highlighted={labels.includes(a.id)}
-              ring={pl ? s.clubs[a.clubId]?.colors.secondary ?? '#fff' : '#fff'}
-            />
-          );
-        })}
-        {frame?.ball && <BallSprite ball={frame.ball} />}
-      </svg>
-      {plates.map((pl) => (
-        <span key={pl.id} className="name-plate" style={{ left: pl.left, top: pl.top, borderColor: pl.color }}>
-          {pl.text}
-          <span className={`plate-pointer ${pl.below ? 'up' : ''}`} style={{ left: pl.pointer }} aria-hidden="true" />
-        </span>
-      ))}
-      {frame?.call && !finished && <span className="call-banner">{frame.call}</span>}
-      {finished && <span className="call-banner final">FINAL</span>}
+    <div className={`cm-team ${home ? 'home' : ''}`}>
+      <Crest club={club} size={52} />
+      <span className="cm-team-name">{clubName(club)}</span>
+      <span className={`cm-runs ${scored ? 'just' : ''}`} aria-label={`${club.name} ${runs}`}>
+        {runs}
+      </span>
+      {scored > 0 && <span className="run-chip">+{scored} RUN{scored > 1 ? 'S' : ''}</span>}
     </div>
   );
-}
-
-/** Places name plates above the figures, nudging to avoid overlaps and never leaving the stage. */
-export function placeLabels(items: { id: PlayerId; x: number; y: number; text: string; color: string }[], w: number, h: number) {
-  const placed: { id: PlayerId; left: number; top: number; width: number; pointer: number; color: string; text: string; below: boolean }[] = [];
-  const HEIGHT = 24;
-  // Just above the figure's head (figures are ~48 view units tall) at any stage width.
-  const headOffset = 48 * (w / VIEW.width) + 6;
-  for (const it of [...items].sort((a, b) => a.y - b.y)) {
-    const width = it.text.length * 7.6 + 22;
-    let left = Math.min(Math.max(4, it.x - width / 2), Math.max(4, w - width - 4));
-    let top = it.y - headOffset - HEIGHT;
-    let below = false;
-    if (top < 4) {
-      top = it.y + 8;
-      below = true;
-    }
-    for (let guard = 0; guard < 6; guard++) {
-      const hit = placed.find((p) => left < p.left + p.width + 4 && left + width + 4 > p.left && top < p.top + HEIGHT + 2 && top + HEIGHT + 2 > p.top);
-      if (!hit) break;
-      top = below ? hit.top + HEIGHT + 4 : hit.top - HEIGHT - 4;
-      if (top < 4) {
-        top = hit.top + HEIGHT + 4;
-        below = true;
-      }
-    }
-    top = Math.min(Math.max(4, top), h - HEIGHT - 4);
-    left = Math.min(Math.max(4, left), Math.max(4, w - width - 4));
-    placed.push({ id: it.id, left, top, width, pointer: Math.min(width - 10, Math.max(10, it.x - left)), color: it.color, text: it.text, below });
-  }
-  return placed;
 }
 
 function OutsDots({ outs }: { outs: number }) {
   return (
     <span className="outs" aria-label={`${outs} outs`}>
-      <span className="muted small">OUTS</span>
       {[0, 1, 2].map((i) => (
         <span key={i} className={`out-dot ${i < outs ? 'on' : ''}`} aria-hidden="true" />
       ))}
@@ -237,178 +168,291 @@ function OutsDots({ outs }: { outs: number }) {
   );
 }
 
-function BasesDiamond({ bases }: { bases: (PlayerId | null)[] }) {
-  const on = ['first', 'second', 'third'].filter((_, i) => bases[i]);
-  return (
-    <svg className="bases-mini" viewBox="0 0 48 30" role="img" aria-label={on.length ? `Runners on ${on.join(', ')}` : 'Bases empty'}>
-      {[
-        [34, 17],
-        [24, 7],
-        [14, 17],
-      ].map(([x, y], i) => (
-        <rect key={i} x={x - 6} y={y - 6} width={12} height={12} transform={`rotate(45 ${x} ${y})`} className={bases[i] ? 'base on' : 'base'} />
-      ))}
-    </svg>
-  );
+function fieldCaption(step: CommentaryStep, players: Record<PlayerId, { lastName: string }>) {
+  const st = step.state;
+  if (st.scoredId) return `${players[st.scoredId]?.lastName} scores`;
+  if (st.inProgress) return 'Play in progress';
+  const n = st.bases.filter(Boolean).length;
+  return n === 0 ? 'Bases empty' : n === 3 ? 'Bases loaded' : `${n} on base`;
 }
 
-function todayLine(revealed: MatchSequence[], id: PlayerId) {
-  let ab = 0;
-  let h = 0;
-  for (const st of revealed) {
-    if (st.kind !== 'plateAppearance' || st.batterId !== id) continue;
-    if (st.outcome !== 'walk' && st.outcome !== 'sacFly') ab++;
-    if (HITS.has(st.outcome!)) h++;
-  }
-  return { ab, h };
+function leadText(match: MatchResult, score: { home: number; away: number }, names: Record<ClubId, { name: string }>) {
+  if (score.home === score.away) return `TIED ${score.home}–${score.away}`;
+  const homeAhead = score.home > score.away;
+  return `${names[homeAhead ? match.homeId : match.awayId].name.toUpperCase()} LEAD ${Math.max(score.home, score.away)}–${Math.min(score.home, score.away)}`;
 }
 
-function ActivePlayers({ match, current, revealed }: { match: MatchResult; current: MatchSequence; revealed: MatchSequence[] }) {
+function Commentary({ steps, index, match }: { steps: CommentaryStep[]; index: number; match: MatchResult }) {
   const s = useGame();
-  const batter = current.batterId ? s.players[current.batterId] : null;
-  const pitcher = s.players[current.pitcherId];
-  const side = current.half === 'top' ? 'away' : 'home';
-  const pos = batter ? match.lineups[side].battingOrder.find((x) => x.playerId === batter.id)?.position : null;
-  const line = batter ? todayLine(revealed, batter.id) : null;
-  const faced = revealed.filter((st) => st.kind === 'plateAppearance' && st.pitcherId === current.pitcherId);
-  const ks = faced.filter((st) => st.outcome === 'strikeout').length;
+  const step = steps[index];
+  const earlier = steps.slice(Math.max(0, index - 3), index);
+  const scoringClub = step.runs > 0 ? s.clubs[step.state.battingClubId] : null;
   return (
-    <div className="active-players">
-      {batter ? (
-        <div className="ap ap-batter">
-          <Avatar player={batter} club={s.clubs[batter.clubId] ?? s.clubs[current.battingClubId]} size={64} />
-          <div>
-            <small>At bat</small>
-            <strong>{batter.firstName} {batter.lastName}</strong>
-            <span className="muted">
-              {line!.h} for {line!.ab} today{pos ? ` · ${pos}` : ''} · bats {batter.bats}
+    <div className="cm-feed">
+      <ol className="cm-earlier" aria-label="Recent commentary">
+        {Array.from({ length: 3 - earlier.length }, (_, i) => (
+          <li key={`pad${i}`} className="cm-old pad" aria-hidden="true" />
+        ))}
+        {earlier.map((e) => (
+          <li key={e.id} className={`cm-old tone-${e.tone}`}>
+            {e.headline && <strong>{e.headline} </strong>}
+            {e.text}
+          </li>
+        ))}
+      </ol>
+      <div key={step.id} className={`cm-now tone-${step.tone} ${step.headline ? 'big' : ''}`} aria-live="polite" aria-atomic="true">
+        {step.headline && <strong className="cm-headline">{step.headline}</strong>}
+        <p className="cm-text">{step.text}</p>
+        {step.runs > 0 && (
+          <div className="cm-lead">
+            {scoringClub && <Crest club={scoringClub} size={36} />}
+            <span className="lead-chip">{leadText(match, step.state.score, s.clubs)}</span>
+            <span className="run-chip">
+              +{step.runs} RUN{step.runs > 1 ? 'S' : ''}
             </span>
           </div>
-        </div>
-      ) : (
-        <div className="ap" />
-      )}
-      {pitcher && (
-        <div className="ap ap-pitcher">
-          <div>
-            <small>Pitching</small>
-            <strong>{pitcher.firstName} {pitcher.lastName}</strong>
-            <span className="muted">
-              {pitcher.throws}HP · {faced.length} batters, {ks} K today
-            </span>
-          </div>
-          <Avatar player={pitcher} club={s.clubs[pitcher.clubId] ?? s.clubs[match.homeId]} size={64} />
-        </div>
-      )}
+        )}
+      </div>
+      <p className={`cm-progress small ${step.state.inProgress ? '' : 'idle'}`} aria-hidden={!step.state.inProgress}>
+        {step.state.inProgress ? (
+          <>
+            Play in progress <span className="dots" aria-hidden="true"><i /><i /><i /></span>
+          </>
+        ) : (
+          ' '
+        )}
+      </p>
     </div>
   );
 }
 
-function GameStats({ match, revealed }: { match: MatchResult; revealed: MatchSequence[] }) {
+/** At-bat batter while a play is told; otherwise the next batter due up. */
+function batterFocus(match: MatchResult, steps: CommentaryStep[], index: number): { id: PlayerId; label: 'At bat' | 'Due up'; clubId: ClubId } {
+  const seq = match.sequence!;
+  const step = steps[index];
+  const club = step.state.battingClubId;
+  const cur = step.seqIndex >= 0 ? seq[step.seqIndex] : null;
+  if (cur?.kind === 'plateAppearance' && !step.playDone && step.tone !== 'inning') return { id: cur.batterId!, label: 'At bat', clubId: club };
+  const side = club === match.homeId ? 'home' : 'away';
+  const order = match.lineups[side].battingOrder.map((x) => x.playerId);
+  let lastBatter: PlayerId | null = null;
+  for (let k = index; k >= 0; k--) {
+    const sq = steps[k].seqIndex >= 0 ? seq[steps[k].seqIndex] : null;
+    if (sq?.kind === 'plateAppearance' && sq.battingClubId === club && steps[k].playDone) {
+      lastBatter = sq.batterId;
+      break;
+    }
+  }
+  const at = lastBatter ? (order.indexOf(lastBatter) + 1) % order.length : 0;
+  return { id: order[at], label: 'Due up', clubId: club };
+}
+
+function BattingOrder({ match, steps, index }: { match: MatchResult; steps: CommentaryStep[]; index: number }) {
   const s = useGame();
-  const row = (clubId: string) => {
-    const mine = revealed.filter((st) => st.battingClubId === clubId && st.kind === 'plateAppearance');
-    return {
-      h: mine.filter((st) => HITS.has(st.outcome!)).length,
-      bb: mine.filter((st) => st.outcome === 'walk').length,
-      k: mine.filter((st) => st.outcome === 'strikeout').length,
-    };
-  };
+  const focus = batterFocus(match, steps, index);
+  const side = focus.clubId === match.homeId ? 'home' : 'away';
+  const order = match.lineups[side].battingOrder;
+  const at = order.findIndex((x) => x.playerId === focus.id);
+  const tags = [focus.label, 'On deck', 'In the hole'];
   return (
-    <div className="panel match-panel">
-      <header className="panel-head">
+    <section className="panel cm-order" aria-label="Batting order">
+      <header className="cm-head">
+        <h2>Batting order</h2>
+        <span className="muted small">{s.clubs[focus.clubId].name}</span>
+      </header>
+      <ol>
+        {order.map((slot, i) => {
+          const pl = s.players[slot.playerId];
+          const rel = (i - at + order.length) % order.length;
+          return (
+            <li key={slot.playerId} className={rel === 0 ? 'now' : rel < 3 ? 'soon' : ''} aria-current={rel === 0 ? 'true' : undefined}>
+              <span className="n">{i + 1}</span>
+              <span className="nm">
+                {pl ? shortName(pl) : '?'}
+                {rel < 3 && <small>{tags[rel]}</small>}
+              </span>
+              <span className="pos">{slot.position}</span>
+            </li>
+          );
+        })}
+      </ol>
+    </section>
+  );
+}
+
+function GameSoFar({ match, steps, index }: { match: MatchResult; steps: CommentaryStep[]; index: number }) {
+  const s = useGame();
+  const rows = gameSoFar(match, steps, index);
+  const score = steps[index].state.score;
+  return (
+    <section className="panel cm-sofar" aria-label="Game so far">
+      <header className="cm-head">
         <h2>Game so far</h2>
       </header>
       <table className="mini-table">
         <thead>
           <tr>
             <th scope="col">Team</th>
+            <th scope="col">R</th>
             <th scope="col">H</th>
             <th scope="col">BB</th>
             <th scope="col">K</th>
           </tr>
         </thead>
         <tbody>
-          {[match.awayId, match.homeId].map((id) => {
-            const r = row(id);
-            return (
-              <tr key={id} className={id === s.userClubId ? 'me' : ''}>
-                <td>{s.clubs[id].name}</td>
-                <td>{r.h}</td>
-                <td>{r.bb}</td>
-                <td>{r.k}</td>
-              </tr>
-            );
-          })}
+          {[match.awayId, match.homeId].map((id) => (
+            <tr key={id} className={id === s.userClubId ? 'me' : ''}>
+              <td>{s.clubs[id].name}</td>
+              <td>{id === match.homeId ? score.home : score.away}</td>
+              <td>{rows[id].h}</td>
+              <td>{rows[id].bb}</td>
+              <td>{rows[id].k}</td>
+            </tr>
+          ))}
         </tbody>
       </table>
-    </div>
+    </section>
   );
 }
 
-function BattingOrder({ match, current }: { match: MatchResult; current: MatchSequence | null }) {
+function Players({ match, steps, index }: { match: MatchResult; steps: CommentaryStep[]; index: number }) {
   const s = useGame();
-  const clubId = current?.battingClubId ?? match.awayId;
-  const side = clubId === match.homeId ? 'home' : 'away';
-  return (
-    <div className="panel match-panel">
-      <header className="panel-head">
-        <h2>Batting order · {s.clubs[clubId].name}</h2>
-      </header>
-      <ol className="order-list">
-        {match.lineups[side].battingOrder.map((slot, i) => {
-          const pl = s.players[slot.playerId];
-          const now = current?.batterId === slot.playerId;
-          return (
-            <li key={slot.playerId} className={now ? 'now' : ''} aria-current={now ? 'true' : undefined}>
-              <span className="n">{i + 1}</span>
-              <span className="nm">{pl ? shortName(pl) : '?'}</span>
-              <span className="pos">{slot.position}</span>
-            </li>
-          );
-        })}
-      </ol>
-    </div>
-  );
-}
-
-function MatchLog({ match, revealed }: { match: MatchResult; revealed: MatchSequence[] }) {
-  const s = useGame();
+  const step = steps[index];
+  const focus = batterFocus(match, steps, index);
+  const batter = s.players[focus.id];
+  const pitcher = s.players[step.state.pitcherId];
+  const side = focus.clubId === match.homeId ? 'home' : 'away';
+  const pos = match.lineups[side].battingOrder.find((x) => x.playerId === focus.id)?.position;
+  const line = todayLine(match, steps, index, focus.id);
+  // Batters faced by this pitcher in plays already finished on screen.
   const seq = match.sequence!;
-  const items = revealed.filter((st) => isHighlight(seq, st.index)).reverse().slice(0, 30);
-  const leadText = (st: MatchSequence) => {
-    const { home, away } = st.after.score;
-    const h = s.clubs[match.homeId].name;
-    const a = s.clubs[match.awayId].name;
-    return home === away ? `TIED ${home}–${away}` : home > away ? `${h.toUpperCase()} LEAD ${home}–${away}` : `${a.toUpperCase()} LEAD ${away}–${home}`;
-  };
+  const seen = new Set<number>();
+  for (let k = 0; k <= index; k++) if (steps[k].playDone && steps[k].seqIndex >= 0) seen.add(steps[k].seqIndex);
+  const faced = [...seen].filter((i) => seq[i].kind === 'plateAppearance' && seq[i].pitcherId === step.state.pitcherId).length;
   return (
-    <div className="panel match-panel">
-      <header className="panel-head">
-        <h2>Match log</h2>
-      </header>
-      {items.length === 0 ? (
-        <p className="muted small log-empty">Plays appear here once they have been shown.</p>
-      ) : (
-        <ol className="match-log">
-          {items.map((st) => {
-            const club = s.clubs[st.battingClubId];
-            const scored = st.after.score.home + st.after.score.away > st.before.score.home + st.before.score.away;
-            return (
-              <li key={st.index} className={scored ? 'scoring' : ''}>
-                <Crest club={club} size={28} />
-                <div>
-                  <small>
-                    {st.half === 'top' ? '▲' : '▼'} {ordinal(st.inning)} · {club.name}
-                  </small>
-                  <span>{st.text}</span>
-                  {scored && <span className="lead-chip">{leadText(st)}</span>}
-                </div>
-              </li>
-            );
-          })}
-        </ol>
+    <div className="cm-players">
+      {batter && (
+        <div className="ap">
+          <Avatar player={batter} club={s.clubs[batter.clubId] ?? s.clubs[focus.clubId]} size={56} />
+          <div>
+            <small>{focus.label}</small>
+            <strong>
+              {batter.firstName} {batter.lastName}
+            </strong>
+            <span className="muted small">
+              {pos} · {line.ab === 0 && line.h === 0 ? 'first time up' : `${line.h} for ${line.ab} today`}
+            </span>
+          </div>
+        </div>
       )}
+      {pitcher && (
+        <div className="ap">
+          <Avatar player={pitcher} club={s.clubs[pitcher.clubId] ?? s.clubs[match.homeId]} size={56} />
+          <div>
+            <small>Pitching</small>
+            <strong>
+              {pitcher.firstName} {pitcher.lastName}
+            </strong>
+            <span className="muted small">
+              {pitcher.throws}HP · {faced} batter{faced === 1 ? '' : 's'} faced
+            </span>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Most recent run already presented; a fixed slot so the layout never jumps. */
+function LastRun({ steps, index, match }: { steps: CommentaryStep[]; index: number; match: MatchResult }) {
+  const s = useGame();
+  let k = index;
+  while (k >= 0 && !steps[k].state.scoredId) k--;
+  const hit = k >= 0 ? steps[k] : null;
+  const p = hit ? s.players[hit.state.scoredId!] : null;
+  const clubId = hit?.state.battingClubId ?? match.homeId;
+  const runs = hit ? hit.state.score[clubId === match.homeId ? 'home' : 'away'] : 0;
+  return (
+    <section className={`panel cm-scored ${k === index ? 'now' : ''}`} aria-label="Runs">
+      <header className="cm-head">
+        <h2>{k === index ? 'Just scored' : 'Last run'}</h2>
+      </header>
+      {!p ? (
+        <p className="muted small cm-norun">No runs yet.</p>
+      ) : (
+        <div className="ap">
+          <Avatar player={p} club={s.clubs[p.clubId] ?? s.clubs[clubId]} size={56} />
+          <div>
+            <strong>
+              {p.firstName} {p.lastName}
+            </strong>
+            <span className="muted small">
+              Run #{runs} for {s.clubs[clubId].name}
+            </span>
+          </div>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function FullLog({ steps, index, match, onClose }: { steps: CommentaryStep[]; index: number; match: MatchResult; onClose: () => void }) {
+  const s = useGame();
+  const [away, home] = [s.clubs[match.awayId].abbreviation, s.clubs[match.homeId].abbreviation];
+  const closeRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    closeRef.current?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  // Only steps already presented: the log never shows what is still to come.
+  const shown = steps.slice(0, index + 1);
+  const groups: { key: string; title: string; items: CommentaryStep[] }[] = [];
+  for (const st of shown) {
+    const key = `${st.state.inning}-${st.state.half}`;
+    let g = groups[groups.length - 1];
+    if (!g || g.key !== key) {
+      g = { key, title: `${st.state.half === 'top' ? 'Top' : 'Bottom'} ${ordinalOf(st.state.inning)}`, items: [] };
+      groups.push(g);
+    }
+    g.items.push(st);
+  }
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal cm-log" role="dialog" aria-modal="true" aria-label="Full match log" onClick={(e) => e.stopPropagation()}>
+        <header className="cm-head">
+          <h2>Full match log</h2>
+          <button ref={closeRef} className="icon-btn" aria-label="Close" onClick={onClose}>
+            ✕
+          </button>
+        </header>
+        <div className="cm-log-body">
+          {groups
+            .slice()
+            .reverse()
+            .map((g) => (
+              <section key={g.key}>
+                <h3 className="subhead">{g.title}</h3>
+                <ol>
+                  {g.items
+                    .slice()
+                    .reverse()
+                    .map((st) => (
+                      <li key={st.id} className={`tone-${st.tone}`}>
+                        {st.headline && <strong>{st.headline} </strong>}
+                        {st.text}
+                        <span className="muted small">
+                          {' '}
+                          · {away} {st.state.score.away}–{st.state.score.home} {home}
+                        </span>
+                      </li>
+                    ))}
+                </ol>
+              </section>
+            ))}
+        </div>
+      </div>
     </div>
   );
 }

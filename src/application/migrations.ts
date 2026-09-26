@@ -1,3 +1,4 @@
+import { defaultPitchingPlan } from '../domain/lineup';
 import { createRng } from '../domain/rng';
 import { SCHEMA_VERSION, type GameState } from '../domain/state';
 import { buildEvent, planPreseason } from '../events/planner';
@@ -66,6 +67,11 @@ export function migrate(input: AnyState): GameState {
       }
     }
     s.schemaVersion = 4;
+  }
+  if (s.schemaVersion === 4) {
+    // Pitching plans (reliever, rest, hook) became part of each club.
+    for (const c of Object.values(s.clubs)) c.pitchingPlan ??= defaultPitchingPlan();
+    s.schemaVersion = 5;
   }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;

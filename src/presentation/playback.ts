@@ -1,130 +1,50 @@
-import { buildPresentation, isHighlight, type DisplayState, type MatchContext, type Presentation } from './adapter';
-import { TIMING } from './fieldConfig';
-import { frameAt, type Frame } from './frame';
+import type { CommentaryStep } from './commentary';
 
-export type PlaybackMode = 'highlights' | 'all';
-export type PlaybackPhase = 'ready' | 'playing' | 'finished';
+export type Speed = 1 | 2;
 
 /**
- * Playback controller for an already simulated match. One clock (`tick`), one
- * sequence at a time, no side effects on the game: it only decides what is
- * shown. The match result itself is final and stored before playback starts.
+ * Playback position over precomputed commentary steps. It has no side effects
+ * on the game: the match is already simulated and saved; this only decides
+ * which step is shown. The UI hook owns the single timer that calls `next`.
  */
-export class MatchPlayback {
-  phase: PlaybackPhase = 'ready';
-  /** Sequence being played, or the last one completed. −1 before the first. */
-  cursor = -1;
-  /** Everything up to this index may be shown in the log and stats. */
-  revealedThrough = -1;
-  t = 0;
-  auto = false;
-  presentation: Presentation | null = null;
-  private autoWait = 0;
-  private readonly count: number;
+export class CommentaryPlayback {
+  /** Step currently shown; −1 before the first. */
+  index: number;
+  auto = true;
+  speed: Speed = 1;
 
   constructor(
-    private readonly ctx: MatchContext,
-    public mode: PlaybackMode = 'highlights',
-    private readonly reducedMotion = false,
-    startCursor = -1,
+    readonly steps: CommentaryStep[],
+    startIndex = -1,
   ) {
-    this.count = ctx.match.sequence?.length ?? 0;
-    if (this.count === 0) {
-      this.phase = 'finished';
-      return;
-    }
-    if (startCursor >= this.count - 1) {
-      this.skip();
-    } else if (startCursor >= 0) {
-      // Resume after a completed sequence (e.g. returning to the screen).
-      this.cursor = startCursor;
-      this.revealedThrough = startCursor;
-      this.presentation = buildPresentation(ctx, startCursor, { reducedMotion });
-      this.t = this.presentation.duration;
-    } else {
-      this.presentation = buildPresentation(ctx, 0, { reducedMotion });
-      this.t = 0;
-    }
+    this.index = Math.max(-1, Math.min(steps.length - 1, startIndex));
   }
 
-  private nextIndex(): number | null {
-    const seq = this.ctx.match.sequence!;
-    for (let i = this.cursor + 1; i < this.count; i++) {
-      if (this.mode === 'all' || isHighlight(seq, i)) return i;
-    }
-    return null;
+  get step(): CommentaryStep | null {
+    return this.steps[this.index] ?? null;
   }
 
-  /** Starts the next sequence. Ignored while one is playing (no double playback). */
+  get finished(): boolean {
+    return this.steps.length === 0 || this.index >= this.steps.length - 1;
+  }
+
+  /** Shows the next step. Returns false at the end (nothing changes). */
   next(): boolean {
-    if (this.phase !== 'ready') return false;
-    const i = this.nextIndex();
-    if (i === null) {
-      this.skip();
-      return false;
-    }
-    // Steps passed over in highlight mode are revealed (log and scoreboard catch up to this step's before-state).
-    this.revealedThrough = i - 1;
-    this.cursor = i;
-    this.presentation = buildPresentation(this.ctx, i, { reducedMotion: this.reducedMotion });
-    this.t = 0;
-    this.autoWait = 0;
-    this.phase = 'playing';
+    if (this.finished) return false;
+    this.index += 1;
     return true;
   }
 
-  /** Advances the single playback clock. `dt` is capped by the caller (background tabs pause). */
-  tick(dt: number) {
-    if (this.phase === 'playing' && this.presentation) {
-      this.t = Math.min(this.presentation.duration, this.t + dt);
-      if (this.t >= this.presentation.duration) {
-        this.revealedThrough = this.cursor;
-        this.phase = this.cursor >= this.count - 1 ? 'finished' : 'ready';
-        this.autoWait = 0;
-      }
-      return;
-    }
-    if (this.phase === 'ready' && this.auto) {
-      this.autoWait += dt;
-      const pause = this.reducedMotion ? TIMING.autoPause * TIMING.reducedScale : TIMING.autoPause;
-      if (this.autoWait >= pause) this.next();
-    }
-  }
-
-  setAuto(on: boolean) {
-    // Turning auto off lets the current sequence finish but starts no new one.
-    this.auto = on;
-    this.autoWait = 0;
-  }
-
-  setMode(mode: PlaybackMode) {
-    this.mode = mode;
-  }
-
-  /** Ends playback and shows the authoritative final result. */
+  /** Jumps to the authoritative final step. */
   skip() {
-    this.phase = 'finished';
-    this.cursor = this.count - 1;
-    this.revealedThrough = this.count - 1;
+    this.index = this.steps.length - 1;
     this.auto = false;
-    if (this.count > 0) {
-      this.presentation = buildPresentation(this.ctx, this.count - 1, { reducedMotion: this.reducedMotion });
-      this.t = this.presentation.duration;
-    }
   }
 
-  /** Last index whose result may be shown right now (the playing one only after its result moment). */
-  get logThrough(): number {
-    if (this.phase === 'playing' && this.presentation && this.t >= this.presentation.resultAt) return this.cursor;
-    return this.revealedThrough;
-  }
-
-  frame(): Frame | null {
-    return this.presentation ? frameAt(this.presentation, this.t) : null;
-  }
-
-  /** Scoreboard state currently shown. */
-  display(): DisplayState | null {
-    return this.frame()?.state ?? null;
+  /** How long the current step stays before autoplay moves on; null when nothing is scheduled. */
+  delay(): number | null {
+    if (!this.auto || this.finished) return null;
+    const d = this.step?.duration ?? 600;
+    return Math.round(d / this.speed);
   }
 }

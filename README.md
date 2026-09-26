@@ -20,33 +20,84 @@ Produktionsbygget är en statisk webbapp (cirka 430 kB JS, 132 kB gzip). Typsnit
 
 Under **Settings** finns testläget "Unlimited Time", som gör det möjligt att spela hela säsonger utan väntan. Testläget visas som "∞ TEST" i toppraden och med en gul banner. I ekonomiläget är taket 12 Time, med +1 var 20:e minut.
 
-## Visuell matchvy
+## Inför match: Set your lineup
 
-En avgjord ligamatch spelas upp som en 2D-scen ovanifrån: resultattavla, plan, spelarfigurer, boll, namnskyltar, At bat/Pitching-rad, kommentar, slagordning och matchlogg (`src/ui/match/`).
+Den gamla vyn med tre val (Your lineup, Strongest, Rest) är ersatt av en laguttagning med tre flikar som redigerar **ett gemensamt utkast** (`src/ui/prematch/`, `src/domain/lineupDraft.ts`).
+
+- **Field:** positionskort på en nedtonad plan (en lista på smala skärmar), bänk och **Proposed swap** med jämförelse.
+  - Byten görs med dra-och-släpp, eller genom att klicka ett kort och sedan en bänkspelare. Två kort kan byta position.
+  - Om man väljer pitcher-kortet visas övriga pitchers.
+  - Den inkommande spelaren tar över position och slagplats. Spel ur position visar det faktiska avdraget (−15 i fielding).
+  - Konsekvenser visas: löften som påverkas, "first start in N games" och planerad vila.
+- **Batting order:** dra, ▲/▼ eller Alt + ↑/↓. En omordning ändrar aldrig försvarspositionen. Panelen för vald slagman förklarar slagplatsen beskrivande, utan påhittade bonusar.
+- **Pitchers:** val av starter (samma utkast som pitcher-kortet i Field) och avvägningen mot det starkaste alternativet, med verklig vinstprognos för båda.
+  - Bullpen-plan med rollerna **First reliever / Available / Rest today**.
+  - **When to change pitchers:** Early, Balanced eller Let him pitch.
+- **Attributes / Stats** och **Season / Last 5 games** gäller hela vyn. Fitness (batteri + %) och Happiness (ansikte + värde) syns alltid. Valen sparas som användarinställningar.
+- **Snabbval:** Best lineup, Rotate tired players (<90 %), Suggest order, Suggest setup och Reset. De ändrar bara utkastet, visar vad som ändrades och kan ångras.
+- **Bekräftelse:** utkastet sparas per match i webbläsaren, skilt från den bekräftade uppställningen. **Confirm lineup** skickar det i *samma* kommando som spelar matchen, så valideringen, uppställningen, pitchingplanen, Time-kostnaden och matchen hanteras som en enhet. Dubbelklick ger ingen dubbel debitering.
+
+**Motorn följer planen** (`PitchingPlan` på klubben, sparformat v5):
+- Den planerade relievern används när startern byts ut. Om ingen är planerad väljs den mest utvilade som inte vilar.
+- En pitcher med "Rest today" används aldrig.
+- Hook-trösklarna står i `BALANCE.match.hooks`: Early byter efter 22 slagmän eller 4 runs, Balanced efter 27 eller 6 (motorns tidigare regel), Let him pitch efter 32 eller 8.
+- Reliever och vila gäller en match, medan hook är en bestående inställning.
+- Efter matchen rapporteras vad som faktiskt hände: första start på N matcher, planerad vila med fitness före och efter, om relievern användes, och hur många slagmän startern mötte.
+
+**Statistikdefinitioner:**
+- Season hämtas från säsongens boxscore-summor. Last 5 games är klubbens fem senaste matcher.
+- OBP = (H + BB) / PA. Modellen har ingen hit-by-pitch, och sac fly räknas som PA utan AB.
+- ERA = 9 × runs / IP. Modellen har inga errors, så alla runs är earned.
+- IP visas i basebollnotation (10.2 = 10⅔). Tomt underlag visas som "—", och små urval markeras.
+
+**Inte byggt, eftersom motorn saknar stöd:**
+- Pitch limit och antal kast, eftersom motorn inte räknar pitches. Belastning visas i stället som mötta slagmän och innings.
+- "Looking ahead" (planerad starter till nästa match).
+- Mer än ett pitcherbyte per match.
+## Match: intro och kommentarsdriven vy
+
+**Flöde:** Confirm lineup → arenaintro (~5 s) → matchen startar automatiskt med autoplay. Det finns ingen extra Start match-knapp och inget mellanliggande event. Uppställningen skickas i samma kommando som spelar matchen, så matchen och Time-kostnaden sker exakt en gång, även vid dubbelklick.
+
+**Intro** (`ui/match/MatchIntro.tsx`):
+- Visar hemmalagets arena (`${city} Park`, samma namn som i gate-texterna), Lineup confirmed, lagen och de faktiska startande pitcherna från den sparade matchen.
+- Arenan är ritad i kod med hemmaklubbens färger och märke. En textfri målad arenabild kan ersätta den senare.
+- **Skip intro** öppnar samma matchstart och hoppar aldrig till resultatet. Med reduced motion blir introt kortare och helt stilla.
+- Återinträde i en påbörjad match fortsätter där den var, utan intro.
 
 **Ansvar i tre lager:**
-1. **Simulatorn** (`simulation/match.ts`) avgör allt. Den registrerar nu en komplett `sequence` per match: varje at-bat, stöld, pitcherbyte, extra-inning-löpare och sudden death. Varje steg har före/efter-läge med löparnas ID:n, löparförflyttningar och utslagna spelare i ordning.
-   - Vilken försvarare som tar bollen och bollens riktning registreras som metadata. Den härleds från en hash av match-ID och steg, **aldrig** från spelets slump, så matchutfallen är exakt desamma som tidigare.
-   - Försvararen påverkar inga resultat, eftersom motorn räknar med lagets snittförsvar.
-2. **Presentationsadaptern** (`presentation/adapter.ts`, `frame.ts`) översätter ett steg till en tidslinje: rörelser, boll, namn, domarrop och de ögonblick då tavlan uppdateras. `frameAt(presentation, t)` är en ren funktion, så varje bildruta kan återskapas.
-3. **Uppspelningskontrollen** (`presentation/playback.ts`, `ui/match/usePlayback.ts`) har en enda klocka.
-   - Next ignoreras medan ett steg spelas. Auto kan stängas av, och det pågående steget spelas då klart. Skip visar det auktoritativa slutresultatet.
-   - En bakgrundsflik pausar klockan utan att animationer köas upp. Positionen sparas per match, så uppspelningen fortsätter där den var om du navigerar bort.
+1. **Simulatorn** (`simulation/match.ts`) avgör allt och registrerar `sequence`: varje at-bat, stöld, pitcherbyte, extra-inning-löpare och sudden death. Varje steg har före/efter-läge, löparförflyttningar och outs i ordning.
+2. **Kommentarslagret** (`presentation/commentary.ts`) delar upp varje spel i kommentarssteg. Varje steg bär hela det presenterade läget: poäng, outs, baser, löpare på väg, slagman, pitcher och den som just gjort poäng. Text, resultattavla, plan och sidopaneler byter därför alltid på samma steg.
+   - Exempel: `BASE HIT! Miller singles.` (slagmannen kvar vid plattan, Chen markerad som Advancing…) → `SCORES! Walker crosses home plate!` (+1, Walker bort från tredje) → `Chen to second. Miller to first.`
+   - Uppbyggnadssteg ("Kim delivers to Price…") visas bara när läget före kastet är spännande. De beror aldrig på utfallet och avslöjar därför inget.
+   - Tredje out får ett eget steg "That's three outs…", och varje halvinning börjar med ett eget steg. Poäng räknas bara så långt motorn krediterade dem, så inget tas tillbaka.
+   - Sista steget i varje spel är exakt motorns efter-läge, och sista steget i matchen är matchens slutresultat.
+3. **Uppspelningen** (`presentation/playback.ts`, `ui/match/usePlayback.ts`) har en enda timer för allt.
+   - Next moment visar nästa steg direkt och ersätter den väntande timern, så inget dubbeltriggas.
+   - Paus håller kvar text och plan. 2× halverar tiderna, och Skip to result visar slutläget.
+   - En dold flik pausar klockan, och vid återkomst väntar steget sin fulla tid i stället för att hoppa ikapp.
+   - Positionen sparas per match i localStorage, skild från spelets sparfil. Omladdning eller återuppspelning kan därför aldrig skriva resultat, statistik, belöningar eller fitness igen.
 
-**Lägen:** "Highlights" stannar vid hits, poäng, walks med löpare på bas, double plays, stölder, byten och inningavslut med löpare kvar. "Every play" visar alla steg. Tavla och logg synkas även för hoppade steg, och ingenting visas innan det har spelats upp.
+**Tempo** (`PACE` i `commentary.ts`): uppbyggnad cirka 1 s, rutin 1,3 s, hit/viktig out 2,1 s, poäng 2 s, förflyttning 1,2 s, inningstart 1,5 s och Final 2,6 s, plus lästid för långa texter. En match tar ungefär 3 minuter i 1× och 1,5 minuter i 2×.
 
-**Visuella regler:**
-- Hemmalaget har vita tröjor och bortalaget klubbens färg, så lagen går alltid att skilja åt.
-- Högst tre namn syns samtidigt: kastare och slagman, sedan fältare och löpare.
-- Namnskyltarna är HTML i fast läsbar storlek, placeras med samma transform som figurerna och undviker krockar och kanter.
+**Vyn** (`ui/match/MatchScene.tsx`, `SchematicField.tsx`):
+- Resultattavla med +1 RUN, Live commentary (aktuell kommentar stor, tre tidigare nedtonade, "Play in progress") och At bat/Due up + Pitching.
+- Schematisk plan: försvaret som fyllda cirklar med position, anfallet som vita rutor med lagfärgad kant. Bara pitcher, slagman, löpare och den som gjorde poäng namnges.
+- Slagordning (Due up/On deck/In the hole), Game so far (R/H/BB/K från redan visade spel), Last run/Just scored och Full match log som bara innehåller visade steg.
+- Kontroller: Next moment, Skip to result, Auto play, 1×/2× och Full match log.
+- Mobil: kompakt tavla, aktuell kommentar och plan syns tillsammans, med en fastnålad kontrollrad (paus/play som ikon).
 
-**Dataluckor:** simulatorn har inga enskilda kast, så balls/strikes visas inte. I stället visas ett representativt kast per at-bat. Pitchfart finns inte heller i modellen och visas därför inte. Äldre matcher utan `sequence` visas som tidigare, som en textbaserad sammanfattning.
+**Dataluckor, därför inte påhittat:**
+- Motorn har inga enskilda kast, så balls/strikes, count och pitchfart visas inte.
+- Försvararen och bollriktningen i `sequence` är hash-metadata, inte motorns avgörande, så kommentarerna namnger ingen fältare och ingen riktning eller slagtyp ("Miller singles", inte "lines to center").
+- Äldre matcher utan `sequence` visas som tidigare, som en textbaserad sammanfattning.
 
-**Tester:** `sequence.test.ts` kontrollerar kontinuitet, ID:n, poäng, outs och PA mot boxscoren i 300 matcher. `presentation.test.ts` täcker:
-- single med flera löpare, strikeout som tredje out och walk med fulla baser
-- fly/sac fly, home run, groundout, double play, stölder, pitcherbyte, extra-inning-löpare och inningbyte
-- att varje steg i 30 matcher slutar på sitt efter-läge
-- upprepade klick, Skip mitt i ett steg, Auto av och återupptagning
+**Tester:**
+- `presentation.test.ts` kontrollerar 50 matcher: varje spel slutar på motorns efter-läge, inga poäng visas tidigt eller tas tillbaka, och ingen spelare visas dubbelt.
+  - Det täcker också exemplet hit → score → settle, att uppbyggnadssteg saknar utfall, tredje out/inningbyte, double play i registrerad ordning och alla händelsetyper.
+  - Sidopanelerna räknar bara visade spel, och inga texter nämner fältare eller mph.
+  - Autoplay, manuellt och Skip ger samma slutläge, och återupptagning fungerar.
+- `e2e.test` går Confirm → Skip intro → Skip to result → Final.
+
 ## Spelarvärden: OVR och Fitness
 
 - **OVR (overall)** är ett tal 0–100 som visar hur bra en spelare är på sin primära position. Det är ett positionsviktat snitt av grundvärdena (`src/domain/ratings.ts`): försvaret väger tyngre för C, SS och CF, slaget för 1B, hörnytterfälten och DH, och för pitchers är det i praktiken Pitching. Nivåerna är Elite 80+, Good 70+, Solid 60+, Fringe 50+ och Weak. I lineup-listan visas OVR på just den positionen, med avdrag för att spela ur position. Potential-OVR är scoutingens intervall översatt till samma skala.

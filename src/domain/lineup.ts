@@ -6,7 +6,9 @@ import type {
   Lineup,
   LineupPosition,
   LineupSlot,
+  PitchingPlan,
   Player,
+  PlayerId,
   RatingKey,
 } from './types';
 import { DEFENSIVE_POSITIONS, LINEUP_POSITIONS } from './types';
@@ -70,6 +72,27 @@ export function validateLineup(state: GameState, clubId: ClubId, lineup: Lineup)
 
 export const isLineupValid = (state: GameState, clubId: ClubId, lineup: Lineup) =>
   validateLineup(state, clubId, lineup).every((i) => i.severity !== 'error');
+
+export const defaultPitchingPlan = (): PitchingPlan => ({ relieverId: null, rest: [], hook: 'balanced' });
+
+/** Problems with a pitching plan for a given starter. Errors block confirmation; warnings inform. */
+export function validatePitchingPlan(state: GameState, clubId: ClubId, starterId: PlayerId, plan: PitchingPlan): LineupIssue[] {
+  const club = state.clubs[clubId];
+  const issues: LineupIssue[] = [];
+  const pitchers = club.roster.map((id) => state.players[id]).filter((p) => p.isPitcher);
+  const name = (id: PlayerId) => state.players[id]?.lastName ?? 'That pitcher';
+  if (plan.rest.includes(starterId)) issues.push({ severity: 'error', text: `${name(starterId)} is today's starter and cannot also rest.` });
+  if (plan.relieverId) {
+    if (plan.relieverId === starterId) issues.push({ severity: 'error', text: `${name(starterId)} cannot be both starter and reliever.` });
+    else if (!pitchers.some((p) => p.id === plan.relieverId)) issues.push({ severity: 'error', text: 'The planned reliever is not on the roster.' });
+    else if (plan.rest.includes(plan.relieverId)) issues.push({ severity: 'error', text: `${name(plan.relieverId)} cannot relieve and rest at the same time.` });
+  }
+  const available = pitchers.filter((p) => p.id !== starterId && !plan.rest.includes(p.id));
+  if (available.length === 0) {
+    issues.push({ severity: 'warning', text: 'No reliever is available: the starter will pitch the whole game, whatever happens.' });
+  }
+  return issues;
+}
 
 /** Scarce positions are filled first so the greedy pick stays sensible. */
 const FILL_ORDER: DefensivePosition[] = ['C', 'SS', 'CF', '2B', '3B', 'RF', 'LF', '1B'];

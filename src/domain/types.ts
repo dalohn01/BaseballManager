@@ -100,6 +100,20 @@ export interface Lineup {
   pitcherId: PlayerId;
 }
 
+/** When the starter is replaced: thresholds per setting live in BALANCE.match.hooks. */
+export type PitchingHook = 'early' | 'balanced' | 'long';
+
+/**
+ * Today's pitching plan, followed by the simulator: the designated reliever (or
+ * automatic choice when null), pitchers who must not be used, and how long the
+ * starter stays in. Reliever and rest apply to the next game only.
+ */
+export interface PitchingPlan {
+  relieverId: PlayerId | null;
+  rest: PlayerId[];
+  hook: PitchingHook;
+}
+
 export interface SponsorDeal {
   name: string;
   kind: 'standard' | 'commercial' | 'local';
@@ -129,6 +143,7 @@ export interface Club {
   isUser: boolean;
   roster: PlayerId[];
   lineup: Lineup;
+  pitchingPlan: PitchingPlan;
   cash: number;
   ownerConfidence: number;
   fanSupport: number;

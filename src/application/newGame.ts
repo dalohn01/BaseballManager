@@ -2,7 +2,7 @@ import { BALANCE } from '../balance/config';
 import { AI_CLUBS, GENERATED_ROSTER_SHAPE, USER_CLUB, USER_ROSTER, type ClubSeed, type PlayerSeed } from '../content/clubs';
 import { FIRST_NAMES, LAST_NAMES } from '../content/names';
 import { emptyStats, PRIORITIES, scoutEstimate } from '../content/playerFactory';
-import { autoLineup } from '../domain/lineup';
+import { autoLineup, defaultPitchingPlan } from '../domain/lineup';
 import { clamp, createRng, type Rng } from '../domain/rng';
 import type { GameState } from '../domain/state';
 import { SCHEMA_VERSION } from '../domain/state';
@@ -108,6 +108,7 @@ function makeClub(seed: ClubSeed, isUser: boolean): Club {
     isUser,
     roster: [],
     lineup: { battingOrder: [], pitcherId: '' },
+    pitchingPlan: defaultPitchingPlan(),
     cash: BALANCE.economy.startingCash,
     ownerConfidence: 74,
     fanSupport: 82,

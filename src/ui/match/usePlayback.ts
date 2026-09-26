@@ -1,97 +1,107 @@
-import { useEffect, useReducer, useRef } from 'react';
-import type { MatchContext } from '../../presentation/adapter';
-import { MatchPlayback, type PlaybackMode } from '../../presentation/playback';
+import { useEffect, useReducer, useRef, useState } from 'react';
+import type { CommentaryStep } from '../../presentation/commentary';
+import { CommentaryPlayback, type Speed } from '../../presentation/playback';
 
-const cursorKey = (matchId: string) => `bm.match.${matchId}`;
+/*
+ * Playback position is presentation state only: it is kept per viewer in
+ * localStorage, separate from the saved game, so replaying or resuming a
+ * match can never write results, stats or rewards again.
+ */
+const PREFIX = 'bm.cmt.';
+const posKey = (matchId: string) => `${PREFIX}${matchId}`;
 
-function readCursor(matchId: string): number {
+export function readPosition(matchId: string): number | null {
   try {
-    const v = sessionStorage.getItem(cursorKey(matchId));
-    return v === null ? -1 : Number(v);
+    const v = localStorage.getItem(posKey(matchId));
+    return v === null ? null : Number(v);
   } catch {
-    return -1;
+    return null;
   }
 }
-function writeCursor(matchId: string, cursor: number) {
+function writePosition(matchId: string, index: number) {
   try {
-    sessionStorage.setItem(cursorKey(matchId), String(cursor));
+    // Only one match is live at a time: drop positions of older matches.
+    for (let i = localStorage.length - 1; i >= 0; i--) {
+      const k = localStorage.key(i);
+      if (k?.startsWith(PREFIX) && k !== posKey(matchId)) localStorage.removeItem(k);
+    }
+    localStorage.setItem(posKey(matchId), String(index));
   } catch {
-    /* storage unavailable: playback restarts from the beginning next time */
+    /* storage unavailable: the match simply starts over next time */
   }
 }
-function readMode(): PlaybackMode {
+function readSpeed(): Speed {
   try {
-    return localStorage.getItem('bm.matchMode') === 'all' ? 'all' : 'highlights';
+    return localStorage.getItem('bm.matchSpeed') === '2' ? 2 : 1;
   } catch {
-    return 'highlights';
+    return 1;
   }
 }
 
 /**
- * Drives a MatchPlayback with a single requestAnimationFrame clock. Frame time
- * is capped, so a tab returning from the background never replays a storm of
- * delayed animation. Leaving the screen stops the loop; coming back resumes
- * after the last completed sequence.
+ * One controller for everything shown in the match: a single timeout moves to
+ * the next step. Next moment, pause, speed changes, skip, hiding the tab and
+ * leaving the screen all go through it, so no panel keeps its own timer and no
+ * callback outlives the screen. A hidden tab pauses the clock; coming back
+ * waits the full step again instead of catching up.
  */
-export function useMatchPlayback(ctx: MatchContext, matchId: string, reducedMotion: boolean) {
+export function useCommentaryPlayback(steps: CommentaryStep[], matchId: string, started: boolean) {
   const [, rerender] = useReducer((n: number) => n + 1, 0);
-  const ref = useRef<{ id: string; pb: MatchPlayback } | null>(null);
+  const ref = useRef<{ id: string; pb: CommentaryPlayback } | null>(null);
   if (!ref.current || ref.current.id !== matchId) {
-    ref.current = { id: matchId, pb: new MatchPlayback(ctx, readMode(), reducedMotion, readCursor(matchId)) };
+    const pb = new CommentaryPlayback(steps, readPosition(matchId) ?? -1);
+    pb.speed = readSpeed();
+    ref.current = { id: matchId, pb };
   }
   const pb = ref.current.pb;
+  const [hidden, setHidden] = useState(() => typeof document !== 'undefined' && document.visibilityState === 'hidden');
 
   useEffect(() => {
-    // requestAnimationFrame pauses in background tabs; the fallback keeps non-browser environments working.
-    const requestFrame = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb: FrameRequestCallback) => window.setTimeout(() => cb(performance.now()), 16);
-    const cancelFrame = typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame : (id: number) => window.clearTimeout(id);
-    let raf = 0;
-    let last = performance.now();
-    let saved = pb.revealedThrough;
-    const loop = (now: number) => {
-      const dt = Math.min(100, Math.max(0, now - last));
-      last = now;
-      if (pb.phase === 'playing' || (pb.auto && pb.phase === 'ready')) {
-        pb.tick(dt);
-        rerender();
-      }
-      if (pb.revealedThrough !== saved && pb.phase !== 'playing') {
-        saved = pb.revealedThrough;
-        writeCursor(matchId, saved);
-      }
-      raf = requestFrame(loop);
-    };
-    raf = requestFrame(loop);
-    const onVisible = () => {
-      last = performance.now();
-    };
-    document.addEventListener('visibilitychange', onVisible);
-    return () => {
-      cancelFrame(raf);
-      document.removeEventListener('visibilitychange', onVisible);
-    };
-  }, [pb, matchId]);
+    const on = () => setHidden(document.visibilityState === 'hidden');
+    document.addEventListener('visibilitychange', on);
+    return () => document.removeEventListener('visibilitychange', on);
+  }, []);
+
+  // Starting after the intro shows the first step right away.
+  useEffect(() => {
+    if (started && pb.index < 0) {
+      pb.next();
+      writePosition(matchId, pb.index);
+      rerender();
+    }
+  }, [started, pb, matchId]);
+
+  const delay = started && !hidden ? pb.delay() : null;
+  useEffect(() => {
+    if (delay === null) return;
+    const id = window.setTimeout(() => {
+      if (pb.next()) writePosition(matchId, pb.index);
+      rerender();
+    }, delay);
+    return () => window.clearTimeout(id);
+    // pb.index is part of the key so each step gets exactly one timer.
+  }, [delay, pb, pb.index, matchId]);
 
   return {
     pb,
     next: () => {
-      pb.next();
+      // Replaces the running timer (the effect above re-keys on the new index).
+      if (pb.next()) writePosition(matchId, pb.index);
       rerender();
     },
     skip: () => {
       pb.skip();
-      writeCursor(matchId, pb.revealedThrough);
+      writePosition(matchId, pb.index);
       rerender();
     },
     setAuto: (on: boolean) => {
-      pb.setAuto(on);
-      if (on && pb.phase === 'ready') pb.next();
+      pb.auto = on;
       rerender();
     },
-    setMode: (mode: PlaybackMode) => {
-      pb.setMode(mode);
+    setSpeed: (speed: Speed) => {
+      pb.speed = speed;
       try {
-        localStorage.setItem('bm.matchMode', mode);
+        localStorage.setItem('bm.matchSpeed', String(speed));
       } catch {
         /* per-viewer convenience only */
       }

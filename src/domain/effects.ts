@@ -118,7 +118,7 @@ export class EffectSink {
 }
 
 export const STAT_LABELS: Record<string, string> = {
-  satisfaction: 'Satisfaction',
+  satisfaction: 'Happiness',
   fitness: 'Fitness',
   /** Kept so effects recorded before the fitness change still read correctly. */
   fatigue: 'Fatigue',
