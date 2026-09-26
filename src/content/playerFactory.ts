@@ -87,7 +87,7 @@ export function createPlayer(spec: PlayerSpec, rng: Rng): Player {
     progress: { contact: 0, power: 0, speed: 0, fielding: 0, pitching: 0 },
     potential,
     potentialEstimate: scoutEstimate(potential, best, spec.scoutingLevel, rng),
-    fatigue: rng.int(5, 20),
+    fitness: rng.int(92, 98),
     satisfaction: rng.int(58, 72),
     popularity: clamp(Math.round(15 + (spec.age - 18) * 1.5 + rng.int(-5, 10)), 5, 80),
     priority: rng.pick(PRIORITIES),

@@ -11,10 +11,10 @@ import type {
 } from './types';
 import { DEFENSIVE_POSITIONS, LINEUP_POSITIONS } from './types';
 
-/** Rating as used in matches: fatigue lowers it, satisfaction nudges it slightly. */
+/** Rating as used in matches: fitness below 100% lowers it, satisfaction nudges it slightly. */
 export function effectiveRating(p: Player, key: RatingKey): number {
   const m = BALANCE.match;
-  const v = p.ratings[key] - p.fatigue * m.fatiguePenaltyPerPoint + (p.satisfaction - 50) * m.satisfactionSwing;
+  const v = p.ratings[key] - (100 - p.fitness) * m.fitnessPenaltyPerPoint + (p.satisfaction - 50) * m.satisfactionSwing;
   return Math.max(1, v);
 }
 
@@ -54,7 +54,7 @@ export function validateLineup(state: GameState, clubId: ClubId, lineup: Lineup)
     if (slot.position !== 'DH' && !p.positions.includes(slot.position)) {
       issues.push({ severity: 'warning', text: `${p.lastName} is out of position at ${slot.position} (fielding −${BALANCE.match.outOfPositionFieldingPenalty}).` });
     }
-    if (p.fatigue >= 70) issues.push({ severity: 'warning', text: `${p.lastName} is exhausted (fatigue ${p.fatigue}).` });
+    if (p.fitness < BALANCE.fitness.exhaustedBelow) issues.push({ severity: 'warning', text: `${p.lastName} is exhausted (fitness ${p.fitness}%).` });
   }
   for (const pos of LINEUP_POSITIONS) {
     if (!seenPositions.has(pos)) issues.push({ severity: 'error', text: `Nobody is playing ${pos}.` });
@@ -62,8 +62,8 @@ export function validateLineup(state: GameState, clubId: ClubId, lineup: Lineup)
   const pitcher = state.players[lineup.pitcherId];
   if (!pitcher || !roster.has(lineup.pitcherId) || !pitcher.isPitcher) {
     issues.push({ severity: 'error', text: 'Choose a starting pitcher from the roster.' });
-  } else if (pitcher.fatigue >= 60) {
-    issues.push({ severity: 'warning', text: `${pitcher.lastName} is tired (fatigue ${pitcher.fatigue}) and will pitch worse.` });
+  } else if (pitcher.fitness < BALANCE.fitness.needsRestBelow) {
+    issues.push({ severity: 'warning', text: `${pitcher.lastName} is tired (fitness ${pitcher.fitness}%) and will pitch worse.` });
   }
   return issues;
 }
@@ -75,8 +75,8 @@ export const isLineupValid = (state: GameState, clubId: ClubId, lineup: Lineup) 
 const FILL_ORDER: DefensivePosition[] = ['C', 'SS', 'CF', '2B', '3B', 'RF', 'LF', '1B'];
 
 export interface AutoLineupOptions {
-  /** Players at or above this fatigue are benched if a replacement exists. */
-  restThreshold?: number;
+  /** Players below this fitness (%) are benched if a replacement exists. */
+  restBelow?: number;
   /** Players to prefer (e.g. prospects that were promised starts). */
   prefer?: string[];
 }
@@ -84,10 +84,10 @@ export interface AutoLineupOptions {
 export function autoLineup(state: GameState, clubId: ClubId, opts: AutoLineupOptions = {}): Lineup {
   const players = state.clubs[clubId].roster.map((id) => state.players[id]);
   const hitters = players.filter((p) => !p.isPitcher);
-  const restThreshold = opts.restThreshold ?? 101;
+  const restBelow = opts.restBelow ?? 0;
   const prefer = new Set(opts.prefer ?? []);
 
-  const restPenalty = (p: Player) => (p.fatigue >= restThreshold ? 40 : 0);
+  const restPenalty = (p: Player) => (p.fitness < restBelow ? 40 : 0);
   const bonus = (p: Player) => (prefer.has(p.id) ? 25 : 0);
   const valueAt = (p: Player, pos: LineupPosition) =>
     offenseScore(p) * 0.6 + (pos === 'DH' ? 0 : fieldingAt(p, pos) * 0.4) - restPenalty(p) + bonus(p);
@@ -113,10 +113,10 @@ export function autoLineup(state: GameState, clubId: ClubId, opts: AutoLineupOpt
   return { battingOrder, pitcherId: bestRestedPitcher(state, clubId) };
 }
 
-/** Rotation helper: strongest pitcher once fatigue is taken into account. */
+/** Rotation helper: strongest pitcher once fitness is taken into account. */
 export function bestRestedPitcher(state: GameState, clubId: ClubId): string {
   const pitchers = state.clubs[clubId].roster.map((id) => state.players[id]).filter((p) => p.isPitcher);
-  const value = (p: Player) => effectiveRating(p, 'pitching') - p.fatigue * 0.6;
+  const value = (p: Player) => effectiveRating(p, 'pitching') - (100 - p.fitness) * 1.5;
   return [...pitchers].sort((a, b) => value(b) - value(a) || a.id.localeCompare(b.id))[0]?.id ?? '';
 }
 

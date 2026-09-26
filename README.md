@@ -20,6 +20,14 @@ Produktionsbygget är en statisk webbapp (cirka 430 kB JS, 132 kB gzip). Typsnit
 
 Under **Settings** finns testläget "Unlimited Time", som gör det möjligt att spela hela säsonger utan väntan. Testläget visas som "∞ TEST" i toppraden och med en gul banner. I ekonomiläget är taket 12 Time, med +1 var 20:e minut.
 
+## Spelarvärden: OVR och Fitness
+
+- **OVR (overall)** är ett tal 0–100 som visar hur bra en spelare är på sin primära position. Det är ett positionsviktat snitt av grundvärdena (`src/domain/ratings.ts`): försvaret väger tyngre för C, SS och CF, slaget för 1B, hörnytterfälten och DH, och för pitchers är det i praktiken Pitching. Nivåerna är Elite 80+, Good 70+, Solid 60+, Fringe 50+ och Weak. I lineup-listan visas OVR på just den positionen, med avdrag för att spela ur position. Potential-OVR är scoutingens intervall översatt till samma skala.
+- **Fitness** är matchberedskap i procent. 100 % betyder fullt redo, och varje procentenhet under det kostar 0,3 ratingpoäng (90 % ger −3, 80 % ger −6).
+  - En match kostar en startspelare 3 %, bänken återhämtar 4 % och alla återhämtar 3 % per omgång. En start kostar pitchern 24 %, och vila ger 8 % per omgång.
+  - "Rest tired players" bänkar den som ligger under **90 %**. Varning visas under 85 % och "Needs rest" under 80 %.
+  - Uppmätt under en säsong ligger ordinarie slagmän i snitt kring 91 % (94 % med rest-valet) och startpitchern kring 97 %.
+  - Sparformat v4 räknar om gamla sparfiler enligt fitness = 100 − fatigue × 0,4.
 ## Acceptanskriterier (brief §16) och hur de verifieras
 
 | Kriterium | Verifiering |
@@ -32,7 +40,7 @@ Under **Settings** finns testläget "Unlimited Time", som gör det möjligt att 
 | Omladdning, dubbelklick, omrullning och sparfel ger aldrig dubbel kostnad | `controller.test`, `step2.test` (omrullning), `e2e.test` (omladdning) |
 | Time vid offlinefrånvaro, full mätare och bakåtklocka; säsongen avancerar inte av frånvaro | `time.test` |
 | Giltiga matcher och inningsummor; varje match räknas en gång | `match.test`, `engine.test` "full season" |
-| Lineup, fatigue och färdigheter ger mätbara skillnader | `match.test` (400 seedade matcher per variant) |
+| Lineup, fitness och färdigheter ger mätbara skillnader | `match.test` (400 seedade matcher per variant) |
 | Ekonomin stämmer mot ekonomiloggen | `engine.test` "reconciles club cash with the ledger" |
 | Byten bevarar identitet, flyttar kontrakt och lämnar giltiga trupper | `step2.test` "trades", invarianter i `step2`, `step3` och `stability` |
 | Tre uppföljningskedjor reagerar på verkliga val, inklusive brutna löften | `step3.test` kedja 1 (hållet och brutet), 2 och 3 |
@@ -165,7 +173,7 @@ Försäsong (omgång 0) → 20 omgångar → draft → kontraktsbeslut → säso
 - Startklubb (namn och färg valbara) med handskriven trupp: prospects Miller (21) och Martinez (19), den populära veteranen Brooks och ett ess.
 - Liga med 6 klubbar och 20 omgångar. Varje par möts 4 gånger (2 hemma, 2 borta). Tabellen härleds från sparade resultat, så varje match räknas exakt en gång.
 - Eventflöde: 2 managementevent och därefter en ligamatch per omgång. Mallar: Team Training (med Influence-boost "Extra coaching"), tre Fan Interaction-mallar (biljettpriser, community day, efter förlust), League Game och en minimal Season Review.
-- Matchsimulering per at-bat. Contact, Power, Speed, Fielding, Pitching, fatigue och nöjdhet påverkar utfallet. Höjdpunkter bygger enbart på det som faktiskt hände.
+- Matchsimulering per at-bat. Contact, Power, Speed, Fielding, Pitching, fitness och nöjdhet påverkar utfallet. Höjdpunkter bygger enbart på det som faktiskt hände.
 - Resurser: Club Cash (ekonomilogg som stämmer mot kassan), Time (tak 12, +1 per 20 minuter, testläge med obegränsad Time) och Influence.
 - Feedback: före- och eftervärden, progress mot nästa statpoäng, spelarreaktioner, orsaker till nöjdhetsförändringar och en beslutshistorik.
 - Skärmar: Home, Team (roster och lineup-editor utan drag-and-drop), spelarprofil, Club, League, History och Settings.
@@ -173,7 +181,7 @@ Försäsong (omgång 0) → 20 omgångar → draft → kontraktsbeslut → säso
 
 ### Tester (46 st, alla gröna)
 
-Idempotens, stale revision, oföränderlig input, grundval utan Influence/Cash, Influence debiteras en gång, hel säsong, ekonomilogg = kassa, lönefördelning summerar exakt, 50 seedade säsonger utan fel, determinism över save/load, Time-regenerering (offline, tak, bakåtklocka, testläge), matchkonsistens (inningsummor, walk-off, ingen sista hemmahalva), mätbar effekt av fatigue och förmåga, sparfel/retry, dubbelklick, konflikt mellan flikar, export/import och IndexedDB-backup.
+Idempotens, stale revision, oföränderlig input, grundval utan Influence/Cash, Influence debiteras en gång, hel säsong, ekonomilogg = kassa, lönefördelning summerar exakt, 50 seedade säsonger utan fel, determinism över save/load, Time-regenerering (offline, tak, bakåtklocka, testläge), matchkonsistens (inningsummor, walk-off, ingen sista hemmahalva), mätbar effekt av fitness och förmåga, sparfel/retry, dubbelklick, konflikt mellan flikar, export/import och IndexedDB-backup.
 
 Steg 2 lägger till:
 - alla 12 eventtyper och minst 18 mallar
@@ -209,7 +217,7 @@ Steg 3 lägger till:
 
 ## Arbetsantaganden (ändras lätt i `src/balance/config.ts`)
 
-Alla siffror är testvärden: startkassa $245K, biljettpriser $5–10, lönefördelning 1/20 per omgång (exakt avrundning), fatigue-belastning och återhämtning, träningsprogress, boost +50 % för 2 Influence.
+Alla siffror är testvärden: startkassa $245K, biljettpriser $5–10, lönefördelning 1/20 per omgång (exakt avrundning), fitness-belastning och återhämtning, träningsprogress, boost +50 % för 2 Influence.
 
 ## Kvar och kända begränsningar
 

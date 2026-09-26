@@ -73,7 +73,8 @@ export interface Player {
   potential: number;
   /** What the club's scouts believe, shown to the player. */
   potentialEstimate: { low: number; high: number };
-  fatigue: number;
+  /** Match readiness in percent: 100 = fully ready, lower = rating penalty. */
+  fitness: number;
   satisfaction: number;
   popularity: number;
   priority: PersonalPriority;

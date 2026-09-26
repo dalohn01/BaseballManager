@@ -85,7 +85,7 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
     case 'autoLineup': {
       const next = structuredClone(state);
       next.clubs[next.userClubId].lineup = autoLineup(next, next.userClubId, {
-        restThreshold: cmd.mode === 'rest' ? BALANCE.fatigue.restThreshold : undefined,
+        restBelow: cmd.mode === 'rest' ? BALANCE.fitness.restBelow : undefined,
       });
       next.revision += 1;
       return { ok: true, state: next };

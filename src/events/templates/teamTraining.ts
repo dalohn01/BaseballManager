@@ -15,16 +15,16 @@ export const teamTraining: EventTemplate = {
   weight: () => 5,
   build: ({ state, followUp }) => {
     const players = clubPlayers(state, state.userClubId);
-    const fatigue = Math.round(avg(players.map((p) => p.fatigue)));
-    const tired = players.filter((p) => p.fatigue >= 55).sort((a, b) => b.fatigue - a.fatigue);
+    const fitness = Math.round(avg(players.map((p) => p.fitness)));
+    const tired = players.filter((p) => p.fitness < BALANCE.fitness.warnBelow).sort((a, b) => a.fitness - b.fitness);
     const facility = followUp?.data.facilityLevel
       ? `First session in the upgraded Training Center (level ${followUp.data.facilityLevel}, finished after round ${followUp.data.completedRound}). `
       : '';
     const context =
       facility +
       (tired.length > 0
-        ? `Average squad fatigue is ${fatigue}. ${tired.slice(0, 2).map(shortName).join(' and ')} ${tired.length > 1 ? 'are' : 'is'} running low.`
-        : `Average squad fatigue is ${fatigue}. The group is ready to work.`);
+        ? `Average squad fitness is ${fitness}%. ${tired.slice(0, 2).map(shortName).join(' and ')} ${tired.length > 1 ? 'are' : 'is'} running low.`
+        : `Average squad fitness is ${fitness}%. The group is ready to work.`);
     return {
       kicker: 'Team Training',
       title: facility ? 'Training in the New Center' : 'Team Training',
@@ -37,7 +37,7 @@ export const teamTraining: EventTemplate = {
           id: 'batting',
           label: 'Batting',
           summary: 'Cage work for every hitter.',
-          certain: [{ text: `Fatigue +${t.battingFatigue}`, tone: 'negative' }],
+          certain: [{ text: `Fitness ${t.battingFitness}%`, tone: 'negative' }],
           uncertain: [{ text: 'Contact & Power progress', tone: 'positive' }],
           cost: cost(),
           primary: true,
@@ -46,7 +46,7 @@ export const teamTraining: EventTemplate = {
           id: 'defense',
           label: 'Defense',
           summary: 'Fielding drills and bullpen sessions.',
-          certain: [{ text: `Fatigue +${t.defenseFatigue}`, tone: 'negative' }],
+          certain: [{ text: `Fitness ${t.defenseFitness}%`, tone: 'negative' }],
           uncertain: [{ text: 'Fielding & Pitching progress', tone: 'positive' }],
           cost: cost(),
         },
@@ -54,7 +54,7 @@ export const teamTraining: EventTemplate = {
           id: 'recovery',
           label: 'Recovery',
           summary: 'Light session, physio and rest.',
-          certain: [{ text: `Fatigue ${t.recoveryFatigue}`, tone: 'positive' }],
+          certain: [{ text: `Fitness +${t.recoveryFitness}%`, tone: 'positive' }],
           uncertain: [],
           cost: cost(),
         },
@@ -79,7 +79,7 @@ export const teamTraining: EventTemplate = {
     const reactions: { playerId: string; text: string }[] = [];
 
     if (focus === 'recovery') {
-      narrative.push(`Squad fatigue down from ${Math.round(summary.fatigueBefore)} to ${Math.round(summary.fatigueAfter)}.`);
+      narrative.push(`Squad fitness up from ${Math.round(summary.fitnessBefore)}% to ${Math.round(summary.fitnessAfter)}%.`);
     } else {
       narrative.push(`${summary.totalProgress} development points across the squad${boost ? ' (extra coaching +50%)' : ''}.`);
       if (summary.facilityLevel > 1) {

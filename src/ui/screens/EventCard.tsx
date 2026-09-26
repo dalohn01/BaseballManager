@@ -1,12 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { optionBlocker, totalCost } from '../../application/engine';
+import { BALANCE } from '../../balance/config';
 import { effectiveRating } from '../../domain/lineup';
+import { fitnessLabel } from '../../domain/mood';
 import type { EventInstance, EventOption } from '../../domain/state';
 import { clubName, shortName, userClub } from '../../domain/state';
-import { leagueGameForecast, type LeagueGameChoice, lineupForChoice } from '../../events/templates/leagueGame';
+import { leagueGameForecast, leagueGameOptionNotes, type LeagueGameChoice, lineupForChoice } from '../../events/templates/leagueGame';
 import { SLOT_LABELS } from '../../events/planner';
 import { Avatar, Crest, EventArt } from '../components/art';
-import { EffectList, Ribbon } from '../components/common';
+import { EffectList, OvrBadge, Ribbon } from '../components/common';
+import { overallAt } from '../../domain/ratings';
 import { Icon } from '../components/icons';
 import { money } from '../format';
 import { href, useController, useGame, useNow, useSnapshot } from '../hooks';
@@ -172,6 +175,7 @@ function EventDecision({ ev }: { ev: EventInstance }) {
             return (
               <a key={id} className="subject" href={href(`team/${id}`)}>
                 <Avatar player={p} club={s.clubs[p.clubId] ?? club} size={36} />
+                <OvrBadge player={p} size="sm" />
                 <span>
                   <strong>
                     {shortName(p)}
@@ -252,7 +256,7 @@ function OptionRow({ option: o, ev, checked, onSelect, now, unlimited }: { optio
     <label className={`option ${checked ? 'option-checked' : ''} ${blocker ? 'option-blocked' : ''}`}>
       <input type="radio" name={`opt-${ev.id}`} value={o.id} checked={checked} onChange={onSelect} className="sr-only" />
       {candidate ? (
-        <Avatar player={candidate} club={userClub(s)} size={40} />
+        <OvrBadge player={candidate} size="md" />
       ) : (
         <Icon name={OPTION_ICON[o.id] ?? OPTION_ICON[o.id.split(':')[0]] ?? 'clipboard'} size={30} className="option-icon" />
       )}
@@ -262,7 +266,7 @@ function OptionRow({ option: o, ev, checked, onSelect, now, unlimited }: { optio
       </span>
       <span className="option-effects">
         {forecast && <span className="eff neutral">Win chance {Math.round(forecast.winChance * 100)}%</span>}
-        {o.certain.map((e, i) => (
+        {(ev.type === 'leagueGame' ? leagueGameOptionNotes(s, o.id as LeagueGameChoice) : o.certain).map((e, i) => (
           <span key={i} className={`eff ${e.tone}`}>
             {e.text}
           </span>
@@ -319,21 +323,23 @@ function PreMatch({ ev, choice }: { ev: EventInstance; choice: LeagueGameChoice 
         {lineup.battingOrder.map((slot, i) => {
           const p = s.players[slot.playerId];
           return (
-            <li key={slot.playerId} className={p.fatigue >= 55 ? 'tired' : ''}>
+            <li key={slot.playerId} className={p.fitness < BALANCE.fitness.warnBelow ? 'tired' : ''}>
               <span className="order">{i + 1}</span>
-              <span className="name">{shortName(p)}</span>
+              <span className="name">
+                {shortName(p)} <span className="ovr-inline" title="Overall at this position">{overallAt(p, slot.position)}</span>
+              </span>
               <span className="pos">{slot.position}</span>
-              <span className="fat" title="Fatigue">
-                {p.fatigue >= 55 ? '⚠ ' : ''}F{p.fatigue}
+              <span className="fat" title={`Fitness: ${fitnessLabel(p.fitness)}`}>
+                {p.fitness < BALANCE.fitness.warnBelow ? '⚠ ' : ''}{p.fitness}%
               </span>
             </li>
           );
         })}
-        <li className={sp && sp.fatigue >= 55 ? 'tired' : ''}>
+        <li className={sp && sp.fitness < BALANCE.fitness.warnBelow ? 'tired' : ''}>
           <span className="order">SP</span>
           <span className="name">{sp ? shortName(sp) : '—'}</span>
           <span className="pos">{sp ? Math.round(effectiveRating(sp, 'pitching')) : ''}</span>
-          <span className="fat">F{sp?.fatigue}</span>
+          <span className="fat">{sp?.fitness}%</span>
         </li>
       </ol>
       <a className="link" href={href('team')}>

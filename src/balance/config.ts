@@ -73,7 +73,8 @@ export const BALANCE = {
     /** After this many innings a clearly labelled prototype sudden-death decides the game. */
     suddenDeathAfterInning: 15,
     homeAdvantage: 1.5,
-    fatiguePenaltyPerPoint: 0.12,
+    /** Rating points lost per fitness point below 100% (90% → −3, 80% → −6). */
+    fitnessPenaltyPerPoint: 0.3,
     satisfactionSwing: 0.06,
     outOfPositionFieldingPenalty: 15,
     starterMaxBattersFaced: 27,
@@ -82,16 +83,25 @@ export const BALANCE = {
     pullMinBattersFaced: 12,
   },
 
-  fatigue: {
-    /** Everyone recovers this much per round before match load is added. */
-    naturalRecoveryPerRound: 4,
-    lineupPerGame: 6,
-    benchRecoveryPerGame: 10,
-    startingPitcherPerGame: 38,
-    reliefPitcherPerGame: 12,
-    restingPitcherRecoveryPerGame: 18,
-    restThreshold: 55,
-    aiRestThreshold: 65,
+  /**
+   * Fitness: match readiness in percent. 100 = fully ready; anything lower is
+   * a penalty. Positive numbers below restore fitness, negative ones cost it.
+   */
+  fitness: {
+    /** Everyone recovers this much per round before match load is applied. */
+    naturalRecoveryPerRound: 3,
+    lineupPerGame: -3,
+    benchRecoveryPerGame: 4,
+    startingPitcherPerGame: -24,
+    reliefPitcherPerGame: -3,
+    restingPitcherRecoveryPerGame: 8,
+    /** "Rest tired players" sits anyone below this if a replacement exists. */
+    restBelow: 90,
+    aiRestBelow: 82,
+    /** UI thresholds. */
+    warnBelow: 85,
+    needsRestBelow: 80,
+    exhaustedBelow: 72,
   },
 
   training: {
@@ -99,9 +109,10 @@ export const BALANCE = {
     baseProgress: 32,
     pitcherBaseProgress: 26,
     variance: [0.7, 1.3] as const,
-    battingFatigue: 3,
-    defenseFatigue: 2,
-    recoveryFatigue: -8,
+    /** Fitness change per team session. */
+    battingFitness: -1,
+    defenseFitness: -1,
+    recoveryFitness: 3,
     /** Headroom (potential − rating) at which training reaches full effect. */
     fullEffectHeadroom: 15,
   },
@@ -150,7 +161,7 @@ export const BALANCE = {
     aiRenewMaxAge: 33,
     minRosterSize: 15,
     ageingFrom: 31,
-    fatigueAfterBreak: [0, 15] as const,
+    fitnessAfterBreak: [94, 100] as const,
     moodDriftToward: 62,
     moodDriftShare: 0.3,
     fanDriftToward: 70,

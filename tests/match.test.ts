@@ -52,7 +52,7 @@ describe('match simulation', () => {
     };
     const base = wins();
     const exhausted = wins((s) => {
-      for (const id of s.clubs[s.clubOrder[0]].roster) s.players[id].fatigue = 95;
+      for (const id of s.clubs[s.clubOrder[0]].roster) s.players[id].fitness = 60;
     });
     const boosted = wins((s) => {
       for (const id of s.clubs[s.clubOrder[0]].roster) {

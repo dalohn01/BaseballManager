@@ -69,7 +69,7 @@ export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): 
   const sp = state.players[lineup.pitcherId];
   const starter = { id: sp.id, name: sp.lastName, pitching: effectiveRating(sp, 'pitching') };
   // Best-rested reliever; arms that are already tired are only used if nobody else is available.
-  const relieverValue = (p: Player) => effectiveRating(p, 'pitching') - p.fatigue * 0.6;
+  const relieverValue = (p: Player) => effectiveRating(p, 'pitching') - (100 - p.fitness) * 1.5;
   const relievers = club.roster
     .map((id) => state.players[id])
     .filter((p) => p.isPitcher && p.id !== sp.id)

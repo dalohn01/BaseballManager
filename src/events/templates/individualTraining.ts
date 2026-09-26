@@ -57,7 +57,7 @@ export const individualProspect: EventTemplate = {
           id: 'program',
           label: 'Individual program',
           summary: `Extra sessions on ${keys.join(' & ')}. No playing-time guarantee.`,
-          certain: [pos(`${p.lastName} satisfaction +2`), neg(`${p.lastName} fatigue +4`)],
+          certain: [pos(`${p.lastName} satisfaction +2`), neg(`${p.lastName} fitness −2%`)],
           uncertain: [pos(`${keys.join(' & ')} progress`)],
           cost: cost(5_000),
           primary: true,
@@ -100,7 +100,7 @@ export const individualProspect: EventTemplate = {
       const mult = b ? BALANCE.influence.trainingBoostMultiplier : 1;
       for (const k of growthKeys(p)) recordProgress(sink, p, k, applyProgress(p, k, 45, userClub(state).facilities.training, rng, mult));
       sink.playerMood(p.id, 'satisfaction', 2, 'Given an individual program');
-      sink.playerMood(p.id, 'fatigue', 4, 'Extra sessions');
+      sink.playerMood(p.id, 'fitness', -2, 'Extra sessions');
       return { headline: `${p.lastName} hits the extra sessions.`, narrative: ['Development, not a promise of minutes.'] };
     }
     sink.playerMood(p.id, 'satisfaction', -5, 'Asked for a bigger role and was told no');
@@ -111,7 +111,7 @@ export const individualProspect: EventTemplate = {
 /** A struggling or tired veteran starter. */
 function strugglingVeteran(s: GameState): Player | undefined {
   return clubPlayers(s, s.userClubId)
-    .filter((p) => !p.isPitcher && p.age >= 29 && isInLineup(s, s.userClubId, p.id) && ((p.stats.ab >= 20 && p.stats.h / p.stats.ab < 0.24) || p.fatigue >= 50))
+    .filter((p) => !p.isPitcher && p.age >= 29 && isInLineup(s, s.userClubId, p.id) && ((p.stats.ab >= 20 && p.stats.h / p.stats.ab < 0.24) || p.fitness < BALANCE.fitness.needsRestBelow + 2))
     .sort((a, b) => b.popularity - a.popularity || a.id.localeCompare(b.id))[0];
 }
 
@@ -132,7 +132,7 @@ export const individualVeteran: EventTemplate = {
     return {
       kicker: 'Individual Training',
       title: `${p.lastName} Is Struggling`,
-      context: `${playerName(p)} is hitting ${avg} with fatigue ${p.fatigue}.`,
+      context: `${playerName(p)} is hitting ${avg} with fitness ${p.fitness}%.`,
       prompt: 'What does he need?',
       subjects: { playerIds: [p.id], clubIds: [] },
       data: { playerId: p.id, subId: sub?.id ?? '' },
@@ -141,7 +141,7 @@ export const individualVeteran: EventTemplate = {
           id: 'extra',
           label: 'Extra cage work',
           summary: 'Grind it out.',
-          certain: [neg(`${p.lastName} fatigue +5`)],
+          certain: [neg(`${p.lastName} fitness −2%`)],
           uncertain: [pos('Contact progress (small at his age)')],
           cost: cost(3_000),
         },
@@ -165,7 +165,7 @@ export const individualVeteran: EventTemplate = {
     if (option.id === 'extra') {
       const r = applyProgress(p, 'contact', 35, userClub(state).facilities.training, rng, b ? BALANCE.influence.trainingBoostMultiplier : 1);
       recordProgress(sink, p, 'contact', r);
-      sink.playerMood(p.id, 'fatigue', 5, 'Extra cage work');
+      sink.playerMood(p.id, 'fitness', -2, 'Extra cage work');
       return { headline: `${p.lastName} stays late in the cage.`, narrative: [`Cost ${fmt(3_000)} for the extra coach.`] };
     }
     if (option.id === 'rest') {
@@ -202,7 +202,7 @@ export const teamScrimmage: EventTemplate = {
           id: 'scrimmage',
           label: 'Intra-squad scrimmage',
           summary: 'Game reps for the bench.',
-          certain: [pos('Bench players satisfaction +2'), neg('Everyone fatigue +3')],
+          certain: [pos('Bench players satisfaction +2'), neg('Everyone fitness −1%')],
           uncertain: [pos('Progress for bench players')],
           cost: cost(),
           primary: true,
@@ -211,11 +211,11 @@ export const teamScrimmage: EventTemplate = {
           id: 'video',
           label: 'Video study',
           summary: 'Hire an analyst for the day.',
-          certain: [neutral('No fatigue')],
+          certain: [neutral('No fitness cost')],
           uncertain: [pos('Small Contact progress for all hitters')],
           cost: cost(3_000),
         },
-        { id: 'off', label: 'Day off', summary: 'Everyone rests.', certain: [pos('Fatigue −8')], uncertain: [], cost: cost() },
+        { id: 'off', label: 'Day off', summary: 'Everyone rests.', certain: [pos(`Fitness +${BALANCE.training.recoveryFitness}%`)], uncertain: [], cost: cost() },
       ],
       boosts: [],
     };
@@ -236,7 +236,7 @@ export const teamScrimmage: EventTemplate = {
         for (const k of growthKeys(p)) recordProgress(sink, p, k, applyProgress(p, k, 36, club.facilities.training, rng));
         sink.playerMood(p.id, 'satisfaction', 2, 'Got game reps in the scrimmage');
       }
-      sink.playerMood(p.id, 'fatigue', 3, 'Scrimmage', { record: false });
+      sink.playerMood(p.id, 'fitness', -1, 'Scrimmage', { record: false });
     }
     return { headline: 'The bench gets its reps.', narrative: ['Starters played a few innings too.'] };
   },

@@ -1,6 +1,7 @@
 import { BALANCE } from '../../balance/config';
 import type { EffectSink } from '../../domain/effects';
 import { offenseScore } from '../../domain/lineup';
+import { overall, potentialOverall } from '../../domain/ratings';
 import type { Cost, EffectPreview, EventOption, GameState } from '../../domain/state';
 import { clubPlayers, userClub } from '../../domain/state';
 import type { ClubId, Player, PlayerId } from '../../domain/types';
@@ -70,5 +71,6 @@ export function describeCandidate(p: Player): string {
   const main = p.isPitcher
     ? `PIT ${p.ratings.pitching}`
     : `CON ${p.ratings.contact} · POW ${p.ratings.power} · SPD ${p.ratings.speed} · FLD ${p.ratings.fielding}`;
-  return `${p.isPitcher ? 'P' : p.positions.join('/')} · age ${p.age} · ${main}`;
+  const pot = potentialOverall(p);
+  return `OVR ${overall(p)} (pot. ${pot.low}–${pot.high}) · ${p.isPitcher ? 'P' : p.positions.join('/')} · age ${p.age} · ${main}`;
 }

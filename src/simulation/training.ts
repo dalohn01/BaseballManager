@@ -92,8 +92,8 @@ export interface TeamTrainingSummary {
   /** Progress points that came from Training Center levels above 1. */
   facilityContribution: number;
   facilityLevel: number;
-  fatigueBefore: number;
-  fatigueAfter: number;
+  fitnessBefore: number;
+  fitnessAfter: number;
 }
 
 export function runTeamTraining(
@@ -107,9 +107,9 @@ export function runTeamTraining(
   const club = state.clubs[clubId];
   const t = BALANCE.training;
   const players = club.roster.map((id) => state.players[id]);
-  const fatigueBefore = avg(players.map((p) => p.fatigue));
+  const fitnessBefore = avg(players.map((p) => p.fitness));
   const level = club.facilities.training;
-  const summary: TeamTrainingSummary = { pointsGained: [], totalProgress: 0, facilityContribution: 0, facilityLevel: level, fatigueBefore, fatigueAfter: fatigueBefore };
+  const summary: TeamTrainingSummary = { pointsGained: [], totalProgress: 0, facilityContribution: 0, facilityLevel: level, fitnessBefore, fitnessAfter: fitnessBefore };
 
   if (focus !== 'recovery') {
     for (const p of players) {
@@ -131,17 +131,17 @@ export function runTeamTraining(
   }
 
   summary.facilityContribution = summary.totalProgress - Math.round(summary.totalProgress / trainingFacilityFactor(level));
-  const fatigueDelta = focus === 'batting' ? t.battingFatigue : focus === 'defense' ? t.defenseFatigue : t.recoveryFatigue;
-  for (const p of players) sink.playerMood(p.id, 'fatigue', fatigueDelta, 'Team training', { record: false });
-  summary.fatigueAfter = avg(players.map((p) => p.fatigue));
+  const fitnessDelta = focus === 'batting' ? t.battingFitness : focus === 'defense' ? t.defenseFitness : t.recoveryFitness;
+  for (const p of players) sink.playerMood(p.id, 'fitness', fitnessDelta, 'Team training', { record: false });
+  summary.fitnessAfter = avg(players.map((p) => p.fitness));
   sink.record({
     targetKind: 'team',
     targetId: clubId,
     targetLabel: 'Squad average',
-    stat: 'fatigue',
-    statLabel: 'Fatigue',
-    before: Math.round(fatigueBefore),
-    after: Math.round(summary.fatigueAfter),
+    stat: 'fitness',
+    statLabel: 'Fitness',
+    before: Math.round(fitnessBefore),
+    after: Math.round(summary.fitnessAfter),
   });
   return summary;
 }

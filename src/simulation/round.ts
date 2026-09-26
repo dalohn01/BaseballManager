@@ -21,12 +21,12 @@ export interface RoundOutcome {
 export function lineupFor(state: GameState, clubId: ClubId): Lineup {
   const club = state.clubs[clubId];
   if (club.isUser && isLineupValid(state, clubId, club.lineup)) return club.lineup;
-  return autoLineup(state, clubId, { restThreshold: BALANCE.fatigue.aiRestThreshold });
+  return autoLineup(state, clubId, { restBelow: BALANCE.fitness.aiRestBelow });
 }
 
 /**
  * Plays every game of the current round exactly once (the user's plus the AI
- * games), then applies stats, fatigue, moods and the user's finances.
+ * games), then applies stats, fitness, moods and the user's finances.
  */
 export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: EffectSink): RoundOutcome {
   const { season, round } = state.calendar;
@@ -36,7 +36,7 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
   if (!userGame) throw new Error('User has no game this round');
 
   state.clubs[state.userClubId].lineup = structuredClone(userLineup);
-  const fatigueBefore = Math.round(avg(clubPlayers(state, state.userClubId).map((p) => p.fatigue)));
+  const fitnessBefore = Math.round(avg(clubPlayers(state, state.userClubId).map((p) => p.fitness)));
   let userMatch: MatchResult | null = null;
   let expectedWin = 0.5;
 
@@ -48,8 +48,8 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
     const result = simulateMatch({ id: g.id, season, round, home, away, rng });
     g.result = { homeRuns: result.runs.home, awayRuns: result.runs.away, innings: result.innings, decidedBy: result.decidedBy };
     applyStats(state, result);
-    applyFatigue(state, g.homeId, result, 'home');
-    applyFatigue(state, g.awayId, result, 'away');
+    applyFitness(state, g.homeId, result, 'home');
+    applyFitness(state, g.awayId, result, 'away');
     if (g === userGame) {
       userMatch = result;
       const pHome = winProbability(home.strength, away.strength);
@@ -66,10 +66,10 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
     targetKind: 'team',
     targetId: state.userClubId,
     targetLabel: 'Squad average',
-    stat: 'fatigue',
-    statLabel: 'Fatigue',
-    before: fatigueBefore,
-    after: Math.round(avg(clubPlayers(state, state.userClubId).map((p) => p.fatigue))),
+    stat: 'fitness',
+    statLabel: 'Fitness',
+    before: fitnessBefore,
+    after: Math.round(avg(clubPlayers(state, state.userClubId).map((p) => p.fitness))),
   });
   const notes: string[] = [];
   const reactions = applyUserMoods(state, userGame, match, expectedWin, sink, notes);
@@ -127,21 +127,22 @@ function applyStats(state: GameState, m: MatchResult) {
   }
 }
 
-function applyFatigue(state: GameState, clubId: ClubId, m: MatchResult, side: 'home' | 'away') {
-  const f = BALANCE.fatigue;
+/** Match load and recovery for one round. Config values are fitness changes (negative = load). */
+function applyFitness(state: GameState, clubId: ClubId, m: MatchResult, side: 'home' | 'away') {
+  const f = BALANCE.fitness;
   const lineup = m.lineups[side];
   const batters = new Set(lineup.battingOrder.map((s) => s.playerId));
   const used = m.pitchersUsed[side];
   for (const p of clubPlayers(state, clubId)) {
-    let delta = -f.naturalRecoveryPerRound;
+    let delta = f.naturalRecoveryPerRound;
     if (p.isPitcher) {
       if (p.id === lineup.pitcherId) delta += f.startingPitcherPerGame;
       else if (used.includes(p.id)) delta += f.reliefPitcherPerGame;
-      else delta -= f.restingPitcherRecoveryPerGame;
+      else delta += f.restingPitcherRecoveryPerGame;
     } else {
-      delta += batters.has(p.id) ? f.lineupPerGame : -f.benchRecoveryPerGame;
+      delta += batters.has(p.id) ? f.lineupPerGame : f.benchRecoveryPerGame;
     }
-    p.fatigue = Math.max(0, Math.min(100, p.fatigue + delta));
+    p.fitness = Math.max(0, Math.min(100, p.fitness + delta));
   }
 }
 

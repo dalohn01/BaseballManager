@@ -56,6 +56,17 @@ export function migrate(input: AnyState): GameState {
     }
     s.schemaVersion = 3;
   }
+  if (s.schemaVersion === 3) {
+    // Fatigue (0 = fresh, higher = worse) became fitness in percent (100 = fully ready).
+    for (const p of Object.values(s.players) as (typeof s.players)[string][]) {
+      const legacy = p as unknown as { fatigue?: number };
+      if (legacy.fatigue !== undefined) {
+        p.fitness ??= Math.max(0, Math.min(100, Math.round(100 - legacy.fatigue * 0.4)));
+        delete legacy.fatigue;
+      }
+    }
+    s.schemaVersion = 4;
+  }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;
 }

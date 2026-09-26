@@ -7,8 +7,9 @@ import { squadProblem } from '../src/domain/roster';
 import type { GameState } from '../src/domain/state';
 import { absoluteRound, SCHEMA_VERSION } from '../src/domain/state';
 import { getTemplate } from '../src/events/registry';
+import { describeLineupChange, leagueGameOptionNotes, lineupForChoice } from '../src/events/templates/leagueGame';
 import { lossExpectation } from '../src/simulation/round';
-import { expiringPlayers, renewalTerms } from '../src/simulation/season';
+import { expiringPlayers, renewalTerms, startNextSeason } from '../src/simulation/season';
 import { newGame, playSeason, run, T0 } from './helpers';
 
 function force(s: GameState, templateId: string): GameState {
@@ -115,6 +116,31 @@ describe('chain 1: promise of starts', () => {
   });
 });
 
+describe('pre-match choices explain themselves', () => {
+  it('shows concrete lineup changes, real resting and promise warnings', () => {
+    let s = structuredClone(toRound1(newGame(21)));
+    s = run(s, { type: 'autoLineup', mode: 'strongest' });
+    expect(leagueGameOptionNotes(s, 'strongest').map((n) => n.text)).toContain('Same as your lineup');
+
+    for (const id of s.clubs.hfx.roster) s.players[id].fitness = 100;
+    expect(leagueGameOptionNotes(s, 'rest').map((n) => n.text)).toContain(`Everyone at ${BALANCE.fitness.restBelow}%+ fitness`);
+
+    // Bench a promised player in the saved lineup: "Your lineup" must warn.
+    s = force(s, 'individual_training_prospect');
+    s = ack(resolve(s, 'promise'));
+    const pr = s.promises[s.promises.length - 1];
+    const lineup = structuredClone(s.clubs.hfx.lineup);
+    lineup.battingOrder.find((x) => x.playerId === pr.playerId)!.playerId = pr.rivalId!;
+    s = run(s, { type: 'setLineup', lineup });
+    const warn = leagueGameOptionNotes(s, 'current').find((n) => n.text.includes(s.players[pr.playerId].lastName));
+    expect(warn?.tone).toBe('negative');
+    expect(warn?.text).toMatch(/misses a promised start|Breaks the promise/);
+    // The strongest lineup lists who changes compared with the saved one.
+    const diff = describeLineupChange(s, s.clubs.hfx.lineup, lineupForChoice(s, 'strongest'));
+    expect(leagueGameOptionNotes(s, 'strongest').some((n) => diff.slice(0, 4).includes(n.text) || n.text === 'Same as your lineup')).toBe(true);
+  });
+});
+
 describe('chain 2: public message → fan reaction → evaluation', () => {
   it('a rebuild message softens losses and is revisited by the press', () => {
     let s = toRound1(newGame(13));
@@ -211,6 +237,35 @@ describe('contracts', () => {
     for (const p of willing) expect(s.players[p.id].clubId).toBe('hfx');
     checkInvariants(s);
   }, 60_000);
+});
+
+describe('off-season squad completion', () => {
+  it('rebuilds a full valid squad even when every contract ends at once', () => {
+    const s = structuredClone(newGame(23));
+    for (const id of s.clubs.hfx.roster) s.players[id].contract.seasonsLeft = 1;
+    startNextSeason(s, createRng(5));
+    expect(s.clubs.hfx.roster.length).toBeGreaterThanOrEqual(BALANCE.offseason.minRosterSize);
+    expect(squadProblem(s, s.clubs.hfx.roster)).toBeNull();
+  });
+});
+
+describe('migration v3 → v4 (fatigue → fitness)', () => {
+  it('converts fatigue to fitness percent and keeps playing', () => {
+    const s = newGame(22);
+    const v3 = JSON.parse(JSON.stringify(s));
+    v3.schemaVersion = 3;
+    for (const p of Object.values(v3.players) as Record<string, unknown>[]) {
+      delete p.fitness;
+      p.fatigue = 30;
+    }
+    const m = migrate(v3);
+    expect(m.schemaVersion).toBe(SCHEMA_VERSION);
+    for (const p of Object.values(m.players)) {
+      expect(p.fitness).toBe(88);
+      expect('fatigue' in p).toBe(false);
+    }
+    expect(execute(m, { type: 'resolveEvent', eventId: m.currentEvent!.id, revision: m.revision, optionId: 'balanced', boostId: null }, T0).ok).toBe(true);
+  });
 });
 
 describe('migration v2 → v3', () => {

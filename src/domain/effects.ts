@@ -31,7 +31,7 @@ export class EffectSink {
 
   playerMood(
     playerId: PlayerId,
-    stat: 'satisfaction' | 'fatigue' | 'popularity',
+    stat: 'satisfaction' | 'fitness' | 'popularity',
     delta: number,
     reason: string,
     opts: { record?: boolean } = {},
@@ -119,6 +119,8 @@ export class EffectSink {
 
 export const STAT_LABELS: Record<string, string> = {
   satisfaction: 'Satisfaction',
+  fitness: 'Fitness',
+  /** Kept so effects recorded before the fitness change still read correctly. */
   fatigue: 'Fatigue',
   popularity: 'Popularity',
   fanSupport: 'Fan support',

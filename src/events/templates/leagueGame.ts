@@ -1,7 +1,7 @@
 import { BALANCE } from '../../balance/config';
 import { autoLineup, isLineupValid } from '../../domain/lineup';
-import type { GameState } from '../../domain/state';
-import { clubName, userClub } from '../../domain/state';
+import type { EffectPreview, GameState } from '../../domain/state';
+import { absoluteRound, clubName, userClub } from '../../domain/state';
 import type { Lineup } from '../../domain/types';
 import { FACILITY_LABELS, projectedTicketRevenue } from '../../simulation/economy';
 import { teamStrength, winProbability } from '../../simulation/match';
@@ -13,7 +13,7 @@ export type LeagueGameChoice = 'current' | 'strongest' | 'rest';
 export function lineupForChoice(state: GameState, choice: LeagueGameChoice): Lineup {
   const club = userClub(state);
   if (choice === 'current' && isLineupValid(state, club.id, club.lineup)) return club.lineup;
-  if (choice === 'rest') return autoLineup(state, club.id, { restThreshold: BALANCE.fatigue.restThreshold });
+  if (choice === 'rest') return autoLineup(state, club.id, { restBelow: BALANCE.fitness.restBelow });
   return autoLineup(state, club.id);
 }
 
@@ -26,6 +26,74 @@ export function leagueGameForecast(state: GameState, gameId: string, choice: Lea
   const theirs = teamStrength(state, lineupFor(state, oppId));
   const pHome = isHome ? winProbability(ours, theirs) : winProbability(theirs, ours);
   return { winChance: isHome ? pHome : 1 - pHome, ours, theirs, isHome, oppId };
+}
+
+const inLineup = (l: Lineup, id: string) => l.pitcherId === id || l.battingOrder.some((s) => s.playerId === id);
+
+/** Concrete differences from the saved lineup: who sits, who comes in, who moves, pitcher. */
+export function describeLineupChange(state: GameState, from: Lineup, to: Lineup): string[] {
+  const name = (id: string) => state.players[id]?.lastName ?? '?';
+  const posIn = (l: Lineup, id: string) => l.battingOrder.find((s) => s.playerId === id)?.position;
+  const out: string[] = [];
+  for (const s of from.battingOrder) if (!inLineup(to, s.playerId)) out.push(`${name(s.playerId)} → bench`);
+  for (const s of to.battingOrder) if (!inLineup(from, s.playerId)) out.push(`${name(s.playerId)} in (${s.position})`);
+  for (const s of to.battingOrder) {
+    const before = posIn(from, s.playerId);
+    if (before && before !== s.position) out.push(`${name(s.playerId)} ${before}→${s.position}`);
+  }
+  if (from.pitcherId !== to.pitcherId) out.push(`SP ${name(to.pitcherId)} instead of ${name(from.pitcherId)}`);
+  return out;
+}
+
+/**
+ * Live notes for each pre-match choice: what it changes compared with the saved
+ * lineup and which active promises it would cost a start (or break outright).
+ */
+export function leagueGameOptionNotes(state: GameState, choice: LeagueGameChoice): EffectPreview[] {
+  const club = userClub(state);
+  const saved = club.lineup;
+  const savedValid = isLineupValid(state, club.id, saved);
+  const lineup = lineupForChoice(state, choice);
+  const notes: EffectPreview[] = [];
+
+  if (choice === 'current') {
+    if (!savedValid) notes.push({ text: 'Saved lineup is invalid: the strongest valid lineup will be used', tone: 'negative' });
+  } else {
+    const changes = savedValid ? describeLineupChange(state, saved, lineup) : ['Replaces your invalid saved lineup'];
+    if (changes.length === 0) notes.push({ text: 'Same as your lineup', tone: 'neutral' });
+    else {
+      const shown = changes.slice(0, 4);
+      if (changes.length > shown.length) shown.push(`+${changes.length - shown.length} more`);
+      notes.push(...shown.map((text) => ({ text, tone: 'neutral' as const })));
+    }
+  }
+
+  if (choice === 'rest') {
+    const tired = saved.battingOrder
+      .map((s) => state.players[s.playerId])
+      .filter((p) => p && p.fitness < BALANCE.fitness.restBelow);
+    const rested = tired.filter((p) => !inLineup(lineup, p.id));
+    if (tired.length === 0) notes.push({ text: `Everyone at ${BALANCE.fitness.restBelow}%+ fitness`, tone: 'neutral' });
+    else if (rested.length === 0) notes.push({ text: 'No replacement for the tired players', tone: 'neutral' });
+    else notes.push({ text: `${rested.map((p) => p.lastName).join(', ')} rest${rested.length === 1 ? 's' : ''} (+${BALANCE.fitness.benchRecoveryPerGame - BALANCE.fitness.lineupPerGame}% fitness vs playing)`, tone: 'positive' });
+  }
+
+  notes.push({ text: `Playing costs starters ${-BALANCE.fitness.lineupPerGame}% fitness`, tone: 'negative' });
+
+  // Promises whose window includes this game.
+  const now = absoluteRound(state.calendar.season, state.calendar.round);
+  for (const pr of state.promises) {
+    if (pr.status !== 'active' || now < pr.fromRound || now > pr.toRound || inLineup(lineup, pr.playerId)) continue;
+    const p = state.players[pr.playerId];
+    const needed = pr.threshold - pr.progress;
+    const gamesLeftAfter = pr.toRound - now;
+    notes.push(
+      needed > gamesLeftAfter
+        ? { text: `Breaks the promise to ${p.lastName} (satisfaction ${BALANCE.promises.broken})`, tone: 'negative' }
+        : { text: `${p.lastName} misses a promised start (${needed} still needed in ${gamesLeftAfter} game${gamesLeftAfter === 1 ? '' : 's'})`, tone: 'negative' },
+    );
+  }
+  return notes;
 }
 
 export const leagueGame: EventTemplate = {
@@ -55,8 +123,8 @@ export const leagueGame: EventTemplate = {
         {
           id: 'current',
           label: 'Your lineup',
-          summary: 'Exactly as set on the Team page.',
-          certain: [{ text: `Starters fatigue +${BALANCE.fatigue.lineupPerGame}`, tone: 'negative' }],
+          summary: 'Exactly as set on the Team page, including your own choices.',
+          certain: leagueGameOptionNotes(state, 'current'),
           uncertain: [],
           cost: { time: BALANCE.time.costPerEvent, cash: 0, influence: 0 },
           primary: true,
@@ -64,16 +132,16 @@ export const leagueGame: EventTemplate = {
         {
           id: 'strongest',
           label: 'Strongest available',
-          summary: 'Best nine and best-rested ace, fatigue be damned.',
-          certain: [{ text: 'Replaces your saved lineup', tone: 'neutral' }],
+          summary: 'Best nine on today’s form and the best-rested pitcher. Becomes your saved lineup.',
+          certain: leagueGameOptionNotes(state, 'strongest'),
           uncertain: [],
           cost: { time: BALANCE.time.costPerEvent, cash: 0, influence: 0 },
         },
         {
           id: 'rest',
           label: 'Rest tired players',
-          summary: `Bench anyone at fatigue ${BALANCE.fatigue.restThreshold}+ where a replacement exists.`,
-          certain: [{ text: `Benched players recover ${BALANCE.fatigue.benchRecoveryPerGame}`, tone: 'positive' }],
+          summary: `Like strongest, but anyone below ${BALANCE.fitness.restBelow}% fitness sits if a replacement exists. Becomes your saved lineup.`,
+          certain: leagueGameOptionNotes(state, 'rest'),
           uncertain: [],
           cost: { time: BALANCE.time.costPerEvent, cash: 0, influence: 0 },
         },

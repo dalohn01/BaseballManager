@@ -1,24 +1,36 @@
 import { useState } from 'react';
 import { validateLineup } from '../../domain/lineup';
-import { fatigueLabel, moodLabel } from '../../domain/mood';
+import { BALANCE } from '../../balance/config';
+import { fitnessLabel, moodLabel } from '../../domain/mood';
 import { clubPlayers, playerName, shortName, userClub } from '../../domain/state';
 import type { Lineup, LineupPosition, Player } from '../../domain/types';
 import { LINEUP_POSITIONS } from '../../domain/types';
 import { Avatar } from '../components/art';
-import { Panel } from '../components/common';
+import { OvrBadge, Panel } from '../components/common';
+import { overall, overallAt, primaryPosition } from '../../domain/ratings';
 import { avg3, era, ROLE_LABEL } from '../format';
 import { href, useController, useGame, useSnapshot } from '../hooks';
 
 type Filter = 'all' | 'hitters' | 'pitchers' | 'lineup';
+type Sort = 'ovr' | 'position' | 'age' | 'fitness';
+const SORT_LABEL: Record<Sort, string> = { ovr: 'OVR', position: 'Position', age: 'Age', fitness: 'Fitness' };
+const POS_ORDER = ['C', '1B', '2B', '3B', 'SS', 'LF', 'CF', 'RF', 'DH', 'P'];
+const SORTS: Record<Sort, (a: Player, b: Player) => number> = {
+  ovr: (a, b) => overall(b) - overall(a),
+  position: (a, b) => POS_ORDER.indexOf(primaryPosition(a)) - POS_ORDER.indexOf(primaryPosition(b)) || overall(b) - overall(a),
+  age: (a, b) => a.age - b.age,
+  fitness: (a, b) => a.fitness - b.fitness,
+};
 
 export function TeamScreen() {
   const s = useGame();
   const club = userClub(s);
   const [filter, setFilter] = useState<Filter>('all');
+  const [sort, setSort] = useState<Sort>('ovr');
   const inLineup = new Set([...club.lineup.battingOrder.map((x) => x.playerId), club.lineup.pitcherId]);
-  const players = clubPlayers(s, club.id).filter((p) =>
-    filter === 'hitters' ? !p.isPitcher : filter === 'pitchers' ? p.isPitcher : filter === 'lineup' ? inLineup.has(p.id) : true,
-  );
+  const players = clubPlayers(s, club.id)
+    .filter((p) => (filter === 'hitters' ? !p.isPitcher : filter === 'pitchers' ? p.isPitcher : filter === 'lineup' ? inLineup.has(p.id) : true))
+    .sort((a, b) => SORTS[sort](a, b) || a.id.localeCompare(b.id));
   return (
     <div className="page">
       <h1 className="page-title">Team</h1>
@@ -31,11 +43,20 @@ export function TeamScreen() {
               </button>
             ))}
           </div>
+          <div className="filters" role="group" aria-label="Sort players">
+            <span className="muted small">Sort:</span>
+            {(Object.keys(SORT_LABEL) as Sort[]).map((k) => (
+              <button key={k} className={`chip ${sort === k ? 'chip-on' : ''}`} aria-pressed={sort === k} onClick={() => setSort(k)}>
+                {SORT_LABEL[k]}
+              </button>
+            ))}
+          </div>
           <div className="table-wrap">
             <table className="roster">
               <thead>
                 <tr>
                   <th scope="col">Player</th>
+                  <th scope="col" title="Overall rating at his primary position">OVR</th>
                   <th scope="col">Pos</th>
                   <th scope="col">Age</th>
                   <th scope="col" title="Contact / Pitching">CON/PIT</th>
@@ -43,7 +64,7 @@ export function TeamScreen() {
                   <th scope="col">SPD</th>
                   <th scope="col">FLD</th>
                   <th scope="col">Sat.</th>
-                  <th scope="col">Fat.</th>
+                  <th scope="col" title="Fitness: match readiness, 100% = fully ready">Fit.</th>
                   <th scope="col">Stats</th>
                 </tr>
               </thead>
@@ -77,6 +98,9 @@ function RosterRow({ p, starting }: { p: Player; starting: boolean }) {
           </span>
         </a>
       </th>
+      <td>
+        <OvrBadge player={p} size="sm" />
+      </td>
       <td>{p.isPitcher ? 'P' : p.positions.join('/')}</td>
       <td>{p.age}</td>
       <td className="num">{p.isPitcher ? p.ratings.pitching : p.ratings.contact}</td>
@@ -86,8 +110,8 @@ function RosterRow({ p, starting }: { p: Player; starting: boolean }) {
       <td className={`num ${p.satisfaction < 40 ? 'bad' : ''}`} title={moodLabel('player', p.satisfaction)}>
         {p.satisfaction}
       </td>
-      <td className={`num ${p.fatigue >= 55 ? 'bad' : ''}`} title={fatigueLabel(p.fatigue)}>
-        {p.fatigue}
+      <td className={`num ${p.fitness < BALANCE.fitness.warnBelow ? 'bad' : ''}`} title={fitnessLabel(p.fitness)}>
+        {p.fitness}%
       </td>
       <td className="small">
         {p.isPitcher ? `${p.stats.pitchingStarts} GS, ${era(p.stats.runsAllowed, p.stats.outsPitched)} RA9` : `${avg3(p.stats.h, p.stats.ab)}, ${p.stats.hr} HR`}
@@ -169,7 +193,7 @@ function LineupEditor() {
               <select id={`lp-${i}`} value={slot.playerId} onChange={(e) => setSlot(i, { playerId: e.target.value })}>
                 {hitters.map((h) => (
                   <option key={h.id} value={h.id}>
-                    {shortName(h)} ({h.positions.join('/')}) F{h.fatigue}
+                    {shortName(h)} · {overallAt(h, slot.position)} at {slot.position} ({h.positions.join('/')}) {h.fitness}%
                   </option>
                 ))}
               </select>
@@ -200,12 +224,12 @@ function LineupEditor() {
         <select id="sp" value={draft.pitcherId} onChange={(e) => setDraft({ ...draft, pitcherId: e.target.value })}>
           {pitchers.map((p) => (
             <option key={p.id} value={p.id}>
-              {shortName(p)} — PIT {p.ratings.pitching}, fatigue {p.fatigue}
+              {shortName(p)} — OVR {overall(p)}, fitness {p.fitness}%
             </option>
           ))}
         </select>
       </div>
-      <p className="small muted">Bench: {bench.map((b) => `${shortName(b)} (F${b.fatigue})`).join(', ') || '—'}</p>
+      <p className="small muted">Bench: {bench.map((b) => `${shortName(b)} (${b.fitness}%)`).join(', ') || '—'}</p>
       {issues.length > 0 && (
         <ul className="issues">
           {issues.map((i, k) => (

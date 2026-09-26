@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { EffectRecord } from '../../domain/state';
-import type { ReasonEntry } from '../../domain/types';
+import { overall, overallTier, TIER_LABEL } from '../../domain/ratings';
+import type { Player, ReasonEntry } from '../../domain/types';
 import { money, signed } from '../format';
 
 export function Panel({ title, children, className = '', action }: { title?: string; children: ReactNode; className?: string; action?: ReactNode }) {
@@ -75,6 +76,24 @@ export function ReasonList({ reasons }: { reasons: ReasonEntry[] }) {
   );
 }
 
+/** Overall rating badge: number plus tier colour, with the tier name for screen readers and tooltips. */
+export function OvrBadge({ player, size = 'md' }: { player: Player; size?: 'sm' | 'md' | 'lg' }) {
+  const ovr = overall(player);
+  const tier = overallTier(ovr);
+  return (
+    <span className={`ovr ovr-${tier} ovr-${size}`} title={`Overall ${ovr} (${TIER_LABEL[tier]})`} aria-label={`Overall ${ovr}, ${TIER_LABEL[tier]}`}>
+      <span className="ovr-num" aria-hidden="true">
+        {ovr}
+      </span>
+      {size !== 'sm' && (
+        <span className="ovr-lbl" aria-hidden="true">
+          OVR
+        </span>
+      )}
+    </span>
+  );
+}
+
 export function RatingBar({ value, max = 100 }: { value: number; max?: number }) {
   return (
     <div className="rating-track" aria-hidden="true">
@@ -89,7 +108,7 @@ function formatValue(e: EffectRecord, v: number) {
   return String(v);
 }
 
-/** Before → after list. Positive/negative is judged per stat (fatigue up is bad). */
+/** Before → after list. Positive/negative is judged per stat (for the legacy "fatigue" stat, up is bad). */
 export function EffectList({ effects, limit }: { effects: EffectRecord[]; limit?: number }) {
   const shown = limit ? effects.slice(0, limit) : effects;
   if (shown.length === 0) return <p className="muted">No measurable changes.</p>;

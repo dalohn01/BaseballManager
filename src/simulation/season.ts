@@ -96,15 +96,16 @@ export function startNextSeason(state: GameState, rng: Rng): TransitionReport {
       }
 
       // A break between seasons: rested, moods settle toward a neutral level.
-      p.fatigue = rng.int(O.fatigueAfterBreak[0], O.fatigueAfterBreak[1]);
+      p.fitness = rng.int(O.fitnessAfterBreak[0], O.fitnessAfterBreak[1]);
       p.satisfaction = Math.round(p.satisfaction + (O.moodDriftToward - p.satisfaction) * O.moodDriftShare);
     }
   }
 
   for (const clubId of state.clubOrder) {
     const club = state.clubs[clubId];
-    // Complete the squad with cheap replacements.
-    for (let guard = 0; guard < 10; guard++) {
+    // Complete the squad with cheap replacements. Every contract can expire at once,
+    // so the loop may need to build a whole minimum squad; the cap only guards against bugs.
+    for (let guard = 0; guard <= BALANCE.roster.max; guard++) {
       const problem = squadProblem(state, club.roster);
       if (!problem && club.roster.length >= O.minRosterSize) break;
       if (club.roster.length >= BALANCE.roster.max) break;

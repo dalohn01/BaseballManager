@@ -26,9 +26,10 @@ export function moodThresholds(value: number): { below: number | null; above: nu
   return { below: i > 0 ? bands[i] : null, above: i < 4 ? bands[i + 1] : null };
 }
 
-export function fatigueLabel(value: number): string {
-  if (value < 25) return 'Fresh';
-  if (value < 50) return 'Fit';
-  if (value < 70) return 'Tired';
+/** Fitness in percent → readable label (shown next to the number, never colour alone). */
+export function fitnessLabel(value: number): string {
+  if (value >= 95) return 'Fresh';
+  if (value >= 88) return 'Ready';
+  if (value >= 78) return 'Tired';
   return 'Exhausted';
 }

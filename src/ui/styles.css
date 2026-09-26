@@ -438,7 +438,7 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   .history summary { grid-template-columns: 56px minmax(0, 1fr); }
   .h-head { grid-column: 2; }
   .field-row { grid-template-columns: minmax(0, 1fr); }
-  .roster th:nth-child(3), .roster td:nth-child(3), .roster th:nth-child(10), .roster td:nth-child(10) { display: none; }
+  .roster th:nth-child(4), .roster td:nth-child(4), .roster th:nth-child(11), .roster td:nth-child(11) { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { transition-duration: 0.01ms !important; animation-duration: 0.01ms !important; }
@@ -463,3 +463,25 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   .notes a { display: flex; flex-direction: column; align-items: flex-start; justify-content: center; }
 }
 .event-title:focus { outline: none; }
+
+/* Longer, dynamic option notes (lineup changes, promise warnings) may wrap. */
+.option-effects .eff { white-space: normal; text-align: right; }
+@media (max-width: 720px) { .option-effects .eff { text-align: left; } }
+
+/* Overall rating (OVR) badge: number + tier colour; tier name in title/aria. */
+.ovr { display: inline-flex; flex-direction: column; align-items: center; justify-content: center; flex: none; border-radius: 10px; color: #fff; font-family: var(--display); font-weight: 800; line-height: 1; }
+.ovr-sm { min-width: 30px; height: 26px; padding: 0 5px; border-radius: 7px; font-size: 1rem; }
+.ovr-md { min-width: 44px; height: 44px; font-size: 1.35rem; }
+.ovr-lg { min-width: 76px; height: 76px; border-radius: 16px; font-size: 2.6rem; }
+.ovr-lbl { font-size: 0.55em; letter-spacing: 0.08em; opacity: 0.9; margin-top: 2px; }
+.ovr-lg .ovr-lbl { font-size: 0.32em; }
+.ovr-elite { background: linear-gradient(160deg, #f2c233, #c98a00); color: #3a2600; }
+.ovr-good { background: linear-gradient(160deg, #2f6fe4, #1b4fb3); }
+.ovr-solid { background: linear-gradient(160deg, #2fa865, #1d7f47); }
+.ovr-fringe { background: linear-gradient(160deg, #8a97aa, #66748a); }
+.ovr-weak { background: linear-gradient(160deg, #b9c2cf, #98a3b3); color: #1f2a3a; }
+.name-ovr { display: flex; align-items: center; gap: 16px; }
+.pot-ovr { display: block; font-family: var(--display); font-weight: 700; text-transform: uppercase; font-size: 0.95rem; color: var(--muted); }
+.roster th.sortable button { background: none; border: none; font: inherit; color: inherit; cursor: pointer; padding: 0; text-transform: inherit; }
+.ovr-inline { font-weight: 700; color: var(--blue); margin-left: 2px; }
+.subject .ovr { margin-left: -2px; }

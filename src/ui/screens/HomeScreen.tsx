@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { fatigueLabel, moodLabel } from '../../domain/mood';
+import { BALANCE } from '../../balance/config';
+import { fitnessLabel, moodLabel } from '../../domain/mood';
 import type { GameState } from '../../domain/state';
 import { absoluteRound, clubName, clubPlayers, shortName, userClub } from '../../domain/state';
 import { SLOT_LABELS } from '../../events/planner';
@@ -96,13 +97,13 @@ function ClubStatus() {
   const club = userClub(s);
   const players = clubPlayers(s, club.id);
   const happy = Math.round(avg(players.map((p) => p.satisfaction)));
-  const fatigue = Math.round(avg(players.map((p) => p.fatigue)));
+  const fitness = Math.round(avg(players.map((p) => p.fitness)));
   return (
     <Panel title="Club status">
       <Meter label="Owners" value={club.ownerConfidence} caption={`${moodLabel('owners', club.ownerConfidence)} · tap for reasons`} reasons={club.reasons.ownerConfidence} />
       <Meter label="Fans" value={club.fanSupport} caption={`${moodLabel('fans', club.fanSupport)} · tap for reasons`} reasons={club.reasons.fanSupport} />
       <Meter label="Player happiness" value={happy} caption="Team average — see Team for each player" />
-      <Meter label="Fatigue" value={fatigue} caption={`${fatigueLabel(fatigue)} · higher = more tired`} tone={fatigue >= 50 ? 'warn' : 'slate'} />
+      <Meter label="Fitness" value={fitness} display={`${fitness}%`} caption={`${fitnessLabel(fitness)} · squad average, 100% = fully ready`} tone={fitness < BALANCE.fitness.warnBelow ? 'warn' : 'slate'} />
     </Panel>
   );
 }
@@ -111,8 +112,8 @@ function PlayerNotes() {
   const s = useGame();
   const players = clubPlayers(s, s.userClubId);
   const notes: { id: string; text: string; icon: 'person' | 'rest' | 'warning' }[] = [];
-  for (const p of [...players].sort((a, b) => b.fatigue - a.fatigue)) {
-    if (p.fatigue >= 60 && notes.length < 4) notes.push({ id: p.id, text: 'Needs rest', icon: 'rest' });
+  for (const p of [...players].sort((a, b) => a.fitness - b.fitness)) {
+    if (p.fitness < BALANCE.fitness.needsRestBelow && notes.length < 4) notes.push({ id: p.id, text: `Needs rest (${p.fitness}%)`, icon: 'rest' });
   }
   for (const p of [...players].sort((a, b) => a.satisfaction - b.satisfaction)) {
     if (p.satisfaction < 45 && notes.length < 4) notes.push({ id: p.id, text: `${moodLabel('player', p.satisfaction)}: ${p.moodLog[0]?.text ?? 'wants more'}`, icon: 'warning' });

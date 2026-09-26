@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import { releaseBlocker, releaseCost } from '../../application/engine';
 import { effectiveRating } from '../../domain/lineup';
-import { fatigueLabel, moodLabel, moodThresholds } from '../../domain/mood';
+import { BALANCE } from '../../balance/config';
+import { fitnessLabel, moodLabel, moodThresholds } from '../../domain/mood';
 import { playerName, userClub } from '../../domain/state';
 import type { RatingKey } from '../../domain/types';
 import { Avatar } from '../components/art';
-import { Meter, Panel, RatingBar, ReasonList, Ribbon } from '../components/common';
+import { Meter, OvrBadge, Panel, RatingBar, ReasonList, Ribbon } from '../components/common';
+import { overall, overallTier, potentialOverall, TIER_LABEL } from '../../domain/ratings';
 import { Icon } from '../components/icons';
 import { avg3, era, ip, moneyExact, potentialLabel, PRIORITY_LABEL, PRIORITY_TEXT, ROLE_LABEL } from '../format';
 import { href, useController, useGame, useSnapshot } from '../hooks';
@@ -33,6 +35,7 @@ export function PlayerScreen({ id }: { id: string }) {
   }
   const club = s.clubs[p.clubId] as (typeof s.clubs)[string] | undefined;
   const look = club ?? userClub(s);
+  const pot = potentialOverall(p);
   const keys = p.isPitcher ? PITCHER_KEYS : HITTER_KEYS;
   const development = s.history
     .flatMap((h) => h.effects.filter((e) => e.targetId === p.id && (keys as string[]).includes(e.stat)).map((e) => ({ ...e, round: h.round, title: h.title, choice: h.choice })))
@@ -94,10 +97,18 @@ export function PlayerScreen({ id }: { id: string }) {
 
         <div className="profile-main">
           <Panel className="profile-head">
-            <h1 className="player-name">{playerName(p)}</h1>
-            <p className="player-meta">
-              #{p.number} · {p.isPitcher ? 'Pitcher' : p.positions.join(' / ')} · Age {p.age}
-            </p>
+            <div className="name-ovr">
+              <OvrBadge player={p} size="lg" />
+              <div>
+                <h1 className="player-name">{playerName(p)}</h1>
+                <p className="player-meta">
+                  #{p.number} · {p.isPitcher ? 'Pitcher' : p.positions.join(' / ')} · Age {p.age}
+                </p>
+                <span className="pot-ovr">
+                  {TIER_LABEL[overallTier(overall(p))]} · Potential OVR {pot.low}–{pot.high}
+                </span>
+              </div>
+            </div>
             {p.bio && <p className="muted">{p.bio}</p>}
             <div className="abilities">
               <Ribbon>Player abilities</Ribbon>
@@ -117,16 +128,16 @@ export function PlayerScreen({ id }: { id: string }) {
                       {p.ratings[k]}
                       {lastGain.get(k) ? <span className="gain">+{lastGain.get(k)}</span> : null}
                     </span>
-                    <span className="ab-eff small muted" title="Rating used in matches after fatigue and mood">
+                    <span className="ab-eff small muted" title="Rating used in matches after fitness and mood">
                       today {Math.round(effectiveRating(p, k))}
                     </span>
                   </li>
                 ))}
               </ul>
               <p className="potential">
-                <strong>Potential</strong> <span className="big">{potentialLabel(p.potentialEstimate.low, p.potentialEstimate.high)}</span>
+                <strong>Potential</strong> <span className="big">{potentialLabel(pot.low, pot.high)}</span>
                 <span className="muted">
-                  Scouting estimate {p.potentialEstimate.low}–{p.potentialEstimate.high}
+                  Scouting estimate: OVR {pot.low}–{pot.high} (best rating {p.potentialEstimate.low}–{p.potentialEstimate.high})
                 </span>
               </p>
             </div>
@@ -208,7 +219,7 @@ export function PlayerScreen({ id }: { id: string }) {
 
         <Panel title="Player status" className="profile-status">
           <Meter label="Happiness" value={p.satisfaction} caption={`${moodLabel('player', p.satisfaction)}${th.below !== null ? ` · drops a level below ${th.below}` : ''}`} />
-          <Meter label="Fatigue" value={p.fatigue} caption={`${fatigueLabel(p.fatigue)} · higher means more tired`} tone={p.fatigue >= 55 ? 'warn' : 'slate'} />
+          <Meter label="Fitness" value={p.fitness} display={`${p.fitness}%`} caption={`${fitnessLabel(p.fitness)} · 100% = fully ready; each point below costs ${BALANCE.match.fitnessPenaltyPerPoint} rating`} tone={p.fitness < BALANCE.fitness.warnBelow ? 'warn' : 'slate'} />
           <Meter label="Popularity" value={p.popularity} caption="How much the fans love him" />
           <div className="status-item">
             <Icon name="trophy" size={30} />
