@@ -207,6 +207,7 @@ export const leagueGame: EventTemplate = {
     narrative.push(`Pre-game forecast gave you a ${Math.round(out.expectedWin * 100)}% win chance.`);
     if (out.settlement.attendance) narrative.push(`${out.settlement.attendance.toLocaleString('en-US')} fans at ${ballparkName(userClub(state))}.`);
     if (out.settlement.completed) narrative.push(`Construction finished: the ${FACILITY_LABELS[out.settlement.completed]} is now level ${userClub(state).facilities[out.settlement.completed]}.`);
+    for (const x of out.settlement.expired) narrative.push(`Happening ended: ${x.label}.`);
     return { headline, narrative, reactions: out.reactions, matchId: m.id };
   },
 };

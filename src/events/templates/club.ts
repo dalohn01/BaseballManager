@@ -1,7 +1,8 @@
 import { BALANCE } from '../../balance/config';
 import { absoluteRound, clubPlayers, nextId, playerName, shortName, userClub } from '../../domain/state';
 import type { GameState } from '../../domain/state';
-import type { FacilityId } from '../../domain/types';
+import type { FacilityId, FacilityModifier } from '../../domain/types';
+import { addModifier } from '../../simulation/facilities';
 import { FACILITY_LABELS, seasonForecast, upkeepPerRound } from '../../simulation/economy';
 import type { EventOption } from '../../domain/state';
 import type { EventTemplate } from '../types';
@@ -120,7 +121,158 @@ export const boardEmergency: EventTemplate = {
   },
 };
 
-// ---------- Facilities ----------
+// ---------- Facility happenings (temporary modifiers, never levels) ----------
+
+const H = BALANCE.facilities.happenings;
+const hasKind = (s: GameState, kind: FacilityModifier['kind']) => userClub(s).modifiers.some((m) => m.kind === kind);
+const matches = (n: number) => `${n} match${n === 1 ? '' : 'es'}`;
+
+/** Facility a sponsor would back: the stadium first, then any facility below max level. */
+function discountTarget(s: GameState): FacilityId | null {
+  const c = userClub(s);
+  return (['stadium', 'training', 'scouting'] as FacilityId[]).find((id) => c.facilities[id] < 3 && c.project?.facility !== id) ?? null;
+}
+
+export const facilitySponsorDiscount: EventTemplate = {
+  id: 'facility_sponsor_discount',
+  version: 1,
+  type: 'facility',
+  slot: 'management',
+  cooldownRounds: 6,
+  weight: (s) => (!hasKind(s, 'upgradeDiscount') && discountTarget(s) && s.calendar.round <= BALANCE.season.rounds - 2 ? 1.2 : 0),
+  build: ({ state }) => {
+    const id = discountTarget(state)!;
+    const pctOff = Math.round(H.sponsorDiscount * 100);
+    return {
+      kicker: 'Club Happening',
+      title: 'Local Sponsor Partnership',
+      context: `A local builder wants its name on the ${FACILITY_LABELS[id]}. In return it covers ${pctOff}% of the next upgrade, if you buy it within ${matches(H.sponsorMatches)}. Upgrades are bought any time from Club → Facilities.`,
+      prompt: 'Do you take the partnership?',
+      subjects: { playerIds: [], clubIds: [] },
+      data: { facility: id },
+      options: [
+        {
+          id: 'accept',
+          label: 'Accept the partnership',
+          summary: 'A temporary discount; the facility level does not change by itself.',
+          certain: [pos(`${pctOff}% off the next ${FACILITY_LABELS[id]} upgrade`), neutral(`Expires after ${matches(H.sponsorMatches)}`), pos('Local roots +2')],
+          uncertain: [],
+          cost: cost(),
+          primary: true,
+        },
+        passOption('Decline', 'Keep the building free of logos.'),
+      ],
+      boosts: [],
+    };
+  },
+  resolve: ({ state, sink, option, event }) => {
+    if (option.id === 'pass') return { headline: 'The builder will ask again another year.', narrative: [] };
+    const c = userClub(state);
+    const id = event.data.facility as FacilityId;
+    addModifier(state, c.id, { facility: id, kind: 'upgradeDiscount', value: H.sponsorDiscount, label: 'Local sponsor partnership', source: event.title, matchesLeft: H.sponsorMatches });
+    sink.brand(c.id, 'local', 2);
+    return { headline: 'Partnership signed.', narrative: [`The discount applies to the next ${FACILITY_LABELS[id]} upgrade for ${matches(H.sponsorMatches)}. It is shown under Club happenings.`] };
+  },
+};
+
+export const facilityTrainingClinic: EventTemplate = {
+  id: 'facility_training_clinic',
+  version: 1,
+  type: 'facility',
+  slot: 'management',
+  cooldownRounds: 6,
+  weight: (s) => (!hasKind(s, 'trainingBoost') ? 1 : 0),
+  build: () => {
+    const pct = Math.round(H.clinicBoost * 100);
+    return {
+      kicker: 'Club Happening',
+      title: 'Guest Coaching Clinic',
+      context: `A former big-league hitting coach is in town and offers to run sessions at the Training Center. All training progress rises ${pct}% for ${matches(H.clinicMatches)}, on top of the facility level.`,
+      prompt: 'Book the clinic?',
+      subjects: { playerIds: [], clubIds: [] },
+      data: {},
+      options: [
+        {
+          id: 'book',
+          label: `Book the clinic · ${fmt(H.clinicCost)}`,
+          summary: 'Temporary bonus; the Training Center level stays the same.',
+          certain: [pos(`Training progress +${pct}%`), neutral(`Lasts ${matches(H.clinicMatches)}`)],
+          uncertain: [],
+          cost: cost(H.clinicCost),
+          primary: true,
+        },
+        passOption('Not now', 'Keep the cash.'),
+      ],
+      boosts: [],
+    };
+  },
+  resolve: ({ state, option, event }) => {
+    if (option.id === 'pass') return { headline: 'The coach moves on to the next town.', narrative: [] };
+    addModifier(state, userClub(state).id, { facility: 'training', kind: 'trainingBoost', value: H.clinicBoost, label: 'Guest coaching clinic', source: event.title, matchesLeft: H.clinicMatches });
+    return { headline: 'The clinic starts tomorrow.', narrative: [`Training progress +${Math.round(H.clinicBoost * 100)}% for ${matches(H.clinicMatches)}.`] };
+  },
+};
+
+export const facilityDisruption: EventTemplate = {
+  id: 'facility_disruption',
+  version: 1,
+  type: 'facility',
+  slot: 'management',
+  cooldownRounds: 8,
+  weight: (s) => (!hasKind(s, 'capacityCut') && !userClub(s).modifiers.some((m) => m.kind === 'trainingBoost' && m.value < 0) ? 0.8 : 0),
+  build: ({ rng }) => {
+    const stadium = rng.chance(0.5);
+    const cut = Math.round((stadium ? H.outageCut : -H.maintenanceCut) * 100);
+    return {
+      kicker: 'Club Happening',
+      title: stadium ? 'Floodlight Failure' : 'Training Center Leak',
+      context: stadium
+        ? `Part of the floodlights failed. Without a rush repair, ${cut}% of the seats stay closed for ${matches(H.outageMatches)}.`
+        : `Water in the weight room. Without a rush repair, training progress drops ${cut}% for ${matches(H.outageMatches)}.`,
+      prompt: 'Pay for a rush repair?',
+      subjects: { playerIds: [], clubIds: [] },
+      data: { facility: stadium ? 'stadium' : 'training' },
+      options: [
+        {
+          id: 'repair',
+          label: `Rush repair · ${fmt(H.repairCost)}`,
+          summary: 'Fixed before the next game.',
+          certain: [neutral('No disruption')],
+          uncertain: [],
+          cost: cost(H.repairCost),
+          primary: true,
+        },
+        {
+          id: 'wait',
+          label: 'Wait for the regular crew',
+          summary: 'Save the money and live with it for a while.',
+          certain: [neg(stadium ? `Capacity −${cut}%` : `Training progress −${cut}%`), neutral(`Lasts ${matches(H.outageMatches)}`)],
+          uncertain: [],
+          cost: cost(),
+        },
+      ],
+      boosts: [],
+    };
+  },
+  resolve: ({ state, option, event }) => {
+    if (option.id === 'repair') return { headline: 'Fixed overnight.', narrative: ['Nothing changes for the next games.'] };
+    const id = event.data.facility as FacilityId;
+    if (id === 'stadium') {
+      addModifier(state, userClub(state).id, { facility: 'stadium', kind: 'capacityCut', value: H.outageCut, label: 'Floodlight failure', source: event.title, matchesLeft: H.outageMatches });
+    } else {
+      addModifier(state, userClub(state).id, { facility: 'training', kind: 'trainingBoost', value: H.maintenanceCut, label: 'Training Center leak', source: event.title, matchesLeft: H.outageMatches });
+    }
+    return { headline: 'The regular crew will get to it.', narrative: [`Shown under Club happenings until it ends after ${matches(H.outageMatches)}.`] };
+  },
+};
+
+// ---------- Legacy facility proposal ----------
+
+/*
+ * Kept only so an already planned or open proposal in an older save still
+ * works. It is never planned again (weight 0): upgrades are bought directly
+ * from Club → Facilities, and facility events are happenings.
+ */
 
 const FACILITIES: FacilityId[] = ['training', 'scouting', 'stadium'];
 const FACILITY_GAIN: Record<FacilityId, string> = {
@@ -135,10 +287,7 @@ export const facilityExpansion: EventTemplate = {
   type: 'facility',
   slot: 'management',
   cooldownRounds: 6,
-  weight: (s) => {
-    const c = userClub(s);
-    return !c.project && FACILITIES.some((f) => c.facilities[f] < 3) && s.calendar.round <= BALANCE.season.rounds - 3 ? 1.5 : 0;
-  },
+  weight: () => 0,
   build: ({ state }) => {
     const c = userClub(state);
     const cfg = BALANCE.facilities;
@@ -188,6 +337,8 @@ export const facilityExpansion: EventTemplate = {
     };
   },
 };
+
+
 
 // ---------- Sponsors ----------
 

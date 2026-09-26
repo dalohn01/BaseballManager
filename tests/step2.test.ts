@@ -70,7 +70,8 @@ describe('content coverage', () => {
     }
     // Conditional templates (low moods, off-track goals) are covered by forced tests in step3.test.ts.
     const conditional = ['board_ultimatum', 'trade_request', 'fans_protest', 'board_course_change'];
-    const expected = TEMPLATES.filter((t) => t.slot === 'management' && !t.urgent && !conditional.includes(t.id)).map((t) => t.id);
+    // facility_expansion is legacy (weight 0): kept only for proposals already in older saves.
+    const expected = TEMPLATES.filter((t) => t.slot === 'management' && !t.urgent && !conditional.includes(t.id) && t.id !== 'facility_expansion').map((t) => t.id);
     for (const id of expected) expect(seen.has(id), id).toBe(true);
     expect(seen.has('draft')).toBe(true);
   }, 120_000);
@@ -150,11 +151,10 @@ describe('economy safety net', () => {
     expect(s.currentEvent!.options.every((o) => optionBlocker(s, s.currentEvent!, o, null, T0) === null)).toBe(true);
   });
 
-  it('facility projects complete after their build rounds and then raise running costs', () => {
-    let s = force(newGame(6), 'facility_expansion');
-    s = resolve(s, 'build:training');
-    const done = s.clubs.hfx.project!.completesRound;
-    s = run(s, { type: 'acknowledgeEvent', eventId: s.currentEvent!.id });
+  it('legacy facility projects from older saves still complete after their build rounds', () => {
+    let s = structuredClone(newGame(6));
+    s.clubs.hfx.project = { facility: 'training', toLevel: 2, startedRound: 0, completesRound: 3, cost: 80_000 };
+    const done = s.clubs.hfx.project.completesRound;
     let guard = 0;
     while (s.clubs.hfx.project && guard++ < 30) s = step(s, guard);
     expect(s.clubs.hfx.facilities.training).toBe(2);

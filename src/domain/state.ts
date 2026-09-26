@@ -10,7 +10,7 @@ import type {
 } from './types';
 import { BALANCE } from '../balance/config';
 
-export const SCHEMA_VERSION = 5;
+export const SCHEMA_VERSION = 6;
 
 export type EventType =
   | 'leagueGame'
@@ -196,7 +196,7 @@ export interface DecisionRecord {
   effects: EffectRecord[];
 }
 
-export type LedgerCategory = 'tickets' | 'sponsor' | 'salaries' | 'upkeep' | 'event';
+export type LedgerCategory = 'tickets' | 'sponsor' | 'salaries' | 'upkeep' | 'event' | 'facility';
 
 export interface LedgerEntry {
   id: number;

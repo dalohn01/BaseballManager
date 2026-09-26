@@ -87,7 +87,7 @@ export function SeasonGoal() {
   const active = s.promises.filter((p) => p.status === 'active');
   if (!g && active.length === 0) return null;
   return (
-    <Panel title="Season goal" action={<a className="link small" href={href('club')}>Details →</a>}>
+    <Panel title="Season goal" action={<a className="link small" href={href('club/finances')}>Details →</a>}>
       {g ? (
         <>
           <p className="goal-direction">

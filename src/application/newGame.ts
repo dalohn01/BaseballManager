@@ -118,6 +118,7 @@ function makeClub(seed: ClubSeed, isUser: boolean): Club {
     sponsor: { ...seed.sponsor, kind: 'standard', bonus: null },
     facilities: { training: 1, scouting: 1, stadium: 1 },
     project: null,
+    modifiers: [],
     publicStance: null,
     seasonPlan: null,
     spendingFreezeUntil: 0,

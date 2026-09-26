@@ -60,7 +60,7 @@ export function App() {
         {route.name === 'home' && <HomeScreen />}
         {route.name === 'team' && <TeamScreen />}
         {route.name === 'player' && <PlayerScreen id={route.id} />}
-        {route.name === 'club' && <ClubScreen />}
+        {route.name === 'club' && <ClubScreen tab={route.tab} />}
         {route.name === 'league' && <LeagueScreen />}
         {route.name === 'history' && <HistoryScreen />}
         {route.name === 'settings' && <SettingsScreen />}

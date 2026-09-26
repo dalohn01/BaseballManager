@@ -1,4 +1,5 @@
 import { BALANCE } from '../../balance/config';
+import { trainingModifier } from '../../simulation/economy';
 import type { GameState } from '../../domain/state';
 import { clubPlayers, playerName, userClub } from '../../domain/state';
 import type { Player, RatingKey } from '../../domain/types';
@@ -98,7 +99,7 @@ export const individualProspect: EventTemplate = {
     }
     if (option.id === 'program') {
       const mult = b ? BALANCE.influence.trainingBoostMultiplier : 1;
-      for (const k of growthKeys(p)) recordProgress(sink, p, k, applyProgress(p, k, 45, userClub(state).facilities.training, rng, mult));
+      for (const k of growthKeys(p)) recordProgress(sink, p, k, applyProgress(p, k, 45, userClub(state).facilities.training, rng, mult * trainingModifier(userClub(state))));
       sink.playerMood(p.id, 'satisfaction', 2, 'Given an individual program');
       sink.playerMood(p.id, 'fitness', -2, 'Extra sessions');
       return { headline: `${p.lastName} hits the extra sessions.`, narrative: ['Development, not a promise of minutes.'] };
@@ -163,7 +164,7 @@ export const individualVeteran: EventTemplate = {
   resolve: ({ state, rng, sink, option, event, boost: b }) => {
     const p = state.players[String(event.data.playerId)];
     if (option.id === 'extra') {
-      const r = applyProgress(p, 'contact', 35, userClub(state).facilities.training, rng, b ? BALANCE.influence.trainingBoostMultiplier : 1);
+      const r = applyProgress(p, 'contact', 35, userClub(state).facilities.training, rng, (b ? BALANCE.influence.trainingBoostMultiplier : 1) * trainingModifier(userClub(state)));
       recordProgress(sink, p, 'contact', r);
       sink.playerMood(p.id, 'fitness', -2, 'Extra cage work');
       return { headline: `${p.lastName} stays late in the cage.`, narrative: [`Cost ${fmt(3_000)} for the extra coach.`] };
@@ -228,12 +229,12 @@ export const teamScrimmage: EventTemplate = {
       return { headline: 'A quiet day at the park.', narrative: [] };
     }
     if (option.id === 'video') {
-      for (const p of players.filter((x) => !x.isPitcher)) recordProgress(sink, p, 'contact', applyProgress(p, 'contact', 14, club.facilities.training, rng));
+      for (const p of players.filter((x) => !x.isPitcher)) recordProgress(sink, p, 'contact', applyProgress(p, 'contact', 14, club.facilities.training, rng, trainingModifier(club)));
       return { headline: 'Hours of film.', narrative: ['Small gains, fresh legs.'] };
     }
     for (const p of players) {
       if (!isInLineup(state, club.id, p.id)) {
-        for (const k of growthKeys(p)) recordProgress(sink, p, k, applyProgress(p, k, 36, club.facilities.training, rng));
+        for (const k of growthKeys(p)) recordProgress(sink, p, k, applyProgress(p, k, 36, club.facilities.training, rng, trainingModifier(club)));
         sink.playerMood(p.id, 'satisfaction', 2, 'Got game reps in the scrimmage');
       }
       sink.playerMood(p.id, 'fitness', -1, 'Scrimmage', { record: false });

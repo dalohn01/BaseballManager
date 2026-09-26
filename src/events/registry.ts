@@ -1,4 +1,4 @@
-import { boardCheckin, boardEmergency, facilityExpansion, mediaExpectations, mediaSpotlight, sponsorOffer } from './templates/club';
+import { boardCheckin, boardEmergency, facilityDisruption, facilityExpansion, facilitySponsorDiscount, facilityTrainingClinic, mediaExpectations, mediaSpotlight, sponsorOffer } from './templates/club';
 import { fansAfterLoss, fansCommunityDay, fansTicketPrices } from './templates/fanInteraction';
 import { fansProtest, mediaStanceReview, promiseFollowUp, tradeRequest } from './templates/followUps';
 import { individualProspect, individualVeteran, teamScrimmage } from './templates/individualTraining';
@@ -24,6 +24,9 @@ export const TEMPLATES: EventTemplate[] = [
   boardEmergency,
   boardCourseChange,
   boardUltimatum,
+  facilitySponsorDiscount,
+  facilityTrainingClinic,
+  facilityDisruption,
   facilityExpansion,
   freeAgent,
   tryouts,

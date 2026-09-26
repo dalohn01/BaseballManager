@@ -73,6 +73,13 @@ export function migrate(input: AnyState): GameState {
     for (const c of Object.values(s.clubs)) c.pitchingPlan ??= defaultPitchingPlan();
     s.schemaVersion = 5;
   }
+  if (s.schemaVersion === 5) {
+    // Facility happenings (temporary modifiers) became part of each club.
+    for (const c of Object.values(s.clubs)) c.modifiers ??= [];
+    // Proposals still waiting in the plan become a happening; an open or pre-built one keeps working (legacy template).
+    for (const q of s.queue) if (q.templateId === 'facility_expansion') q.templateId = 'facility_training_clinic';
+    s.schemaVersion = 6;
+  }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;
 }

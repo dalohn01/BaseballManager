@@ -1,4 +1,5 @@
 import { BALANCE } from '../balance/config';
+import { applyUpgrade, FACILITY_IDS, upgradeBlocker } from '../simulation/facilities';
 import { EffectSink } from '../domain/effects';
 import { autoLineup, validateLineup, validatePitchingPlan } from '../domain/lineup';
 import { createRng } from '../domain/rng';
@@ -6,7 +7,7 @@ import { releasePlayer, remainingSeasonSalary, repairLineup, squadProblem } from
 import type { BoostOption, Cost, EventInstance, EventOption, GameState } from '../domain/state';
 import { absoluteRound, userClub } from '../domain/state';
 import { canAffordTime, regenerate, spendTime } from '../domain/time';
-import type { Lineup, PitchingPlan } from '../domain/types';
+import type { FacilityId, Lineup, PitchingPlan } from '../domain/types';
 import { prepareNextEvent } from '../events/planner';
 import { getTemplate } from '../events/registry';
 
@@ -25,7 +26,9 @@ export type Command =
   | { type: 'autoLineup'; mode: 'strongest' | 'rest' }
   | { type: 'setTimeMode'; mode: 'economy' | 'unlimited' }
   | { type: 'rerollCandidates'; eventId: string; revision: number }
-  | { type: 'releasePlayer'; playerId: string };
+  | { type: 'releasePlayer'; playerId: string }
+  /** Direct facility upgrade: Club Cash only, no event and no Time. */
+  | { type: 'upgradeFacility'; facility: FacilityId; revision: number };
 
 export type CommandError = { ok: false; code: 'stale' | 'duplicate' | 'invalid' | 'unaffordable'; error: string };
 export type CommandResult = { ok: true; state: GameState } | CommandError;
@@ -116,6 +119,17 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       if (buyout > 0) sink.cash(next.userClubId, -buyout, 'salaries', `Released ${p.firstName} ${p.lastName} (buyout)`);
       releasePlayer(next, p.id);
       repairLineup(next, next.userClubId);
+      next.revision += 1;
+      return { ok: true, state: next };
+    }
+    case 'upgradeFacility': {
+      // The revision makes a repeated click (or a second tab) fail instead of buying twice.
+      if (cmd.revision !== state.revision) return fail('stale', 'The club changed since this screen was opened.');
+      if (!FACILITY_IDS.includes(cmd.facility)) return fail('invalid', 'Unknown facility.');
+      const blocker = upgradeBlocker(state, cmd.facility);
+      if (blocker) return fail(blocker.startsWith('Not enough') ? 'unaffordable' : 'invalid', blocker);
+      const next = structuredClone(state);
+      applyUpgrade(next, cmd.facility, new EffectSink(next, null));
       next.revision += 1;
       return { ok: true, state: next };
     }

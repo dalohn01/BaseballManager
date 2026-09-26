@@ -98,6 +98,41 @@ Den gamla vyn med tre val (Your lineup, Strongest, Rest) är ersatt av en lagutt
   - Autoplay, manuellt och Skip ger samma slutläge, och återupptagning fungerar.
 - `e2e.test` går Confirm → Skip intro → Skip to result → Final.
 
+## Club → Facilities
+
+Club har två flikar: **Facilities** (`#/club`) och **Finances** (`#/club/finances`, tidigare Club-sidan).
+
+**Permanenta nivåer** (`simulation/facilities.ts`, `ui/screens/FacilitiesView.tsx`):
+- Tre faciliteter med nivå 1–3: Training Center, Scouting Department och Stadium & Fan Facilities.
+- Varje kort visar illustration, nivå, nuvarande effekt, nästa nivå och eventuella happenings.
+- Detaljpanelen jämför nivå N → N+1, upkeep per säsong, pris, Club funds, pengar efter köp och ökad driftkostnad.
+- Effekterna kommer från samma balansvärden som spelet använder:
+  - Training: träningsprogress ×1,0 / ×1,2 / ×1,4.
+  - Scouting: potentialintervall ±8 / ±5 / ±3.
+  - Stadium: kapacitet 7 000 / 8 500 / 10 000.
+- **Upgrade** köper nästa nivå direkt med kommandot `upgradeFacility`. Det kostar bara Club Cash, varken Time eller event, och nivån gäller omedelbart.
+- Kommandot bär `revision`, så ett dubbelklick eller en andra flik ger `stale` i stället för ett andra köp.
+- Köpet syns i Economy log (kategori `facility`). En ny Training Center-nivå schemalägger fortfarande "Training in the New Center".
+- **Spärrar med förklaring:** maxnivå, för lite pengar ("needs $80,000, you have …"), negativ kassa, ägarnas utgiftsstopp och ägarförtroende under 50.
+
+**Happenings, tillfälliga och skilda från nivåer** (`club.modifiers`):
+- **Local Sponsor Partnership:** 20 % rabatt på nästa uppgradering av en facilitet i 3 matcher. Rabatten förbrukas av köpet.
+- **Guest Coaching Clinic:** $8 000 för +15 % träningsprogress i 3 matcher.
+- **Floodlight Failure / Training Center Leak:** betala $12 000 för akut reparation, eller acceptera −25 % kapacitet respektive −20 % träning i 2 matcher.
+- Modifierarna räknas ned en gång per ligamatch i `settleRound`, efter att matchens biljetter räknats. Vid 0 tas de bort, och matchresultatet nämner "Happening ended: …".
+- De visas under **Club happenings** med facilitet, effekt och återstående matcher. Berörda kort får en markering.
+- Värdena finns i `BALANCE.facilities.happenings`.
+
+**Äldre sparfiler (schema v6):**
+- Alla klubbar får `modifiers: []`.
+- Ett köat "Facility expansion"-event blir en happening.
+- Ett redan öppet eller förbyggt förslag fungerar fortfarande via den gamla mallen. Den planeras aldrig igen (vikt 0), och ett pågående bygge blir klart som tidigare.
+
+**Tester:**
+- `facilities.test.ts` täcker köp en gång, revision-skydd, att ingen Time eller event används, alla spärrar och riktig mekanik (kapacitet).
+- Den täcker också rabatt som förbrukas, nedräkning och borttagning över ligamatcher, att happenings aldrig ändrar nivåer och migreringen.
+- `facilitiesView.test.tsx` renderar vyn via riktig controller: happenings visas separat, kortet markeras, rabatterat pris köps och "Not enough Club Cash"/maxnivå förklaras.
+
 ## Spelarvärden: OVR och Fitness
 
 - **OVR (overall)** är ett tal 0–100 som visar hur bra en spelare är på sin primära position. Det är ett positionsviktat snitt av grundvärdena (`src/domain/ratings.ts`): försvaret väger tyngre för C, SS och CF, slaget för 1B, hörnytterfälten och DH, och för pitchers är det i praktiken Pitching. Nivåerna är Elite 80+, Good 70+, Solid 60+, Fringe 50+ och Weak. I lineup-listan visas OVR på just den positionen, med avdrag för att spela ur position. Potential-OVR är scoutingens intervall översatt till samma skala.

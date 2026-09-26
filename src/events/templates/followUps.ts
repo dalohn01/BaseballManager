@@ -1,4 +1,5 @@
 import { BALANCE } from '../../balance/config';
+import { trainingModifier } from '../../simulation/economy';
 import { offenseScore } from '../../domain/lineup';
 import { repairLineup, squadProblem, transferPlayer } from '../../domain/roster';
 import type { GameState } from '../../domain/state';
@@ -110,7 +111,7 @@ export const promiseFollowUp: EventTemplate = {
         return { headline: 'A second promise.', narrative: [`${npr.threshold} starts in the next ${BALANCE.promises.windowGames} games, checked against the actual lineups.`, 'He is in the saved lineup for the next game.'] };
       }
       case 'program':
-        for (const k of p.isPitcher ? (['pitching'] as const) : (['contact', 'fielding'] as const)) recordProgress(sink, p, k, applyProgress(p, k, 40, userClub(state).facilities.training, rng));
+        for (const k of p.isPitcher ? (['pitching'] as const) : (['contact', 'fielding'] as const)) recordProgress(sink, p, k, applyProgress(p, k, 40, userClub(state).facilities.training, rng, trainingModifier(userClub(state))));
         sink.playerMood(p.id, 'satisfaction', 2, 'Offered a development program after a broken promise');
         return { headline: 'Extra sessions instead of minutes.', narrative: [] };
       default:

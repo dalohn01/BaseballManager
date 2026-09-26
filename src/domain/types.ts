@@ -125,6 +125,23 @@ export interface SponsorDeal {
 
 export type FacilityId = 'training' | 'scouting' | 'stadium';
 
+/**
+ * Temporary facility happening (from an event), kept apart from permanent
+ * levels. Counts down one per league game of the club and is removed at 0.
+ */
+export interface FacilityModifier {
+  id: string;
+  facility: FacilityId;
+  /** upgradeDiscount: share off the next upgrade · trainingBoost: training progress ± share · capacityCut: share of seats unavailable. */
+  kind: 'upgradeDiscount' | 'trainingBoost' | 'capacityCut';
+  value: number;
+  label: string;
+  /** Event that created it. */
+  source: string;
+  matchesLeft: number;
+}
+
+/** Legacy construction project (older saves); new upgrades are immediate. */
 export interface FacilityProject {
   facility: FacilityId;
   toLevel: number;
@@ -154,6 +171,8 @@ export interface Club {
   sponsor: SponsorDeal | null;
   facilities: Record<FacilityId, number>;
   project: FacilityProject | null;
+  /** Active facility happenings (temporary, separate from levels). */
+  modifiers: FacilityModifier[];
   /** What the club has said publicly about its ambitions (used by follow-ups). */
   publicStance: { stance: 'contend' | 'patience'; season: number; round: number; eventId: string } | null;
   /** Season direction and measurable goals agreed with the owners. */

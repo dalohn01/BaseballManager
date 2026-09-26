@@ -160,8 +160,7 @@ describe('chain 2: public message → fan reaction → evaluation', () => {
 describe('chain 3: training investment → facility → training result', () => {
   it('the first session after completion shows the facility contribution', () => {
     let s = toRound1(newGame(14));
-    s = force(s, 'facility_expansion');
-    s = ack(resolve(s, 'build:training'));
+    s = run(s, { type: 'upgradeFacility', facility: 'training', revision: s.revision });
     for (let i = 0; i < 30 && s.currentEvent!.title !== 'Training in the New Center'; i++) s = calmStep(s);
     expect(s.currentEvent!.title).toBe('Training in the New Center');
     s = resolve(s, 'batting');

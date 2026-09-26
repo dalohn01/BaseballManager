@@ -44,8 +44,21 @@ export const BALANCE = {
   facilities: {
     /** Cost to reach level 2 and level 3. */
     cost: { training: [80_000, 140_000], scouting: [60_000, 110_000], stadium: [120_000, 200_000] },
+    /** Legacy: construction time for projects started in older saves. */
     buildRounds: { training: 3, scouting: 2, stadium: 4 },
     minOwnerConfidence: 50,
+    /** Temporary happenings from events (separate from levels). Durations in league games. */
+    happenings: {
+      sponsorDiscount: 0.2,
+      sponsorMatches: 3,
+      clinicBoost: 0.15,
+      clinicMatches: 3,
+      clinicCost: 8_000,
+      outageCut: 0.25,
+      maintenanceCut: -0.2,
+      outageMatches: 2,
+      repairCost: 12_000,
+    },
   },
 
   board: {

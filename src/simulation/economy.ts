@@ -2,13 +2,37 @@ import { BALANCE } from '../balance/config';
 import type { EffectSink } from '../domain/effects';
 import type { GameState } from '../domain/state';
 import { absoluteRound, nextId } from '../domain/state';
-import type { Club, ClubId, FacilityId } from '../domain/types';
+import type { Club, ClubId, FacilityId, FacilityModifier } from '../domain/types';
 
 const ROUNDS = BALANCE.season.rounds;
 
 /** Exact per-round share of a season amount; the 20 shares always sum to the total. */
 export function roundShare(perSeason: number, round: number): number {
   return Math.floor((perSeason * round) / ROUNDS) - Math.floor((perSeason * (round - 1)) / ROUNDS);
+}
+
+/** Training progress multiplier from active happenings (1 = none). */
+export function trainingModifier(club: Club): number {
+  return club.modifiers.filter((m) => m.kind === 'trainingBoost').reduce((f, m) => f * (1 + m.value), 1);
+}
+
+/** Share of seats available after happenings (1 = all). */
+export function capacityModifier(club: Club): number {
+  return club.modifiers.filter((m) => m.kind === 'capacityCut').reduce((f, m) => f * (1 - m.value), 1);
+}
+
+/** One league game played: every happening counts down; expired ones are removed. */
+export function tickModifiers(club: Club): FacilityModifier[] {
+  const expired: FacilityModifier[] = [];
+  club.modifiers = club.modifiers.filter((m) => {
+    m.matchesLeft -= 1;
+    if (m.matchesLeft <= 0) {
+      expired.push(m);
+      return false;
+    }
+    return true;
+  });
+  return expired;
 }
 
 export const ticketPrice = (club: Club) => BALANCE.economy.ticketPrices[club.ticketPriceLevel - 1];
@@ -18,7 +42,8 @@ export function projectedAttendance(club: Club, priceLevel = club.ticketPriceLev
   const supportFactor = 0.5 + support / 200;
   const localFactor = 1 + (club.brand.local - 50) / 500;
   const demand = club.fanBase * supportFactor * e.ticketDemand[priceLevel - 1] * localFactor;
-  return Math.round(Math.min(e.stadiumCapacity[club.facilities.stadium - 1], demand));
+  // A capacity happening (e.g. floodlight failure) closes part of the seats.
+  return Math.round(Math.min(e.stadiumCapacity[club.facilities.stadium - 1] * capacityModifier(club), demand));
 }
 
 export function projectedTicketRevenue(club: Club, priceLevel = club.ticketPriceLevel, support = club.fanSupport): number {
@@ -45,13 +70,15 @@ export interface RoundSettlement {
   salaries: number;
   upkeep: number;
   completed?: FacilityId;
+  /** Happenings that ran out with this game. */
+  expired: FacilityModifier[];
 }
 
 /** Charges/credits one round of club finances. Called exactly once per round, at the league game. */
 export function settleRound(state: GameState, clubId: ClubId, isHome: boolean, sink: EffectSink): RoundSettlement {
   const club = state.clubs[clubId];
   const round = state.calendar.round;
-  const out: RoundSettlement = { tickets: 0, attendance: 0, sponsor: 0, salaries: 0, upkeep: 0 };
+  const out: RoundSettlement = { tickets: 0, attendance: 0, sponsor: 0, salaries: 0, upkeep: 0, expired: [] };
 
   if (isHome) {
     out.attendance = projectedAttendance(club);
@@ -68,6 +95,9 @@ export function settleRound(state: GameState, clubId: ClubId, isHome: boolean, s
   sink.cash(clubId, -out.upkeep, 'upkeep', 'Facility running costs');
 
   const p = club.project;
+  // Happenings count down one per league game; expired ones are removed here, once.
+  for (const m of tickModifiers(club)) out.expired.push(m);
+
   if (p && absoluteRound(state.calendar.season, round) >= p.completesRound) {
     const before = club.facilities[p.facility];
     club.facilities[p.facility] = p.toLevel;

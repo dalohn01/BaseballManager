@@ -5,6 +5,7 @@ import { STAT_LABELS } from '../domain/effects';
 import type { GameState } from '../domain/state';
 import { playerName } from '../domain/state';
 import type { Player, RatingKey } from '../domain/types';
+import { trainingModifier } from './economy';
 
 export function ageFactor(age: number): number {
   if (age <= 21) return 1.4;
@@ -109,6 +110,8 @@ export function runTeamTraining(
   const players = club.roster.map((id) => state.players[id]);
   const fitnessBefore = avg(players.map((p) => p.fitness));
   const level = club.facilities.training;
+  // Temporary training happenings (guest clinic, maintenance) on top of the level.
+  const boost = trainingModifier(club);
   const summary: TeamTrainingSummary = { pointsGained: [], totalProgress: 0, facilityContribution: 0, facilityLevel: level, fitnessBefore, fitnessAfter: fitnessBefore };
 
   if (focus !== 'recovery') {
@@ -122,7 +125,7 @@ export function runTeamTraining(
           : ['fielding'];
       for (const key of keys) {
         const base = p.isPitcher ? t.pitcherBaseProgress : t.baseProgress;
-        const r = applyProgress(p, key, base, level, rng, multiplier);
+        const r = applyProgress(p, key, base, level, rng, multiplier * boost);
         summary.totalProgress += r.gain;
         recordProgress(sink, p, key, r);
         if (r.ratingAfter > r.ratingBefore) summary.pointsGained.push({ playerId: p.id, key, before: r.ratingBefore, after: r.ratingAfter });
