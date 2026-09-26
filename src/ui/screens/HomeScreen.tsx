@@ -12,6 +12,7 @@ import { Crest } from '../components/art';
 import { Meter, Panel } from '../components/common';
 import { Icon } from '../components/icons';
 import { href, useGame } from '../hooks';
+import { MatchScene } from '../match/MatchScene';
 import { EventCard } from './EventCard';
 
 export function HomeScreen() {
@@ -23,6 +24,19 @@ export function HomeScreen() {
     const el = mainRef.current;
     if (el && el.getBoundingClientRect().top < 0) el.scrollIntoView({ block: 'start' });
   }, [eventKey]);
+  const ev = s.currentEvent;
+  const liveMatch = ev?.type === 'leagueGame' && ev.status === 'resolved' && ev.resolution?.matchId ? s.matches[ev.resolution.matchId] : null;
+  if (ev && liveMatch?.sequence?.length) {
+    // The visual match view takes over Home until the result has been continued past.
+    return (
+      <div className="home" ref={mainRef}>
+        <p className="crumb">
+          Season {s.calendar.season} · {phaseLabel(s)}
+        </p>
+        <MatchScene key={liveMatch.id} ev={ev} match={liveMatch} />
+      </div>
+    );
+  }
   return (
     <div className="home">
       <p className="crumb">

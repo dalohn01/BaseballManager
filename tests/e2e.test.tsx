@@ -95,8 +95,9 @@ describe('end-to-end', () => {
 
     // Keep playing through the UI until the first league game has been played.
     const clicks: string[] = [];
-    for (let i = 0; i < 30 && !screen.queryByText(/^Final/); i++) clicks.push(await advance());
-    expect(screen.getByText(/^Final/)).toBeTruthy();
+    // The visual match view ends on FINAL with the existing match summary underneath.
+    for (let i = 0; i < 30 && screen.queryAllByText(/^Final/i).length === 0; i++) clicks.push(await advance());
+    expect(screen.getAllByText(/^Final/i).length).toBeGreaterThan(0);
     expect(screen.getByRole('table', { name: 'Line score' })).toBeTruthy();
     expect(clicks).toContain('confirm');
 

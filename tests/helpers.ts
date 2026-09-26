@@ -1,3 +1,6 @@
+import { autoLineup } from '../src/domain/lineup';
+import type { MatchResult } from '../src/domain/types';
+import { buildSimTeam, simulateMatch } from '../src/simulation/match';
 import { execute, optionBlocker, type Command } from '../src/application/engine';
 import { createNewGame } from '../src/application/newGame';
 import { createRng } from '../src/domain/rng';
@@ -42,3 +45,12 @@ export function playSeason(state: GameState, pickSeed = 1): GameState {
 
 /** The last completed season's state just before the review closed it is not kept; use summaries instead. */
 export const lastSummary = (s: GameState) => s.seasonSummaries[s.seasonSummaries.length - 1];
+
+/** A fully simulated match between the first two clubs of a fresh game (deterministic by seed). */
+export function simMatch(seed: number): { m: MatchResult; s: ReturnType<typeof newGame> } {
+  const s = newGame(5);
+  const [h, a] = [s.clubOrder[0], s.clubOrder[1]];
+  const home = buildSimTeam(s, h, autoLineup(s, h));
+  const away = buildSimTeam(s, a, autoLineup(s, a));
+  return { m: simulateMatch({ id: `m${seed}`, season: 1, round: 1, home, away, rng: createRng(seed) }), s };
+}

@@ -54,6 +54,9 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
       userMatch = result;
       const pHome = winProbability(home.strength, away.strength);
       expectedWin = g.homeId === state.userClubId ? pHome : 1 - pHome;
+      // Only the latest game is replayed visually; older games keep their box score but drop
+      // the step-by-step sequence so the save (and every state copy) stays small.
+      for (const old of Object.values(state.matches)) delete old.sequence;
       state.matches[g.id] = result;
     }
   }

@@ -214,6 +214,53 @@ export interface PlayRecord {
   pitcherId?: PlayerId;
 }
 
+/** Match situation at a moment: outs in the half-inning, runner IDs on 1st–3rd, score. */
+export interface BaseState {
+  outs: number;
+  bases: [PlayerId | null, PlayerId | null, PlayerId | null];
+  score: { home: number; away: number };
+}
+
+export type PaOutcome = 'strikeout' | 'walk' | 'single' | 'double' | 'triple' | 'homeRun' | 'groundOut' | 'doublePlay' | 'flyOut' | 'sacFly';
+
+/** 0 = batter's box, 1–3 = bases, 4 = home (scored), 'out' = put out. */
+export interface RunnerMove {
+  playerId: PlayerId;
+  from: 0 | 1 | 2 | 3;
+  to: 1 | 2 | 3 | 4 | 'out';
+}
+
+export type FieldSpot = LineupPosition | 'P';
+
+/**
+ * One step of the game as simulated: every plate appearance, steal attempt,
+ * pitching change, extra-innings runner and sudden-death decision, in order.
+ * Everything here is recorded by the simulator; the presentation layer only
+ * reads it. Fielder and ball direction are simulator-recorded metadata derived
+ * from a hash of match id and index (never from the game RNG); they do not
+ * influence outcomes, which use team fielding.
+ */
+export interface MatchSequence {
+  index: number;
+  inning: number;
+  half: 'top' | 'bottom';
+  kind: 'plateAppearance' | 'steal' | 'caughtStealing' | 'pitchingChange' | 'ghostRunner' | 'suddenDeath';
+  battingClubId: ClubId;
+  batterId: PlayerId | null;
+  pitcherId: PlayerId;
+  /** For pitching changes: the pitcher being replaced. */
+  previousPitcherId?: PlayerId;
+  outcome: PaOutcome | null;
+  before: BaseState;
+  after: BaseState;
+  runners: RunnerMove[];
+  /** Outs in the order they happened (e.g. lead runner, then batter on a double play). */
+  outOrder: PlayerId[];
+  fielder: { spot: FieldSpot; playerId: PlayerId } | null;
+  ball: { type: 'ground' | 'line' | 'fly' | 'pop' | 'over'; dir: number } | null;
+  text: string;
+}
+
 export interface MatchResult {
   id: GameId;
   season: number;
@@ -233,4 +280,6 @@ export interface MatchResult {
   pitchersUsed: { home: PlayerId[]; away: PlayerId[] };
   /** Highlights: only things that actually happened in the simulation. */
   plays: PlayRecord[];
+  /** Complete ordered sequence for the visual match view (absent in older saves). */
+  sequence?: MatchSequence[];
 }

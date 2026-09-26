@@ -1,19 +1,24 @@
 import { BALANCE } from '../balance/config';
 import { effectiveRating, fieldingAt, offenseScore } from '../domain/lineup';
-import { clamp, type Rng } from '../domain/rng';
+import { clamp, hashSeed, type Rng } from '../domain/rng';
 import type { GameState } from '../domain/state';
 import type {
+  BaseState,
   BattingLine,
   ClubId,
   DecidedBy,
+  FieldSpot,
   GameId,
   Lineup,
   MatchResult,
+  MatchSequence,
+  PaOutcome,
   PitchingLine,
   PlayKind,
   PlayRecord,
   Player,
   PlayerId,
+  RunnerMove,
 } from '../domain/types';
 
 /**
@@ -169,6 +174,9 @@ export function simulateMatch(input: MatchInput): MatchResult {
   let inning = 0;
   let walkOff = false;
   let decidedBy: DecidedBy = 'regulation';
+  const sequence: MatchSequence[] = [];
+  /** Runners who scored during the step currently being recorded. */
+  let stepRuns: PlayerId[] = [];
 
   const playHalf = (half: 'top' | 'bottom') => {
     const battingKey = half === 'top' ? 'away' : 'home';
@@ -196,7 +204,14 @@ export function simulateMatch(input: MatchInput): MatchResult {
     };
     const isWalkOff = () => half === 'bottom' && inning >= cfg.innings && score.home > score.away;
 
+    const snap = (): BaseState => ({ outs, bases: [bases[0], bases[1], bases[2]], score: { ...score } });
+    const push = (s: Omit<MatchSequence, 'index' | 'inning' | 'half' | 'battingClubId'>) =>
+      sequence.push({ index: sequence.length, inning, half, battingClubId: off.team.clubId, ...s });
+    const fielderAt = (spot: FieldSpot): PlayerId | null =>
+      spot === 'P' ? def.pitcher.id : (def.team.lineup.battingOrder.find((s) => s.position === spot)?.playerId ?? null);
+
     const scoreRun = (runnerId: PlayerId, rbiBatter: PlayerId | null) => {
+      stepRuns.push(runnerId);
       score[battingKey] += 1;
       line[line.length - 1] = (line[line.length - 1] ?? 0) + 1;
       batting[runnerId].r += 1;
@@ -206,8 +221,10 @@ export function simulateMatch(input: MatchInput): MatchResult {
 
     if (inning >= cfg.ghostRunnerFromInning) {
       const ghost = off.team.batters[(off.idx + 8) % 9];
+      const before = snap();
       bases[1] = ghost.id;
       record('ghostRunner', `${ghost.name} starts on second (extra-innings rule).`, 0);
+      push({ kind: 'ghostRunner', batterId: null, pitcherId: def.pitcher.id, outcome: null, before, after: snap(), runners: [], outOrder: [], fielder: null, ball: null, text: `${ghost.name} starts on second (extra-innings rule).` });
     }
 
     while (outs < 3) {
@@ -224,6 +241,8 @@ export function simulateMatch(input: MatchInput): MatchResult {
         def.used.push(def.pitcher.id);
         pitching[def.pitcher.id] = emptyPitching();
         record('pitchingChange', `Pitching change: ${def.pitcher.name} replaces ${prev.name}.`, 0);
+        const s = snap();
+        push({ kind: 'pitchingChange', batterId: null, pitcherId: def.pitcher.id, previousPitcherId: prev.id, outcome: null, before: s, after: s, runners: [], outOrder: [], fielder: null, ball: null, text: `Pitching change: ${def.pitcher.name} replaces ${prev.name}.` });
       }
 
       // Stolen base attempt: runner on first, second open.
@@ -233,16 +252,20 @@ export function simulateMatch(input: MatchInput): MatchResult {
         const attempt = runner.speed >= 60 ? 0.05 + (runner.speed - 60) * 0.004 : 0;
         if (attempt > 0 && rng.chance(attempt)) {
           const success = clamp(0.62 + (runner.speed - 50) * 0.008 - (def.team.catcherFielding - 50) * 0.004, 0.4, 0.92);
+          const before = snap();
+          const catcher = fielderAt('C');
           if (rng.chance(success)) {
             bases[1] = r1;
             bases[0] = null;
             batting[r1].sb += 1;
             record('steal', `${runner.name} steals second.`, 0, r1);
+            push({ kind: 'steal', batterId: null, pitcherId: def.pitcher.id, outcome: null, before, after: snap(), runners: [{ playerId: r1, from: 1, to: 2 }], outOrder: [], fielder: catcher ? { spot: 'C', playerId: catcher } : null, ball: null, text: `${runner.name} steals second.` });
           } else {
             bases[0] = null;
             outs += 1;
             pitching[def.pitcher.id].outs += 1;
             record('caughtStealing', `${runner.name} is caught stealing.`, 0, r1);
+            push({ kind: 'caughtStealing', batterId: null, pitcherId: def.pitcher.id, outcome: null, before, after: snap(), runners: [{ playerId: r1, from: 1, to: 'out' }], outOrder: [r1], fielder: catcher ? { spot: 'C', playerId: catcher } : null, ball: null, text: `${runner.name} is caught stealing.` });
             if (outs >= 3) break;
           }
         }
@@ -262,6 +285,9 @@ export function simulateMatch(input: MatchInput): MatchResult {
       const speedOf = (id: PlayerId) => off.team.batters.find((b) => b.id === id)?.speed ?? 50;
       const scored: PlayerId[] = [];
       const runnersBefore = bases.filter(Boolean).length;
+      const before = snap();
+      stepRuns = [];
+      let doublePlay = false;
 
       switch (outcome) {
         case 'strikeout': {
@@ -339,6 +365,7 @@ export function simulateMatch(input: MatchInput): MatchResult {
         case 'groundOut': {
           bLine.ab += 1;
           if (bases[0] && outs < 2 && rng.chance(clamp(0.25 + (def.team.fielding - 50) * 0.004 - (batter.speed - 50) * 0.004, 0.05, 0.45))) {
+            doublePlay = true;
             outs += 2;
             pLine.outs += 2;
             bases[0] = null;
@@ -386,6 +413,38 @@ export function simulateMatch(input: MatchInput): MatchResult {
 
       for (const id of scored) scoreRun(id, batter.id);
 
+      // Record the plate appearance for the visual match view.
+      {
+        const after = snap();
+        const label: PaOutcome = doublePlay ? 'doublePlay' : outcome === 'flyOut' && stepRuns.length > 0 ? 'sacFly' : outcome;
+        const moveOf = (id: PlayerId, from: 0 | 1 | 2 | 3): RunnerMove => {
+          const at = after.bases.indexOf(id);
+          return { playerId: id, from, to: stepRuns.includes(id) ? 4 : at >= 0 ? ((at + 1) as 1 | 2 | 3) : 'out' };
+        };
+        const runners: RunnerMove[] = [];
+        for (const i of [2, 1, 0] as const) {
+          const id = before.bases[i];
+          if (id) runners.push(moveOf(id, (i + 1) as 1 | 2 | 3));
+        }
+        runners.push(moveOf(batter.id, 0));
+        const outOrder = doublePlay ? [before.bases[0]!, batter.id] : runners.filter((r) => r.to === 'out').map((r) => r.playerId);
+        const meta = playMetadata(`${input.id}:${sequence.length}`, label);
+        const fielderId = meta.spot ? fielderAt(meta.spot) : null;
+        push({
+          kind: 'plateAppearance',
+          batterId: batter.id,
+          pitcherId: pitcher.id,
+          outcome: label,
+          before,
+          after,
+          runners,
+          outOrder,
+          fielder: meta.spot && fielderId ? { spot: meta.spot, playerId: fielderId } : null,
+          ball: meta.ball,
+          text: describePlay(batter.name, label, meta.spot, runners.filter((r) => r.to === 4 && r.playerId !== batter.id).map((r) => names[r.playerId]), after.outs),
+        });
+      }
+
       if (scored.length > 0 || outcome === 'homeRun' || outcome === 'triple' || outcome === 'double') {
         const runText = scored.filter((id) => id !== batter.id).map((id) => `${names[id]} scores.`).join(' ');
         const verb: Record<Outcome, string> = {
@@ -425,6 +484,7 @@ export function simulateMatch(input: MatchInput): MatchResult {
     if (inning >= cfg.suddenDeathAfterInning) {
       // Prototype sudden-death: a single weighted decision, shown as its own column.
       const pHome = winProbability(home.strength, away.strength);
+      const sdBefore: BaseState = { outs: 3, bases: [null, null, null], score: { ...score } };
       const homeWins = rng.chance(pHome);
       score[homeWins ? 'home' : 'away'] += 1;
       linescore.home.push(homeWins ? 1 : 0);
@@ -439,6 +499,23 @@ export function simulateMatch(input: MatchInput): MatchResult {
         runs: 1,
         outs: 3,
         score: { ...score },
+      });
+      sequence.push({
+        index: sequence.length,
+        inning,
+        half: 'bottom',
+        kind: 'suddenDeath',
+        battingClubId: homeWins ? home.clubId : away.clubId,
+        batterId: null,
+        pitcherId: side[homeWins ? 'away' : 'home'].pitcher.id,
+        outcome: null,
+        before: sdBefore,
+        after: { outs: 3, bases: [null, null, null], score: { ...score } },
+        runners: [],
+        outOrder: [],
+        fielder: null,
+        ball: null,
+        text: `Still tied after ${inning}. Prototype sudden-death rule: ${homeWins ? home.name : away.name} take the deciding run.`,
       });
       break;
     }
@@ -475,7 +552,94 @@ export function simulateMatch(input: MatchInput): MatchResult {
     pitching,
     pitchersUsed: { home: side.home.used, away: side.away.used },
     plays,
+    sequence,
   };
+}
+
+// ---------- Presentation metadata recorded by the simulator ----------
+
+type Weighted<T> = [T, number][];
+
+/** Deterministic pick from a hash (never the game RNG). */
+function pickBy<T>(h: number, items: Weighted<T>): T {
+  const total = items.reduce((a, [, w]) => a + w, 0);
+  let roll = (h % 10_000) / 10_000 * total;
+  for (const [item, w] of items) {
+    if (roll < w) return item;
+    roll -= w;
+  }
+  return items[items.length - 1][0];
+}
+
+/** Ball direction on the field: −1 = left-field line, 0 = straight away, 1 = right-field line. */
+const SPOT_DIR: Record<FieldSpot, number> = { '3B': -0.55, SS: -0.22, P: 0, '2B': 0.22, '1B': 0.55, LF: -0.6, CF: 0, RF: 0.6, C: 0, DH: 0 };
+
+/**
+ * Who handled the ball and where it went. Cosmetic by design: derived from a
+ * hash of match id and step index, so it never changes simulated outcomes and
+ * always looks the same when replayed.
+ */
+function playMetadata(key: string, outcome: PaOutcome): { spot: FieldSpot | null; ball: MatchSequence['ball'] } {
+  const h = hashSeed(key);
+  const h2 = hashSeed(`${key}:b`);
+  const jitter = ((h2 % 1000) / 1000 - 0.5) * 0.2;
+  const outfield: Weighted<FieldSpot> = [['LF', 1], ['CF', 1.2], ['RF', 1]];
+  switch (outcome) {
+    case 'strikeout':
+    case 'walk':
+      return { spot: null, ball: null };
+    case 'single': {
+      const spot = pickBy(h, outfield);
+      return { spot, ball: { type: h2 % 5 < 2 ? 'ground' : 'line', dir: SPOT_DIR[spot] + jitter } };
+    }
+    case 'double': {
+      const spot = pickBy(h, outfield);
+      return { spot, ball: { type: h2 % 2 ? 'line' : 'fly', dir: SPOT_DIR[spot] * 1.3 + jitter } };
+    }
+    case 'triple': {
+      const spot = pickBy<FieldSpot>(h, [['CF', 1], ['RF', 1.4]]);
+      return { spot, ball: { type: 'fly', dir: SPOT_DIR[spot] + 0.15 + jitter } };
+    }
+    case 'homeRun': {
+      const dir = pickBy(h, [[-0.6, 1], [-0.25, 1], [0, 1], [0.25, 1], [0.6, 1]]);
+      return { spot: null, ball: { type: 'over', dir: dir + jitter } };
+    }
+    case 'groundOut':
+    case 'doublePlay': {
+      const spot = pickBy<FieldSpot>(h, outcome === 'doublePlay' ? [['SS', 3], ['2B', 3], ['3B', 1.5]] : [['SS', 3], ['2B', 3], ['3B', 2], ['1B', 1.5], ['P', 0.5]]);
+      return { spot, ball: { type: 'ground', dir: SPOT_DIR[spot] + jitter / 2 } };
+    }
+    case 'flyOut':
+    case 'sacFly': {
+      const spot = pickBy<FieldSpot>(h, outcome === 'sacFly' ? outfield : [...outfield, ['SS', 0.25], ['2B', 0.25], ['3B', 0.15], ['1B', 0.15]]);
+      const infield = !['LF', 'CF', 'RF'].includes(spot);
+      return { spot, ball: { type: infield ? 'pop' : 'fly', dir: SPOT_DIR[spot] + jitter / 2 } };
+    }
+  }
+}
+
+const SPOT_WORD: Partial<Record<FieldSpot, string>> = {
+  LF: 'left', CF: 'center', RF: 'right', SS: 'short', '2B': 'second', '3B': 'third', '1B': 'first', P: 'the pitcher', C: 'the catcher',
+};
+
+/** Result text shown after the play has been animated (the view never shows it earlier). */
+function describePlay(name: string, outcome: PaOutcome, spot: FieldSpot | null, scorers: string[], outsAfter: number): string {
+  const where = spot ? SPOT_WORD[spot] : '';
+  const main: Record<PaOutcome, string> = {
+    strikeout: `${name} strikes out.`,
+    walk: `${name} draws a walk.`,
+    single: `${name} singles to ${where}.`,
+    double: `${name} doubles to ${where}.`,
+    triple: `${name} triples to ${where}.`,
+    homeRun: scorers.length === 3 ? `${name} hits a grand slam!` : scorers.length ? `${name} hits a ${scorers.length + 1}-run homer!` : `${name} homers!`,
+    groundOut: `${name} grounds out to ${where}.`,
+    doublePlay: `${name} grounds into a double play.`,
+    flyOut: spot && ['LF', 'CF', 'RF'].includes(spot) ? `${name} flies out to ${where}.` : `${name} pops out to ${where}.`,
+    sacFly: `${name} hits a sacrifice fly to ${where}.`,
+  };
+  const runs = scorers.map((s) => `${s} scores.`).join(' ');
+  const end = outsAfter >= 3 ? ' Side retired.' : '';
+  return `${main[outcome]}${runs ? ' ' + runs : ''}${end}`;
 }
 
 export function ordinal(n: number): string {

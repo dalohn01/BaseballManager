@@ -113,7 +113,7 @@ function PlayItem({ p, m }: { p: PlayRecord; m: MatchResult }) {
   );
 }
 
-function MatchSummary({ ev, m }: { ev: EventInstance; m: MatchResult }) {
+export function MatchSummary({ ev, m }: { ev: EventInstance; m: MatchResult }) {
   const s = useGame();
   const r = ev.resolution!;
   const userSide = m.homeId === s.userClubId ? 'home' : 'away';

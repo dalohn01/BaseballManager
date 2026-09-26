@@ -20,6 +20,33 @@ Produktionsbygget är en statisk webbapp (cirka 430 kB JS, 132 kB gzip). Typsnit
 
 Under **Settings** finns testläget "Unlimited Time", som gör det möjligt att spela hela säsonger utan väntan. Testläget visas som "∞ TEST" i toppraden och med en gul banner. I ekonomiläget är taket 12 Time, med +1 var 20:e minut.
 
+## Visuell matchvy
+
+En avgjord ligamatch spelas upp som en 2D-scen ovanifrån: resultattavla, plan, spelarfigurer, boll, namnskyltar, At bat/Pitching-rad, kommentar, slagordning och matchlogg (`src/ui/match/`).
+
+**Ansvar i tre lager:**
+1. **Simulatorn** (`simulation/match.ts`) avgör allt. Den registrerar nu en komplett `sequence` per match: varje at-bat, stöld, pitcherbyte, extra-inning-löpare och sudden death. Varje steg har före/efter-läge med löparnas ID:n, löparförflyttningar och utslagna spelare i ordning.
+   - Vilken försvarare som tar bollen och bollens riktning registreras som metadata. Den härleds från en hash av match-ID och steg, **aldrig** från spelets slump, så matchutfallen är exakt desamma som tidigare.
+   - Försvararen påverkar inga resultat, eftersom motorn räknar med lagets snittförsvar.
+2. **Presentationsadaptern** (`presentation/adapter.ts`, `frame.ts`) översätter ett steg till en tidslinje: rörelser, boll, namn, domarrop och de ögonblick då tavlan uppdateras. `frameAt(presentation, t)` är en ren funktion, så varje bildruta kan återskapas.
+3. **Uppspelningskontrollen** (`presentation/playback.ts`, `ui/match/usePlayback.ts`) har en enda klocka.
+   - Next ignoreras medan ett steg spelas. Auto kan stängas av, och det pågående steget spelas då klart. Skip visar det auktoritativa slutresultatet.
+   - En bakgrundsflik pausar klockan utan att animationer köas upp. Positionen sparas per match, så uppspelningen fortsätter där den var om du navigerar bort.
+
+**Lägen:** "Highlights" stannar vid hits, poäng, walks med löpare på bas, double plays, stölder, byten och inningavslut med löpare kvar. "Every play" visar alla steg. Tavla och logg synkas även för hoppade steg, och ingenting visas innan det har spelats upp.
+
+**Visuella regler:**
+- Hemmalaget har vita tröjor och bortalaget klubbens färg, så lagen går alltid att skilja åt.
+- Högst tre namn syns samtidigt: kastare och slagman, sedan fältare och löpare.
+- Namnskyltarna är HTML i fast läsbar storlek, placeras med samma transform som figurerna och undviker krockar och kanter.
+
+**Dataluckor:** simulatorn har inga enskilda kast, så balls/strikes visas inte. I stället visas ett representativt kast per at-bat. Pitchfart finns inte heller i modellen och visas därför inte. Äldre matcher utan `sequence` visas som tidigare, som en textbaserad sammanfattning.
+
+**Tester:** `sequence.test.ts` kontrollerar kontinuitet, ID:n, poäng, outs och PA mot boxscoren i 300 matcher. `presentation.test.ts` täcker:
+- single med flera löpare, strikeout som tredje out och walk med fulla baser
+- fly/sac fly, home run, groundout, double play, stölder, pitcherbyte, extra-inning-löpare och inningbyte
+- att varje steg i 30 matcher slutar på sitt efter-läge
+- upprepade klick, Skip mitt i ett steg, Auto av och återupptagning
 ## Spelarvärden: OVR och Fitness
 
 - **OVR (overall)** är ett tal 0–100 som visar hur bra en spelare är på sin primära position. Det är ett positionsviktat snitt av grundvärdena (`src/domain/ratings.ts`): försvaret väger tyngre för C, SS och CF, slaget för 1B, hörnytterfälten och DH, och för pitchers är det i praktiken Pitching. Nivåerna är Elite 80+, Good 70+, Solid 60+, Fringe 50+ och Weak. I lineup-listan visas OVR på just den positionen, med avdrag för att spela ur position. Potential-OVR är scoutingens intervall översatt till samma skala.
