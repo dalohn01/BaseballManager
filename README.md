@@ -18,6 +18,16 @@ npm run preview    # servera produktionsbygget
 
 Produktionsbygget är en statisk webbapp (cirka 430 kB JS, 132 kB gzip). Typsnitten ligger lokalt i bygget, så appen gör inga externa anrop och kräver inga hemligheter, konton eller betaltjänster. Allt kan läggas på valfri statisk webbhost.
 
+### Publicering (GitHub Pages)
+
+`.github/workflows/deploy.yml` kör tester och bygge vid varje push till `main` och publicerar sedan `dist/` på GitHub Pages. Om ett test misslyckas publiceras inget.
+
+Engångsinställningar på GitHub:
+1. Repot måste vara publikt, eller så krävs GitHub Pro.
+2. Välj Settings → Pages → Source: **GitHub Actions**.
+
+Adressen blir `https://dalohn01.github.io/BaseballManager/`. Tack vare relativ base fungerar bygget under den undersökvägen. Varje besökare har sin egen sparfil i sin webbläsare.
+
 Under **Settings** finns testläget "Unlimited Time", som gör det möjligt att spela hela säsonger utan väntan. Testläget visas som "∞ TEST" i toppraden och med en gul banner. I ekonomiläget är taket 12 Time, med +1 var 20:e minut.
 
 ## Inför match: Set your lineup
