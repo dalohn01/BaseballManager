@@ -6,6 +6,7 @@ import { playerName } from '../../domain/state';
 import { Avatar } from '../components/art';
 import { Icon } from '../components/icons';
 import type { DraftApi } from './PreMatchScreen';
+import { instructionSummary } from '../tactics/TacticsControls';
 import { FitnessMeter, HappinessMeter, hitterValues, Legend, Notes, PosBadge, Values } from './shared';
 
 const GROUP: Record<number, string> = { 0: 'Top of the order', 3: 'Middle of the order', 6: 'Bottom of the order' };
@@ -142,6 +143,12 @@ export function BattingTab({ api }: { api: DraftApi }) {
           <HappinessMeter value={p.satisfaction} />
           <Notes notes={playerNotes(s, p, { starting: true })} max={3} />
         </div>
+        <p className="instr-line small">
+          <span className="muted">Instructions:</span> {instructionSummary(s, p)}{' '}
+          <button className="link" onClick={() => api.openTactics(p.id)}>
+            Change
+          </button>
+        </p>
         <div className="hitter-spot">
           <Icon name="bat" size={22} />
           <div>

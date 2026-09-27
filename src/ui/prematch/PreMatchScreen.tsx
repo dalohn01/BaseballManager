@@ -11,6 +11,8 @@ import { useController, useGame, useNow, useSnapshot } from '../hooks';
 import { BattingTab } from './BattingTab';
 import { FieldTab } from './FieldTab';
 import { PitchersTab } from './PitchersTab';
+import { opponentReport } from '../../simulation/opponentReport';
+import { MatchPlanSummary, TacticsDialog } from '../tactics/TacticsControls';
 import type { DataMode } from './shared';
 
 export type Tab = 'field' | 'order' | 'pitchers';
@@ -24,6 +26,8 @@ export interface DraftApi {
   quick: (label: string, next: LineupDraft) => void;
   mode: DataMode;
   period: StatsPeriod;
+  /** Opens tactics (team, or one player's instructions) without leaving the lineup. */
+  openTactics: (playerId: string | null) => void;
 }
 
 const draftKey = (eventId: string) => `bm.draft.${eventId}`;
@@ -78,6 +82,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   const [mode, setMode] = useState<DataMode>(() => readPref('pmMode', ['attributes', 'stats'] as const, 'attributes'));
   const [period, setPeriod] = useState<StatsPeriod>(() => readPref('pmPeriod', ['season', 'last5'] as const, 'season'));
   const [notice, setNotice] = useState<{ label: string; changes: string[]; undo: LineupDraft } | null>(null);
+  const [tactics, setTactics] = useState<{ playerId: string | null } | null>(null);
 
   const update = (next: LineupDraft) => {
     setDraft(next);
@@ -91,7 +96,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
     setNotice({ label, changes, undo: draft });
     update(next);
   };
-  const api: DraftApi = { state: s, draft, update, quick, mode, period };
+  const api: DraftApi = { state: s, draft, update, quick, mode, period, openTactics: (playerId) => setTactics({ playerId }) };
 
   const game = s.schedule.find((g) => g.id === String(ev.data.gameId))!;
   const isHome = game.homeId === s.userClubId;
@@ -165,6 +170,9 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
         </div>
       )}
 
+      <OpponentReport gameId={String(ev.data.gameId)} onAdjust={() => setTactics({ playerId: null })} />
+      <MatchPlanSummary />
+
       <div className="pm-body">
         {tab === 'field' && <FieldTab api={api} />}
         {tab === 'order' && <BattingTab api={api} />}
@@ -215,7 +223,36 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
           {snap.commandError && <p className="pm-blocker small" role="alert">{snap.commandError}</p>}
         </div>
       </footer>
+      {tactics && <TacticsDialog playerId={tactics.playerId} onClose={() => setTactics(null)} />}
     </div>
+  );
+}
+
+/** Small, muted scouting note: at most three observations, each labelled by kind. */
+function OpponentReport({ gameId, onAdjust }: { gameId: string; onAdjust: () => void }) {
+  const s = useGame();
+  const { opponentId, observations } = opponentReport(s, gameId);
+  return (
+    <aside className="opp-report" aria-label="Opponent report">
+      <div className="opp-head">
+        <strong>Opponent report · {s.clubs[opponentId].name}</strong>
+        <button className="link opp-adjust" onClick={onAdjust}>
+          Adjust tactics
+        </button>
+      </div>
+      {observations.length === 0 ? (
+        <p className="small muted">Nothing stands out about this opponent right now.</p>
+      ) : (
+        <ul>
+          {observations.map((o) => (
+            <li key={o.text}>
+              <span className="opp-kind">{o.kind}</span> {o.text}
+              {o.hint && <span className="muted"> {o.hint.text}</span>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </aside>
   );
 }
 

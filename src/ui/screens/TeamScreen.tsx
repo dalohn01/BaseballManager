@@ -10,6 +10,7 @@ import { OvrBadge, Panel } from '../components/common';
 import { overall, overallAt, primaryPosition } from '../../domain/ratings';
 import { avg3, era, ROLE_LABEL } from '../format';
 import { href, useController, useGame, useSnapshot } from '../hooks';
+import { instructionSummary, MatchPlanSummary, TeamStyleEditor } from '../tactics/TacticsControls';
 
 type Filter = 'all' | 'hitters' | 'pitchers' | 'lineup';
 type Sort = 'ovr' | 'position' | 'age' | 'fitness';
@@ -22,7 +23,55 @@ const SORTS: Record<Sort, (a: Player, b: Player) => number> = {
   fitness: (a, b) => a.fitness - b.fitness,
 };
 
-export function TeamScreen() {
+export function TeamScreen({ tab = 'roster' }: { tab?: 'roster' | 'style' }) {
+  return (
+    <div className="page">
+      <div className="club-head">
+        <h1 className="page-title">{tab === 'style' ? 'Playing style' : 'Team'}</h1>
+        <nav className="segmented club-tabs" aria-label="Team sections">
+          <a href={href('team')} className={tab === 'roster' ? 'on' : ''} aria-current={tab === 'roster' ? 'page' : undefined}>
+            Roster
+          </a>
+          <a href={href('team/style')} className={tab === 'style' ? 'on' : ''} aria-current={tab === 'style' ? 'page' : undefined}>
+            Playing style
+          </a>
+        </nav>
+      </div>
+      {tab === 'style' ? <PlayingStyle /> : <RosterView />}
+    </div>
+  );
+}
+
+function PlayingStyle() {
+  const s = useGame();
+  const club = userClub(s);
+  const withOwn = clubPlayers(s, club.id).filter((p) => instructionSummary(s, p) !== 'Follow team');
+  return (
+    <div className="style-grid">
+      <Panel title="Team playing style">
+        <p className="small muted">Optional. Applies to every match until you change it; Balanced is the neutral choice. Your players' ratings decide how well they carry it out.</p>
+        <TeamStyleEditor scope="default" />
+        <MatchPlanSummary />
+      </Panel>
+      <Panel title="Individual instructions">
+        {withOwn.length === 0 ? (
+          <p className="muted small">Everyone follows the team. Set an exception on a player's profile, e.g. let a fast runner run aggressively.</p>
+        ) : (
+          <ul className="instr-list">
+            {withOwn.map((p) => (
+              <li key={p.id}>
+                <a href={href(`team/${p.id}`)}>{playerName(p)}</a>
+                <span className="small">{instructionSummary(s, p)}</span>
+              </li>
+            ))}
+          </ul>
+        )}
+      </Panel>
+    </div>
+  );
+}
+
+function RosterView() {
   const s = useGame();
   const club = userClub(s);
   const [filter, setFilter] = useState<Filter>('all');
@@ -32,8 +81,7 @@ export function TeamScreen() {
     .filter((p) => (filter === 'hitters' ? !p.isPitcher : filter === 'pitchers' ? p.isPitcher : filter === 'lineup' ? inLineup.has(p.id) : true))
     .sort((a, b) => SORTS[sort](a, b) || a.id.localeCompare(b.id));
   return (
-    <div className="page">
-      <h1 className="page-title">Team</h1>
+    <>
       <div className="team-grid">
         <Panel title="Roster">
           <div className="filters" role="group" aria-label="Filter players">
@@ -78,7 +126,7 @@ export function TeamScreen() {
         </Panel>
         <LineupEditor />
       </div>
-    </div>
+    </>
   );
 }
 

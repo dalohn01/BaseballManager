@@ -1,4 +1,5 @@
 import { BALANCE } from '../balance/config';
+import { defaultTactics } from '../domain/tactics';
 import { AI_CLUBS, GENERATED_ROSTER_SHAPE, USER_CLUB, USER_ROSTER, type ClubSeed, type PlayerSeed } from '../content/clubs';
 import { FIRST_NAMES, LAST_NAMES } from '../content/names';
 import { emptyStats, PRIORITIES, scoutEstimate } from '../content/playerFactory';
@@ -119,6 +120,7 @@ function makeClub(seed: ClubSeed, isUser: boolean): Club {
     facilities: { training: 1, scouting: 1, stadium: 1 },
     project: null,
     modifiers: [],
+    tactics: defaultTactics(),
     publicStance: null,
     seasonPlan: null,
     spendingFreezeUntil: 0,

@@ -36,6 +36,8 @@ function workloadText(state: DraftApi['state'], p: Player): string {
   return `Last outing: ${when} · ${w.last.battersFaced} batters, ${fmtIp(w.last.outs)} IP${w.last.started ? ' (start)' : ''}`;
 }
 
+import { instructionSummary } from '../tactics/TacticsControls';
+
 export function PitchersTab({ api, gameId }: { api: DraftApi; gameId: string }) {
   const { state: s, draft, update, mode, period } = api;
   const pitchers = userClub(s)
@@ -74,6 +76,12 @@ export function PitchersTab({ api, gameId }: { api: DraftApi; gameId: string }) 
                     <HappinessMeter value={p.satisfaction} />
                   </span>
                   <small className="muted">{workloadText(s, p)}</small>
+                  <small className="instr-line">
+                    <span className="muted">Instructions:</span> {instructionSummary(s, p)}{' '}
+                    <button className="link" onClick={() => api.openTactics(p.id)} aria-label={`Instructions for ${p.lastName}`}>
+                      Change
+                    </button>
+                  </small>
                   <Notes notes={playerNotes(s, p, { starting: isStarter })} max={2} />
                 </div>
                 {isStarter ? (

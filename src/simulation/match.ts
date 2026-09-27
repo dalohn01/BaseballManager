@@ -2,9 +2,11 @@ import { BALANCE } from '../balance/config';
 import { effectiveRating, fieldingAt, offenseScore } from '../domain/lineup';
 import { clamp, hashSeed, type Rng } from '../domain/rng';
 import type { GameState } from '../domain/state';
+import { resolveTactic } from '../domain/tactics';
 import type {
   BaseState,
   BattingLine,
+  BattingStyle,
   ClubId,
   DecidedBy,
   FieldSpot,
@@ -15,11 +17,13 @@ import type {
   PaOutcome,
   PitchingLine,
   PitchingPlan,
+  PitchingStyle,
   PlayKind,
   PlayRecord,
   Player,
   PlayerId,
   RunnerMove,
+  RunningStyle,
 } from '../domain/types';
 
 /**
@@ -37,11 +41,17 @@ interface SimBatter {
   contact: number;
   power: number;
   speed: number;
+  /** Effective tactics for this player (team plan or his own instruction). */
+  batting: BattingStyle;
+  running: RunningStyle;
+  /** Whether his running comes from his own instruction (for commentary). */
+  runningSource: 'instruction' | 'team';
 }
 interface SimPitcher {
   id: PlayerId;
   name: string;
   pitching: number;
+  style: PitchingStyle;
 }
 export interface SimTeam {
   clubId: ClubId;
@@ -61,12 +71,16 @@ export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): 
   const club = state.clubs[clubId];
   const batters = lineup.battingOrder.map((slot) => {
     const p = state.players[slot.playerId];
+    const running = resolveTactic(club.tactics, p.id, 'baserunning');
     return {
       id: p.id,
       name: p.lastName,
       contact: effectiveRating(p, 'contact'),
       power: effectiveRating(p, 'power'),
       speed: effectiveRating(p, 'speed'),
+      batting: resolveTactic(club.tactics, p.id, 'batting').value as BattingStyle,
+      running: running.value as RunningStyle,
+      runningSource: running.source === 'instruction' || running.source === 'matchInstruction' ? ('instruction' as const) : ('team' as const),
     };
   });
   const defenders = lineup.battingOrder.filter((s) => s.position !== 'DH');
@@ -75,10 +89,11 @@ export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): 
   const catcherFielding = catcherSlot ? fieldingAt(state.players[catcherSlot.playerId], 'C') : 40;
 
   const sp = state.players[lineup.pitcherId];
-  const starter = { id: sp.id, name: sp.lastName, pitching: effectiveRating(sp, 'pitching') };
+  const pitchStyle = (id: PlayerId) => resolveTactic(club.tactics, id, 'pitching').value as PitchingStyle;
+  const starter = { id: sp.id, name: sp.lastName, pitching: effectiveRating(sp, 'pitching'), style: pitchStyle(sp.id) };
   const plan = club.pitchingPlan;
   const rp = chooseReliever(state, clubId, sp.id, plan);
-  const reliever = rp ? { id: rp.id, name: rp.lastName, pitching: effectiveRating(rp, 'pitching') } : null;
+  const reliever = rp ? { id: rp.id, name: rp.lastName, pitching: effectiveRating(rp, 'pitching'), style: pitchStyle(rp.id) } : null;
 
   return {
     clubId,
@@ -127,17 +142,53 @@ export function winProbability(homeStrength: number, awayStrength: number): numb
 
 type Outcome = 'strikeout' | 'walk' | 'single' | 'double' | 'triple' | 'homeRun' | 'groundOut' | 'flyOut';
 
-function rollOutcome(b: SimBatter, pitching: number, fielding: number, rng: Rng): Outcome {
-  const walk = clamp(0.085 + (50 - pitching) * 0.0012 + (b.contact - 50) * 0.0004, 0.03, 0.16);
-  const k = clamp(0.215 + (pitching - b.contact) * 0.0035, 0.07, 0.4);
+/**
+ * Tactical shifts to the plate-appearance odds. Balanced/Balanced is all zeros
+ * and ×1, so it plays exactly as before tactics existed. Player attributes
+ * decide how well an instruction is carried out: contact hitters cut more
+ * strikeouts, power hitters gain more home runs, better pitchers suffer less
+ * when attacking the zone.
+ */
+export function tacticShift(b: Pick<SimBatter, 'batting' | 'contact' | 'power'>, p: { style: PitchingStyle; pitching: number }) {
+  const s = { k: 0, walk: 0, hit: 0, hr: 1, dbl: 1 };
+  if (b.batting === 'contact') {
+    s.k -= 0.02 + Math.max(0, b.contact - 50) * 0.0006;
+    s.hit += 0.008;
+    s.hr *= 0.65;
+    s.dbl *= 0.9;
+  } else if (b.batting === 'power') {
+    s.k += Math.max(0.01, 0.03 - (b.power - 50) * 0.0005);
+    s.hit -= 0.006;
+    s.hr *= 1.15 + Math.max(0, b.power - 40) * 0.012;
+    s.dbl *= 1.1;
+  }
+  if (p.style === 'attack') {
+    s.walk -= 0.03;
+    s.k += 0.008;
+    // Good pitchers can live in the zone; weaker ones get hit.
+    s.hit += Math.max(0.002, 0.016 - Math.max(0, p.pitching - 50) * 0.0006);
+    s.hr *= 1.1;
+  } else if (p.style === 'careful') {
+    s.walk += 0.045;
+    s.hit -= 0.012;
+    s.hr *= 0.8;
+  }
+  return s;
+}
+
+function rollOutcome(b: SimBatter, pitcher: SimPitcher, pitching: number, fielding: number, rng: Rng): Outcome {
+  const sh = tacticShift(b, { style: pitcher.style, pitching });
+  const walk = clamp(0.085 + (50 - pitching) * 0.0012 + (b.contact - 50) * 0.0004 + sh.walk, 0.03, 0.16);
+  const k = clamp(0.215 + (pitching - b.contact) * 0.0035 + sh.k, 0.07, 0.4);
   const r = rng.next();
   if (r < k) return 'strikeout';
   if (r < k + walk) return 'walk';
-  const hitChance = clamp(0.315 + (b.contact - pitching) * 0.0022 - (fielding - 50) * 0.0018, 0.18, 0.42);
+  const hitChance = clamp(0.315 + (b.contact - pitching) * 0.0022 - (fielding - 50) * 0.0018 + sh.hit, 0.18, 0.42);
   if (rng.next() < hitChance) {
-    const hr = clamp(0.11 + (b.power - 50) * 0.005, 0.02, 0.28);
+    // The ceiling only rises when a hitter swings for power; Balanced keeps the old cap.
+    const hr = clamp((0.11 + (b.power - 50) * 0.005) * sh.hr, 0.02, sh.hr > 1 ? 0.36 : 0.28);
     const triple = clamp(0.02 + (b.speed - 50) * 0.0008, 0.005, 0.05);
-    const dbl = clamp(0.2 + (b.power - 50) * 0.002, 0.1, 0.3);
+    const dbl = clamp((0.2 + (b.power - 50) * 0.002) * sh.dbl, 0.1, 0.3);
     const t = rng.next();
     if (t < hr) return 'homeRun';
     if (t < hr + triple) return 'triple';
@@ -145,6 +196,13 @@ function rollOutcome(b: SimBatter, pitching: number, fielding: number, rng: Rng)
     return 'single';
   }
   return rng.chance(0.5) ? 'groundOut' : 'flyOut';
+}
+
+/** Chance a runner on first tries to steal second, by speed and running style. */
+export function stealAttempt(speed: number, style: RunningStyle): number {
+  if (style === 'aggressive') return speed >= 50 ? 0.08 + (speed - 50) * 0.005 : 0.03;
+  if (style === 'cautious') return speed >= 70 ? (0.05 + (speed - 60) * 0.004) * 0.4 : 0;
+  return speed >= 60 ? 0.05 + (speed - 60) * 0.004 : 0;
 }
 
 const emptyBatting = (): BattingLine => ({ pa: 0, ab: 0, h: 0, doubles: 0, triples: 0, hr: 0, rbi: 0, r: 0, bb: 0, so: 0, sb: 0 });
@@ -263,8 +321,13 @@ export function simulateMatch(input: MatchInput): MatchResult {
       const r1 = bases[0];
       if (r1 && !bases[1] && outs < 2) {
         const runner = off.team.batters.find((b) => b.id === r1)!;
-        const attempt = runner.speed >= 60 ? 0.05 + (runner.speed - 60) * 0.004 : 0;
-        if (attempt > 0 && rng.chance(attempt)) {
+        const usual = stealAttempt(runner.speed, 'balanced');
+        const attempt = stealAttempt(runner.speed, runner.running);
+        // Only drawn when an attempt is possible (as before), so Balanced keeps the same random stream.
+        const roll = attempt > 0 ? rng.next() : 1;
+        if (roll < attempt) {
+          // The attempt happened only because of the running instruction: tell the viewer.
+          const byTactic = roll >= usual ? { playerId: r1, kind: 'steal' as const, source: runner.runningSource } : undefined;
           const success = clamp(0.62 + (runner.speed - 50) * 0.008 - (def.team.catcherFielding - 50) * 0.004, 0.4, 0.92);
           const before = snap();
           const catcher = fielderAt('C');
@@ -273,13 +336,13 @@ export function simulateMatch(input: MatchInput): MatchResult {
             bases[0] = null;
             batting[r1].sb += 1;
             record('steal', `${runner.name} steals second.`, 0, r1);
-            push({ kind: 'steal', batterId: null, pitcherId: def.pitcher.id, outcome: null, before, after: snap(), runners: [{ playerId: r1, from: 1, to: 2 }], outOrder: [], fielder: catcher ? { spot: 'C', playerId: catcher } : null, ball: null, text: `${runner.name} steals second.` });
+            push({ kind: 'steal', batterId: null, pitcherId: def.pitcher.id, outcome: null, before, after: snap(), runners: [{ playerId: r1, from: 1, to: 2 }], outOrder: [], fielder: catcher ? { spot: 'C', playerId: catcher } : null, ball: null, text: `${runner.name} steals second.`, tactic: byTactic });
           } else {
             bases[0] = null;
             outs += 1;
             pitching[def.pitcher.id].outs += 1;
             record('caughtStealing', `${runner.name} is caught stealing.`, 0, r1);
-            push({ kind: 'caughtStealing', batterId: null, pitcherId: def.pitcher.id, outcome: null, before, after: snap(), runners: [{ playerId: r1, from: 1, to: 'out' }], outOrder: [r1], fielder: catcher ? { spot: 'C', playerId: catcher } : null, ball: null, text: `${runner.name} is caught stealing.` });
+            push({ kind: 'caughtStealing', batterId: null, pitcherId: def.pitcher.id, outcome: null, before, after: snap(), runners: [{ playerId: r1, from: 1, to: 'out' }], outOrder: [r1], fielder: catcher ? { spot: 'C', playerId: catcher } : null, ball: null, text: `${runner.name} is caught stealing.`, tactic: byTactic });
             if (outs >= 3) break;
           }
         }
@@ -289,13 +352,40 @@ export function simulateMatch(input: MatchInput): MatchResult {
       off.idx = (off.idx + 1) % 9;
       const pitcher = def.pitcher;
       const pLine = pitching[pitcher.id];
-      const tiredBy = Math.max(0, pLine.battersFaced - cfg.starterTiresAfterBatters);
+      // Attacking the zone saves pitches; working the corners tires a pitcher sooner.
+      const tiresAfter = cfg.starterTiresAfterBatters + (pitcher.style === 'attack' ? 3 : pitcher.style === 'careful' ? -4 : 0);
+      const tiredBy = Math.max(0, pLine.battersFaced - tiresAfter);
       const pitchValue = pitcher.pitching - tiredBy * 1.0;
       pLine.battersFaced += 1;
       const bLine = batting[batter.id];
       bLine.pa += 1;
 
-      const outcome = rollOutcome(batter, pitchValue, def.team.fielding, rng);
+      const outcome = rollOutcome(batter, pitcher, pitchValue, def.team.fielding, rng);
+      const runnerOf = (id: PlayerId) => off.team.batters.find((b) => b.id === id)!;
+      let tacticNote: MatchSequence['tactic'];
+      /**
+       * An extra-base decision. Balanced uses one draw exactly as before.
+       * Aggressive runners go more often; when they go only because of the
+       * instruction, a slower runner can be thrown out. Cautious runners hold.
+       */
+      const sendRunner = (id: PlayerId, usualChance: number): 'safe' | 'held' | 'out' => {
+        const r = runnerOf(id);
+        const chance = clamp(usualChance + (r.running === 'aggressive' ? 0.15 : r.running === 'cautious' ? -0.08 : 0), 0.02, 0.97);
+        const roll = rng.next();
+        if (roll >= chance) return 'held';
+        if (roll < usualChance) return 'safe';
+        // Only the instruction sent him.
+        if (rng.chance(clamp(0.35 - (r.speed - 50) * 0.01, 0.06, 0.55))) {
+          tacticNote = { playerId: id, kind: 'thrownOut', source: r.runningSource };
+          return 'out';
+        }
+        tacticNote = { playerId: id, kind: 'extraBase', source: r.runningSource };
+        return 'safe';
+      };
+      const runnerOut = () => {
+        outs += 1;
+        pLine.outs += 1;
+      };
       const speedOf = (id: PlayerId) => off.team.batters.find((b) => b.id === id)?.speed ?? 50;
       const scored: PlayerId[] = [];
       const runnersBefore = bases.filter(Boolean).length;
@@ -332,11 +422,15 @@ export function simulateMatch(input: MatchInput): MatchResult {
           const next: (PlayerId | null)[] = [batter.id, null, null];
           if (b3) scored.push(b3);
           if (b2) {
-            if (rng.chance(clamp(0.6 + (speedOf(b2) - 50) * 0.008, 0.3, 0.9))) scored.push(b2);
+            const go = sendRunner(b2, clamp(0.6 + (speedOf(b2) - 50) * 0.008, 0.3, 0.9));
+            if (go === 'safe') scored.push(b2);
+            else if (go === 'out') runnerOut();
             else next[2] = b2;
           }
-          if (b1) {
-            if (!next[2] && rng.chance(clamp(0.28 + (speedOf(b1) - 50) * 0.006, 0.1, 0.55))) next[2] = b1;
+          if (b1 && outs < 3) {
+            const go = next[2] ? 'held' : sendRunner(b1, clamp(0.28 + (speedOf(b1) - 50) * 0.006, 0.1, 0.55));
+            if (go === 'safe') next[2] = b1;
+            else if (go === 'out') runnerOut();
             else next[1] = b1;
           }
           bases.splice(0, 3, ...next);
@@ -353,7 +447,9 @@ export function simulateMatch(input: MatchInput): MatchResult {
           if (b3) scored.push(b3);
           if (b2) scored.push(b2);
           if (b1) {
-            if (rng.chance(clamp(0.42 + (speedOf(b1) - 50) * 0.008, 0.15, 0.75))) scored.push(b1);
+            const go = sendRunner(b1, clamp(0.42 + (speedOf(b1) - 50) * 0.008, 0.15, 0.75));
+            if (go === 'safe') scored.push(b1);
+            else if (go === 'out') runnerOut();
             else next[2] = b1;
           }
           bases.splice(0, 3, ...next);
@@ -456,6 +552,7 @@ export function simulateMatch(input: MatchInput): MatchResult {
           fielder: meta.spot && fielderId ? { spot: meta.spot, playerId: fielderId } : null,
           ball: meta.ball,
           text: describePlay(batter.name, label, meta.spot, runners.filter((r) => r.to === 4 && r.playerId !== batter.id).map((r) => names[r.playerId]), after.outs),
+          tactic: tacticNote,
         });
       }
 

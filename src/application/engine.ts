@@ -7,7 +7,8 @@ import { releasePlayer, remainingSeasonSalary, repairLineup, squadProblem } from
 import type { BoostOption, Cost, EventInstance, EventOption, GameState } from '../domain/state';
 import { absoluteRound, userClub } from '../domain/state';
 import { canAffordTime, regenerate, spendTime } from '../domain/time';
-import type { FacilityId, Lineup, PitchingPlan } from '../domain/types';
+import type { FacilityId, Instruction, Lineup, PitchingPlan, TacticArea, TeamStyle } from '../domain/types';
+import { clearMatchTactics, relevantAreas, STYLE_OPTIONS } from '../domain/tactics';
 import { prepareNextEvent } from '../events/planner';
 import { getTemplate } from '../events/registry';
 
@@ -28,12 +29,21 @@ export type Command =
   | { type: 'rerollCandidates'; eventId: string; revision: number }
   | { type: 'releasePlayer'; playerId: string }
   /** Direct facility upgrade: Club Cash only, no event and no Time. */
-  | { type: 'upgradeFacility'; facility: FacilityId; revision: number };
+  | { type: 'upgradeFacility'; facility: FacilityId; revision: number }
+  /** Team playing style: saved default, or this match only. No Time, no event. */
+  | { type: 'setTeamStyle'; area: TacticArea; value: string; scope: TacticScope }
+  /** Player exception; value 'team' = follow team. */
+  | { type: 'setInstruction'; playerId: string; area: TacticArea; value: string; scope: TacticScope }
+  /** Drops every match-only change; the saved plan stays. */
+  | { type: 'resetMatchTactics' };
 
 export type CommandError = { ok: false; code: 'stale' | 'duplicate' | 'invalid' | 'unaffordable'; error: string };
 export type CommandResult = { ok: true; state: GameState } | CommandError;
 
 const POSTSEASON = new Set(['draft', 'contracts', 'seasonReview']);
+
+export type TacticScope = 'default' | 'match';
+const isStyleValue = (area: TacticArea, v: string) => !!STYLE_OPTIONS[area]?.some((o) => o.value === v);
 
 const fail = (code: CommandError['code'], error: string): CommandError => ({ ok: false, code, error });
 
@@ -119,6 +129,53 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       if (buyout > 0) sink.cash(next.userClubId, -buyout, 'salaries', `Released ${p.firstName} ${p.lastName} (buyout)`);
       releasePlayer(next, p.id);
       repairLineup(next, next.userClubId);
+      next.revision += 1;
+      return { ok: true, state: next };
+    }
+    case 'setTeamStyle': {
+      if (!isStyleValue(cmd.area, cmd.value)) return fail('invalid', 'Unknown playing style.');
+      const next = structuredClone(state);
+      const tac = userClub(next).tactics;
+      const value = cmd.value as TeamStyle[typeof cmd.area];
+      if (cmd.scope === 'default') {
+        // Saving as the usual plan also ends a match-only change in the same area.
+        (tac.style as Record<TacticArea, string>)[cmd.area] = value;
+        delete tac.match[cmd.area];
+      } else if (value === tac.style[cmd.area]) {
+        delete tac.match[cmd.area];
+      } else {
+        (tac.match as Record<TacticArea, string>)[cmd.area] = value;
+      }
+      next.revision += 1;
+      return { ok: true, state: next };
+    }
+    case 'setInstruction': {
+      const p = state.players[cmd.playerId];
+      if (!p || p.clubId !== state.userClubId) return fail('invalid', 'He is not on your roster.');
+      if (!relevantAreas(p).includes(cmd.area)) return fail('invalid', 'That instruction does not apply to his role.');
+      if (cmd.value !== 'team' && !isStyleValue(cmd.area, cmd.value)) return fail('invalid', 'Unknown instruction.');
+      const next = structuredClone(state);
+      const tac = userClub(next).tactics;
+      const set = (bag: Record<string, Instruction>, v: string | null) => {
+        const cur = { ...(bag[p.id] ?? {}) } as Record<string, string>;
+        if (v === null) delete cur[cmd.area];
+        else cur[cmd.area] = v;
+        if (Object.keys(cur).length) bag[p.id] = cur as Instruction;
+        else delete bag[p.id];
+      };
+      if (cmd.scope === 'default') {
+        set(tac.instructions, cmd.value === 'team' ? null : cmd.value);
+        set(tac.matchInstructions, null);
+      } else {
+        const saved = tac.instructions[p.id]?.[cmd.area] ?? 'team';
+        set(tac.matchInstructions, cmd.value === saved ? null : cmd.value);
+      }
+      next.revision += 1;
+      return { ok: true, state: next };
+    }
+    case 'resetMatchTactics': {
+      const next = structuredClone(state);
+      clearMatchTactics(userClub(next));
       next.revision += 1;
       return { ok: true, state: next };
     }

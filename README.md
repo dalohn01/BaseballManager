@@ -133,6 +133,60 @@ Club har två flikar: **Facilities** (`#/club`) och **Finances** (`#/club/financ
 - Den täcker också rabatt som förbrukas, nedräkning och borttagning över ligamatcher, att happenings aldrig ändrar nivåer och migreringen.
 - `facilitiesView.test.tsx` renderar vyn via riktig controller: happenings visas separat, kortet markeras, rabatterat pris köps och "Not enough Club Cash"/maxnivå förklaras.
 
+## Taktik (frivilligt lager)
+
+Allt går att spela utan att någonsin öppna taktiken. Standard är **Balanced** och **Follow team**, och motorn spelar då exakt som före taktiken. Det är verifierat: 40 simulerade matcher gav samma hash som föregående commit.
+
+**Var:**
+- **Team → Playing style** (`#/team/style`): lagets sparade stil och en lista över spelare med egna instruktioner.
+- **Spelarprofilen:** en hopfällbar sektion Instructions. Den visar bara relevanta områden: slagmän har Batting och Baserunning, pitchers har Pitching.
+- **Inför match:** Opponent report med Adjust tactics, och "Change" vid vald slagman och på startkorten. Dialogen gäller **This match only** som standard, med växeln **Save as new default**. Uppställningsutkastet påverkas inte.
+
+**Prioritet** (`domain/tactics.ts`, `resolveTactic`):
+1. Spelarens instruktion för denna match.
+2. Spelarens sparade instruktion.
+3. Lagets matchplan.
+4. Lagets sparade stil.
+
+"Follow team" för en match hoppar över spelarens sparade undantag.
+
+**Matchändringar:**
+- Visas som "This match: …" med **Reset to usual plan**.
+- Rensas i `playRound` efter användarens match. Grundplanen skrivs aldrig över.
+- Kommandona är `setTeamStyle`, `setInstruction` och `resetMatchTactics`. De kostar varken Time eller event.
+
+**Effekter i motorn** (`simulation/match.ts`, `tacticShift`, `stealAttempt`, `sendRunner`). Attributen avgör hur väl instruktionen fungerar:
+
+| Område | Val | Effekt |
+| --- | --- | --- |
+| Batting | Contact | Färre strikeouts (mer med hög contact), färre HR. |
+| Batting | Power | Fler HR (mycket mer med hög power), fler strikeouts. Lönar sig för starka slagmän och kostar för svaga. |
+| Baserunning | Aggressive | Fler stöldförsök (även långsammare löpare) och extra baser oftare. Löpare som skickas bara på grund av instruktionen kan kastas ut, oftare om de är långsamma. |
+| Baserunning | Cautious | Stjäl nästan aldrig och tar färre extra baser, men riskerar inga utkast. |
+| Pitching | Attack | Färre walks och startern orkar längre, men fler träffbara kast (mindre för bra pitchers). |
+| Pitching | Careful | Färre hits och HR, fler walks, och startern tröttnar tidigare. |
+
+**Kommentarer:** `MatchSequence.tactic` sätts bara när taktiken faktiskt ändrade utfallet.
+- Ett stöldförsök som annars inte hade skett.
+- En extra bas som annars inte hade tagits.
+- En löpare som kastas ut.
+
+Exempel på kommentarer: "Miller takes his chance for second — his aggressive instruction…" och "Chen tries for home on aggressive running and is thrown out."
+
+**Opponent report** (`simulation/opponentReport.ts`): högst tre observationer, märkta Trait, Status eller Recent form.
+- **Trait:** catcherns arm och den troliga starterns pitching.
+- **Status:** starterns fitness och bullpenens snittfitness.
+- **Recent form:** runs per match, bara med minst tre matcher, och märkt "small sample" under fem matcher.
+- Tipsen är bara förslag och ändrar aldrig något automatiskt.
+
+**Äldre sparfiler (schema v7):** får `tactics` med Balanced och tomma instruktioner.
+
+**Tester:** `tactics.test.ts` täcker:
+- prioritet och sparning, att matchändringar rensas efter matchen och reset
+- att bara relevanta instruktioner accepteras, migrering, och att en säsong kan spelas utan taktik
+- effektriktningar och att attribut spelar roll
+- att kommentarer bara förekommer vid registrerade taktikbeslut, och motståndarrapportens gränser
+
 ## Spelarvärden: OVR och Fitness
 
 - **OVR (overall)** är ett tal 0–100 som visar hur bra en spelare är på sin primära position. Det är ett positionsviktat snitt av grundvärdena (`src/domain/ratings.ts`): försvaret väger tyngre för C, SS och CF, slaget för 1B, hörnytterfälten och DH, och för pitchers är det i praktiken Pitching. Nivåerna är Elite 80+, Good 70+, Solid 60+, Fringe 50+ och Weak. I lineup-listan visas OVR på just den positionen, med avdrag för att spela ur position. Potential-OVR är scoutingens intervall översatt till samma skala.

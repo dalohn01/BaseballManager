@@ -151,6 +151,28 @@ export interface FacilityProject {
   cost: number;
 }
 
+export type TacticArea = 'batting' | 'baserunning' | 'pitching';
+export type BattingStyle = 'contact' | 'balanced' | 'power';
+export type RunningStyle = 'cautious' | 'balanced' | 'aggressive';
+export type PitchingStyle = 'attack' | 'balanced' | 'careful';
+export interface TeamStyle {
+  batting: BattingStyle;
+  baserunning: RunningStyle;
+  pitching: PitchingStyle;
+}
+/** A player's exceptions per area; 'team' = explicitly follow the team (used for one-match overrides). */
+export type Instruction = { [A in TacticArea]?: TeamStyle[A] | 'team' };
+export interface ClubTactics {
+  /** Saved playing style, applies until changed. */
+  style: TeamStyle;
+  /** Next match only; cleared after the game. */
+  match: Partial<TeamStyle>;
+  /** Saved per-player exceptions. */
+  instructions: Record<PlayerId, Instruction>;
+  /** Per-player exceptions for the next match only. */
+  matchInstructions: Record<PlayerId, Instruction>;
+}
+
 export interface Club {
   id: ClubId;
   city: string;
@@ -173,6 +195,8 @@ export interface Club {
   project: FacilityProject | null;
   /** Active facility happenings (temporary, separate from levels). */
   modifiers: FacilityModifier[];
+  /** Playing style and player instructions (optional layer). */
+  tactics: ClubTactics;
   /** What the club has said publicly about its ambitions (used by follow-ups). */
   publicStance: { stance: 'contend' | 'patience'; season: number; round: number; eventId: string } | null;
   /** Season direction and measurable goals agreed with the owners. */
@@ -293,6 +317,8 @@ export interface MatchSequence {
   fielder: { spot: FieldSpot; playerId: PlayerId } | null;
   ball: { type: 'ground' | 'line' | 'fly' | 'pop' | 'over'; dir: number } | null;
   text: string;
+  /** Set only when a tactic actually changed what happened (steal tried, extra base taken, runner thrown out). */
+  tactic?: { playerId: PlayerId; kind: 'steal' | 'extraBase' | 'thrownOut'; source: 'instruction' | 'team' };
 }
 
 export interface MatchResult {

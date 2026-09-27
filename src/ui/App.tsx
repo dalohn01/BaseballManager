@@ -58,7 +58,7 @@ export function App() {
       {snap.state.time.mode === 'unlimited' && <div className="banner banner-test">Test mode · unlimited Time</div>}
       <main id="main">
         {route.name === 'home' && <HomeScreen />}
-        {route.name === 'team' && <TeamScreen />}
+        {route.name === 'team' && <TeamScreen tab={route.tab} />}
         {route.name === 'player' && <PlayerScreen id={route.id} />}
         {route.name === 'club' && <ClubScreen tab={route.tab} />}
         {route.name === 'league' && <LeagueScreen />}

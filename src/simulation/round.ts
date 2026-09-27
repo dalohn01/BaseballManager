@@ -1,6 +1,7 @@
 import { BALANCE } from '../balance/config';
 import type { EffectSink } from '../domain/effects';
 import { autoLineup, bestRestedPitcher, isLineupValid } from '../domain/lineup';
+import { clearMatchTactics, pruneInstructions } from '../domain/tactics';
 import type { Rng } from '../domain/rng';
 import type { GameState } from '../domain/state';
 import { clubPlayers } from '../domain/state';
@@ -67,6 +68,9 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
   userClubState.lineup = { ...userClubState.lineup, pitcherId: bestRestedPitcher(state, state.userClubId) };
   // Reliever and rest applied to this game only; the hook setting is a standing preference.
   userClubState.pitchingPlan = { relieverId: null, rest: [], hook: userClubState.pitchingPlan.hook };
+  // Match-only tactics end with the match; the saved style and instructions stay.
+  clearMatchTactics(userClubState);
+  pruneInstructions(userClubState);
   sink.record({
     targetKind: 'team',
     targetId: state.userClubId,

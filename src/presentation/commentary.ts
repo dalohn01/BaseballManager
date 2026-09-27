@@ -190,7 +190,9 @@ export function buildCommentary(ctx: CommentaryContext): CommentaryStep[] {
     } else if (s.kind === 'steal' || s.kind === 'caughtStealing') {
       const r = s.runners[0];
       const target = r.to === 'out' ? r.from + 1 : r.to;
-      push({ tone: 'build', headline: null, text: `${name(r.playerId)} takes off for ${BASE_NAME[target]}…`, playerIds: [r.playerId], focus: r.playerId, state: { ...clone(base), advancing: [r.playerId], inProgress: true }, playDone: false, base: PACE.build });
+      // Only when the simulator says the attempt came from the running instruction.
+      const why = s.tactic?.kind === 'steal' ? (s.tactic.source === 'instruction' ? ' — his aggressive instruction' : ' — the aggressive running plan') : '';
+      push({ tone: 'build', headline: null, text: why ? `${name(r.playerId)} takes his chance for ${BASE_NAME[target]}${why}…` : `${name(r.playerId)} takes off for ${BASE_NAME[target]}…`, playerIds: [r.playerId], focus: r.playerId, state: { ...clone(base), advancing: [r.playerId], inProgress: true }, playDone: false, base: PACE.build });
       if (s.kind === 'steal') {
         push({ tone: 'hit', headline: 'SAFE!', text: `${name(r.playerId)} steals ${BASE_NAME[target]}.`, playerIds: [r.playerId], focus: r.playerId, state: after, playDone: true, base: PACE.big });
       } else {
@@ -389,7 +391,11 @@ export function buildCommentary(ctx: CommentaryContext): CommentaryStep[] {
       push({
         tone: 'score',
         headline: 'SCORES!',
-        text: sac ? `${name(r.playerId)} tags up and scores on the sacrifice fly.` : pick([`${name(r.playerId)} crosses home plate!`, `${name(r.playerId)} comes home to score!`]),
+        text: sac
+          ? `${name(r.playerId)} tags up and scores on the sacrifice fly.`
+          : s.tactic?.kind === 'extraBase' && s.tactic.playerId === r.playerId
+            ? `${name(r.playerId)} keeps running and scores — ${s.tactic.source === 'instruction' ? 'his aggressive instruction' : 'aggressive baserunning'} pays off!`
+            : pick([`${name(r.playerId)} crosses home plate!`, `${name(r.playerId)} comes home to score!`]),
         playerIds: [r.playerId],
         focus: r.playerId,
         state: st,
@@ -397,8 +403,32 @@ export function buildCommentary(ctx: CommentaryContext): CommentaryStep[] {
         base: PACE.score,
       });
     }
+    // A runner sent on a hit and thrown out (only aggressive running does this): its own step, after the runs.
+    if (s.outcome === 'single' || s.outcome === 'double') {
+      for (const r of others.filter((x) => x.to === 'out')) {
+        st = clone(st);
+        st.bases = st.bases.map((id) => (id === r.playerId ? null : id)) as ShownState['bases'];
+        st.advancing = st.advancing.filter((id) => id !== r.playerId);
+        st.outs = Math.min(3, st.outs + 1);
+        st.scoredId = null;
+        const target = s.outcome === 'single' && r.from === 1 ? 'third' : 'home';
+        const own = s.tactic?.kind === 'thrownOut' && s.tactic.playerId === r.playerId && s.tactic.source === 'instruction';
+        push({
+          tone: 'out',
+          headline: 'OUT AT ' + target.toUpperCase() + '!',
+          text: `${name(r.playerId)} tries for ${target} ${own ? 'on his aggressive instruction' : 'on aggressive running'} and is thrown out.`,
+          playerIds: [r.playerId],
+          focus: r.playerId,
+          state: st,
+          playDone: false,
+          base: PACE.big,
+        });
+      }
+    }
     const settling = others.filter((r) => r.to !== 4 && r.to !== 'out' && r.to !== r.from);
-    const parts = settling.map((r) => `${name(r.playerId)} to ${BASE_NAME[r.to as number]}.`);
+    const parts = settling.map((r) =>
+      s.tactic?.kind === 'extraBase' && s.tactic.playerId === r.playerId ? `${name(r.playerId)} takes ${BASE_NAME[r.to as number]} on aggressive running.` : `${name(r.playerId)} to ${BASE_NAME[r.to as number]}.`,
+    );
     if (batterMove && batterMove.to !== 'out' && batterMove.to !== 4) parts.push(`${name(batterMove.playerId)} to ${BASE_NAME[batterMove.to]}.`);
     const final: ShownState = { ...clone(after), batterId: null, advancing: [], scoredId: null, inProgress: false };
     if (parts.length) {

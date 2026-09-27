@@ -10,7 +10,7 @@ import type {
 } from './types';
 import { BALANCE } from '../balance/config';
 
-export const SCHEMA_VERSION = 6;
+export const SCHEMA_VERSION = 7;
 
 export type EventType =
   | 'leagueGame'

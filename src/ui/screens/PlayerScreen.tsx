@@ -11,6 +11,7 @@ import { overall, overallTier, potentialOverall, TIER_LABEL } from '../../domain
 import { Icon } from '../components/icons';
 import { avg3, era, ip, moneyExact, potentialLabel, PRIORITY_LABEL, PRIORITY_TEXT, ROLE_LABEL } from '../format';
 import { href, useController, useGame, useSnapshot } from '../hooks';
+import { instructionSummary, InstructionsEditor } from '../tactics/TacticsControls';
 
 const HITTER_KEYS: RatingKey[] = ['contact', 'power', 'speed', 'fielding'];
 const PITCHER_KEYS: RatingKey[] = ['pitching', 'fielding'];
@@ -269,9 +270,28 @@ export function PlayerScreen({ id }: { id: string }) {
               </div>
             </div>
           )}
+          {p.clubId === s.userClubId && <PlayerInstructions id={p.id} />}
         </Panel>
       </div>
     </div>
+  );
+}
+
+/** Optional exceptions to the team plan; closed by default, "Follow team" unless changed. */
+function PlayerInstructions({ id }: { id: string }) {
+  const s = useGame();
+  const p = s.players[id];
+  const summary = instructionSummary(s, p);
+  const own = summary !== 'Follow team';
+  return (
+    <details className="instr-panel">
+      <summary>
+        <span>Instructions</span>
+        <span className={`tag ${own ? 'tag-warn' : 'tag-neutral'}`}>{own ? 'Own instructions' : 'Follow team'}</span>
+      </summary>
+      <p className="small muted">{own ? `Differs from the team plan: ${summary}.` : 'He plays the team plan. Add an exception only where it suits him.'} Applies from the next match.</p>
+      <InstructionsEditor player={p} scope="default" />
+    </details>
   );
 }
 

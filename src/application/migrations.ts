@@ -1,4 +1,5 @@
 import { defaultPitchingPlan } from '../domain/lineup';
+import { defaultTactics } from '../domain/tactics';
 import { createRng } from '../domain/rng';
 import { SCHEMA_VERSION, type GameState } from '../domain/state';
 import { buildEvent, planPreseason } from '../events/planner';
@@ -79,6 +80,11 @@ export function migrate(input: AnyState): GameState {
     // Proposals still waiting in the plan become a happening; an open or pre-built one keeps working (legacy template).
     for (const q of s.queue) if (q.templateId === 'facility_expansion') q.templateId = 'facility_training_clinic';
     s.schemaVersion = 6;
+  }
+  if (s.schemaVersion === 6) {
+    // Tactics: older saves play Balanced and every player follows the team.
+    for (const c of Object.values(s.clubs)) c.tactics ??= defaultTactics();
+    s.schemaVersion = 7;
   }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;
