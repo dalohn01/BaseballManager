@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { PlayerAvatar } from '../components/PlayerAvatar';
 import type { EventInstance } from '../../domain/state';
 import { clubName, shortName } from '../../domain/state';
 import type { ClubId, MatchResult, PlayerId } from '../../domain/types';
 import { buildCommentary, gameSoFar, ordinalOf, todayLine, type CommentaryStep } from '../../presentation/commentary';
-import { Avatar, Crest } from '../components/art';
+import { Crest } from '../components/art';
 import { Icon } from '../components/icons';
 import { useGame, useReducedMotion } from '../hooks';
 import { MatchSummary } from '../screens/MatchView';
@@ -333,7 +334,7 @@ function Players({ match, steps, index }: { match: MatchResult; steps: Commentar
     <div className="cm-players">
       {batter && (
         <div className="ap">
-          <Avatar player={batter} club={s.clubs[batter.clubId] ?? s.clubs[focus.clubId]} size={56} />
+          <PlayerAvatar player={batter} club={s.clubs[batter.clubId] ?? s.clubs[focus.clubId]} size={56} />
           <div>
             <small>{focus.label}</small>
             <strong>
@@ -347,7 +348,7 @@ function Players({ match, steps, index }: { match: MatchResult; steps: Commentar
       )}
       {pitcher && (
         <div className="ap">
-          <Avatar player={pitcher} club={s.clubs[pitcher.clubId] ?? s.clubs[match.homeId]} size={56} />
+          <PlayerAvatar player={pitcher} club={s.clubs[pitcher.clubId] ?? s.clubs[match.homeId]} size={56} />
           <div>
             <small>Pitching</small>
             <strong>
@@ -381,7 +382,7 @@ function LastRun({ steps, index, match }: { steps: CommentaryStep[]; index: numb
         <p className="muted small cm-norun">No runs yet.</p>
       ) : (
         <div className="ap">
-          <Avatar player={p} club={s.clubs[p.clubId] ?? s.clubs[clubId]} size={56} />
+          <PlayerAvatar player={p} club={s.clubs[p.clubId] ?? s.clubs[clubId]} size={56} />
           <div>
             <strong>
               {p.firstName} {p.lastName}

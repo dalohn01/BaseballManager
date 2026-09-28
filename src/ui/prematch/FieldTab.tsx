@@ -13,14 +13,16 @@ const SPOT: Record<LineupPosition | 'P', { left: number; top: number }> = {
   LF: { left: 3, top: 5 },
   CF: { left: 36, top: 1 },
   RF: { left: 69, top: 5 },
-  SS: { left: 12, top: 28 },
-  '2B': { left: 60, top: 28 },
-  '3B': { left: 2, top: 52 },
+  SS: { left: 12, top: 31 },
+  '2B': { left: 60, top: 31 },
+  '3B': { left: 2, top: 54 },
   P: { left: 36, top: 50 },
-  '1B': { left: 70, top: 52 },
+  '1B': { left: 70, top: 54 },
   DH: { left: 2, top: 77 },
   C: { left: 36, top: 76 },
 };
+
+const MAX_TOP = Math.max(...Object.values(SPOT).map((s) => s.top));
 
 type Selection = { kind: 'slot'; index: number } | { kind: 'pitcher' } | null;
 type Proposal = { kind: 'bench'; index: number; inId: PlayerId } | { kind: 'positions'; a: number; b: number } | { kind: 'starter'; inId: PlayerId } | null;
@@ -81,7 +83,8 @@ export function FieldTab({ api }: { api: DraftApi }) {
               api={api}
               player={p}
               pos={slot.position}
-              style={{ left: `${pos.left}%`, top: `${pos.top}%` }}
+              // Rows are spread over the board height minus one card, so the bottom row never spills out on short screens.
+              style={{ left: `${pos.left}%`, top: `calc((100% - var(--pm-card-h)) * ${(pos.top / MAX_TOP).toFixed(3)})` }}
               selected={selected}
               onClick={() => clickSlot(i)}
               onDropPlayer={(id) => clickBench(id, i)}
@@ -108,7 +111,7 @@ export function FieldTab({ api }: { api: DraftApi }) {
                   onClick={() => clickBench(p.id)}
                   aria-label={`Compare ${playerName(p)}`}
                 >
-                  <Portrait state={s} player={p} size={44} />
+                  <Portrait state={s} player={p} size={44} nested />
                   <span className="bi-main">
                     <strong>{playerName(p)}</strong>
                     <small>{p.isPitcher ? 'P' : p.positions.join(' / ')}</small>
@@ -174,7 +177,7 @@ function PositionCard({
       aria-pressed={selected}
       aria-label={`${pos}: ${playerName(player)}${battingSpot ? `, batting ${battingSpot}` : ''}. Select to swap.`}
     >
-      <Portrait state={s} player={player} size={46} />
+      <Portrait state={s} player={player} size={46} nested />
       <span className="pc-main">
         <span className="pc-top">
           <PosBadge pos={pos} />

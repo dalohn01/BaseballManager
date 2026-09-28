@@ -48,8 +48,18 @@ export function PlayerScreen({ id }: { id: string }) {
 
   return (
     <div className="page">
-      <a className="back" href={href('team')}>
-        <Icon name="back" size={18} /> Back to roster
+      {/* Portraits link here from many views (lineup, match, events): Back returns to where you came from. */}
+      <a
+        className="back"
+        href={href('team')}
+        onClick={(e) => {
+          if (history.length > 1) {
+            e.preventDefault();
+            history.back();
+          }
+        }}
+      >
+        <Icon name="back" size={18} /> Back
       </a>
       <div className="profile-grid">
         <Panel className="profile-card">

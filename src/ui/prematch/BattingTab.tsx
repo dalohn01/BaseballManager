@@ -1,9 +1,9 @@
 import { useState } from 'react';
+import { PlayerAvatar } from '../components/PlayerAvatar';
 import { moveBatter } from '../../domain/lineupDraft';
 import { battingStats, fmtRate, playerNotes } from '../../domain/playerStats';
 import { overall } from '../../domain/ratings';
 import { playerName } from '../../domain/state';
-import { Avatar } from '../components/art';
 import { Icon } from '../components/icons';
 import type { DraftApi } from './PreMatchScreen';
 import { instructionSummary } from '../tactics/TacticsControls';
@@ -100,7 +100,7 @@ export function BattingTab({ api }: { api: DraftApi }) {
                   <span className="order-num">{i + 1}</span>
                   <PosBadge pos={slot.position} />
                   <span className="order-name">
-                    <Avatar player={pl} club={s.clubs[pl.clubId]} size={34} />
+                    <PlayerAvatar player={pl} club={s.clubs[pl.clubId]} size={34} nested />
                     {playerName(pl)}
                   </span>
                   <Values vals={hitterValues(s, pl, mode, period, 'order')} />
@@ -129,7 +129,7 @@ export function BattingTab({ api }: { api: DraftApi }) {
           <h2>Selected hitter</h2>
         </header>
         <div className="hitter-card">
-          <Avatar player={p} club={s.clubs[p.clubId]} size={96} />
+          <PlayerAvatar player={p} club={s.clubs[p.clubId]} size={96} />
           <div>
             <strong className="hitter-name">{playerName(p)}</strong>
             <span className="muted">
@@ -170,7 +170,7 @@ export function BattingTab({ api }: { api: DraftApi }) {
             <li key={slot.playerId} className={i === selected ? 'on' : ''}>
               <button onClick={() => setSelected(i)} aria-label={`${i + 1}: ${s.players[slot.playerId].lastName}`}>
                 <small>{i + 1}</small>
-                <Avatar player={s.players[slot.playerId]} club={s.clubs[s.players[slot.playerId].clubId]} size={34} />
+                <PlayerAvatar player={s.players[slot.playerId]} club={s.clubs[s.players[slot.playerId].clubId]} size={34} nested />
               </button>
             </li>
           ))}

@@ -39,10 +39,12 @@ export function FacilitiesView() {
         <UpgradePanel ref={detailRef} id={selected} />
         <Happenings club={club} />
       </div>
-      <p className="fac-foot small muted">
-        <Icon name="stadium" size={18} /> {FACILITY_IDS.length} facilities · levels {FACILITY_IDS.map((id) => club.facilities[id]).join(' / ')} · Select a facility to compare upgrades.
-        {club.project && ` Construction from an older save: ${FACILITY_LABELS[club.project.facility]} → level ${club.project.toLevel}, ready after round ${club.project.completesRound - absoluteRound(s.calendar.season, 0)}.`}
-      </p>
+      {club.project && (
+        <p className="fac-foot small muted">
+          <Icon name="stadium" size={18} /> Construction from an older save: {FACILITY_LABELS[club.project.facility]} → level {club.project.toLevel}, ready after round{' '}
+          {club.project.completesRound - absoluteRound(s.calendar.season, 0)}.
+        </p>
+      )}
     </div>
   );
 }
@@ -235,7 +237,7 @@ function Happenings({ club }: { club: Club }) {
       </header>
       <div className="panel-body">
         {club.modifiers.length === 0 ? (
-          <p className="muted small">No active happenings. Events such as sponsor offers, guest clinics or breakdowns can add temporary effects here.</p>
+          <p className="muted small">No active happenings. Events such as sponsor offers, guest clinics or breakdowns add temporary effects here, separate from levels.</p>
         ) : (
           <ul className="fac-mods">
             {club.modifiers.map((m) => (
@@ -252,9 +254,11 @@ function Happenings({ club }: { club: Club }) {
             ))}
           </ul>
         )}
-        <p className="small muted fac-sep">
-          <Icon name="warning" size={16} /> Happenings are temporary and separate from facility levels.
-        </p>
+        {club.modifiers.length > 0 && (
+          <p className="small muted fac-sep">
+            <Icon name="warning" size={16} /> Happenings are temporary and separate from facility levels.
+          </p>
+        )}
       </div>
     </section>
   );

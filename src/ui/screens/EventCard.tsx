@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { PlayerAvatar } from '../components/PlayerAvatar';
 import { optionBlocker, totalCost } from '../../application/engine';
 import { BALANCE } from '../../balance/config';
 import { effectiveRating } from '../../domain/lineup';
@@ -403,7 +404,7 @@ export function Reactions({ reactions }: { reactions: { playerId: string; text: 
         const p = s.players[r.playerId];
         return (
           <li key={i}>
-            <Avatar player={p} club={s.clubs[p.clubId]} size={44} />
+            <PlayerAvatar player={p} club={s.clubs[p.clubId]} size={44} />
             <div>
               <strong>{shortName(p)}</strong>
               <q>{r.text}</q>

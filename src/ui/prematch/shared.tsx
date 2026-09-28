@@ -1,10 +1,10 @@
 import { BALANCE } from '../../balance/config';
+import { PlayerAvatar } from '../components/PlayerAvatar';
 import { fitnessLabel, moodLabel } from '../../domain/mood';
 import { battingStats, fmtEra, fmtIp, fmtRate, pitchingStats, type StatsPeriod, type StatusNote } from '../../domain/playerStats';
 import { overall, overallAt } from '../../domain/ratings';
 import type { GameState } from '../../domain/state';
 import type { LineupPosition, Player } from '../../domain/types';
-import { Avatar } from '../components/art';
 
 export type DataMode = 'attributes' | 'stats';
 
@@ -60,10 +60,10 @@ export function Notes({ notes, max = 2 }: { notes: StatusNote[]; max?: number })
   );
 }
 
-export function Portrait({ state, player, size = 52 }: { state: GameState; player: Player; size?: number }) {
+export function Portrait({ state, player, size = 52, nested = false }: { state: GameState; player: Player; size?: number; nested?: boolean }) {
   return (
     <span className="portrait">
-      <Avatar player={player} club={state.clubs[player.clubId] ?? state.clubs[state.userClubId]} size={size} />
+      <PlayerAvatar player={player} club={state.clubs[player.clubId] ?? state.clubs[state.userClubId]} size={size} nested={nested} />
       <span className="portrait-ovr" title="Overall rating">
         {overall(player)}
       </span>

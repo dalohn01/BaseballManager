@@ -1,8 +1,9 @@
 import { useEffect, useRef } from 'react';
+import { PlayerAvatar } from '../components/PlayerAvatar';
 import { ballparkName } from '../../content/ballparks';
 import { clubName } from '../../domain/state';
 import type { Club, MatchResult, Player } from '../../domain/types';
-import { Avatar, Crest } from '../components/art';
+import { Crest } from '../components/art';
 import { Icon } from '../components/icons';
 import { useGame } from '../hooks';
 
@@ -87,7 +88,7 @@ function PitcherCard({ player, club }: { player: Player | undefined; club: Club 
   if (!player) return <div className="intro-pitcher" />;
   return (
     <div className="intro-pitcher">
-      <Avatar player={player} club={club} size={72} />
+      <PlayerAvatar player={player} club={club} size={72} />
       <div>
         <strong>
           {player.firstName} {player.lastName}

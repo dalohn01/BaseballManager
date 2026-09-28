@@ -721,6 +721,10 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 .note-good { background: #e3f5e8; color: #17692f; }
 .note-info { background: var(--blue-soft); color: var(--navy); }
 .portrait { position: relative; display: inline-block; flex: none; }
+/* Clickable portraits open the player profile. */
+.avatar-link { display: inline-flex; flex: none; border-radius: 14px; cursor: pointer; line-height: 0; transition: box-shadow 0.15s; }
+.avatar-link:hover { box-shadow: 0 0 0 2px var(--blue); }
+.avatar-link:focus-visible { outline: 3px solid var(--blue); outline-offset: 2px; }
 .portrait-ovr { position: absolute; right: -4px; bottom: -4px; min-width: 22px; height: 20px; padding: 0 4px; display: grid; place-items: center; border-radius: 6px; background: var(--green-dark); color: #fff; font-family: var(--display); font-weight: 800; font-size: 0.85rem; }
 .vals { display: inline-flex; flex-wrap: wrap; gap: 4px 12px; }
 .val small { color: var(--muted); font-size: 0.75rem; margin-right: 3px; font-weight: 600; }
@@ -733,7 +737,7 @@ td.num, th.num { text-align: right; white-space: nowrap; }
 
 /* Field tab */
 .pm-field-layout { display: grid; grid-template-columns: minmax(0, 1fr) minmax(300px, 380px); gap: 14px; align-items: start; }
-.pm-board { position: relative; aspect-ratio: 4 / 3; min-height: 560px; background: #dcebd6; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.pm-board { --pm-card-h: 112px; position: relative; aspect-ratio: 4 / 3; min-height: 560px; background: #dcebd6; border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
 .pm-board-bg { position: absolute; inset: 0; width: 100%; height: 100%; }
 .pm-card {
   position: absolute; width: 29%; display: grid; grid-template-columns: auto 1fr; gap: 8px; align-items: center; text-align: left;
@@ -979,4 +983,92 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 @media (max-width: 560px) {
   .opp-kind { min-width: 0; margin-right: 4px; }
   .style-picker .segmented button { padding: 6px 10px; }
+}
+
+/* ---------- Fit to the screen on desktop ----------
+ * On wider screens the main views fit the window: compact headers, areas
+ * sized to the viewport height, and long lists scroll inside their panel.
+ * Phones keep normal page scrolling. --fit-offset is the height taken by
+ * the top bar, headers and the pinned footer above/below the fitted area.
+ */
+.pm-titles { display: flex; align-items: center; gap: 12px; }
+.pm-info { display: grid; gap: 8px; }
+.pm-info:empty { display: none; }
+@media (min-width: 721px) {
+  .crumb { margin: 6px 0 8px; }
+  .page-title { margin: 10px 0 8px; }
+  .club-head { margin-bottom: 10px; }
+  .club-head .page-title { font-size: 2.3rem; }
+  .club-tagline { font-size: 1.1rem; }
+
+  main { padding-bottom: 6px; }
+  .prematch { gap: 10px; --fit-offset: 410px; }
+  .pm-head { grid-template-columns: auto auto 1fr; gap: 18px; padding: 8px 14px; }
+  .pm-title { font-size: clamp(1.5rem, 2.2vw, 2.1rem); }
+  .pm-matchup { justify-self: start; }
+  .pm-matchup strong { font-size: 1.05rem; }
+  .pm-head .pm-toolbar { justify-self: end; background: none; border: none; padding: 0; gap: 8px; }
+  .opp-report { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 16px; margin: 0; padding: 6px 12px; }
+  .opp-head { display: contents; }
+  .opp-head strong { order: 1; }
+  .opp-report ul { order: 2; display: flex; flex-wrap: wrap; gap: 2px 18px; margin: 0; flex: 1 1 400px; }
+  .opp-report > p { order: 2; margin: 0; flex: 1; }
+  .opp-adjust { order: 3; margin-left: auto; }
+  .opp-kind { min-width: 0; margin-right: 4px; }
+  .match-plan { margin: 0; padding: 4px 12px; }
+
+  /* The field fills the window height; the side column scrolls inside. */
+  .pm-board { aspect-ratio: auto; min-height: 0; height: clamp(440px, calc(100vh - var(--fit-offset)), 700px); }
+  /* position: relative keeps visually hidden (absolute) helper text inside the scroll area. */
+  .pm-body .panel { position: relative; max-height: max(400px, calc(100vh - var(--fit-offset))); overflow: auto; }
+  .pm-body .panel > .panel-head { position: sticky; top: 0; z-index: 1; }
+  .pm-side { position: relative; max-height: max(400px, calc(100vh - var(--fit-offset))); overflow: auto; }
+  .pm-side .panel { max-height: none; overflow: visible; }
+
+  /* Batting order: tighter rows so all nine fit. */
+  .order-select { min-height: 40px; padding: 2px 10px; }
+  .order-select .avatar { width: 28px; height: 28px; }
+  .order-row:has(.order-group) { margin-top: 12px; }
+  .order-rows { gap: 3px; }
+  .hitter-card .avatar { width: 72px; height: 72px; }
+
+  /* Pitchers: starters side by side. */
+  .starter-list { grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); padding: 10px; }
+  .starter-card { padding: 8px; }
+
+  /* Lists that grow with the season scroll inside their panel. */
+  .cols-3 .table-wrap { position: relative; max-height: calc(100vh - 280px); overflow: auto; }
+  .team-grid .table-wrap thead th, .cols-3 .table-wrap thead th { position: sticky; top: 0; background: var(--card); z-index: 1; }
+}
+@media (min-width: 721px) {
+  /* Team: roster and lineup scroll inside their panels. */
+  .team-grid > .panel { position: relative; max-height: calc(100vh - 210px); overflow: auto; }
+  .team-grid > .panel > .panel-head { position: sticky; top: 0; z-index: 2; }
+  .team-grid .table-wrap { max-height: none; overflow: visible; }
+  .team-grid .table-wrap thead th { top: 59px; }
+  /* Player profile: tighter rating rows, season stats on one row. */
+  .back { margin: 8px 0 6px; }
+  .abilities li { padding: 4px 0; }
+  .name-ovr { margin-bottom: 4px; }
+  /* Facilities: shorter illustrations so both rows of cards fit. */
+  .fac-card .fac-art { height: 92px; }
+  .fac-card { gap: 8px; padding-bottom: 12px; }
+  .fac-detail { gap: 10px; padding: 14px 16px; }
+}
+@media (min-width: 1200px) {
+  .profile-main .stat-grid { grid-template-columns: repeat(6, 1fr); }
+}
+@media (min-width: 721px) {
+  /* Facilities detail: same content, less height. */
+  .fac-detail-head h2 { font-size: 1.7rem; }
+  .fac-art.small { width: 92px; }
+  .fac-lv { font-size: 1.2rem; padding: 4px 14px; }
+  .fac-cost { padding: 10px 12px; }
+  .fac-price strong { font-size: 1.9rem; }
+  .fac-buy { min-height: 48px; font-size: 1.2rem; }
+  .fac-compare th, .fac-compare td { padding: 6px 10px; }
+  .fac-happen .panel-body { padding: 10px 14px; }
+  .fac-happen .panel-head { padding: 8px 14px; }
+  .fac-happen .panel-head h2 { font-size: 1.15rem; }
+  .fac-sep { margin-top: 8px; }
 }

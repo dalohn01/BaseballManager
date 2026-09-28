@@ -126,11 +126,14 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
 
   return (
     <div className="prematch">
+      {/* One compact bar: title, matchup and the view controls, so the field gets the height. */}
       <header className="pm-head">
-        <span className="ribbon">Pre-match</span>
-        <h1 className="pm-title">Set your lineup</h1>
+        <div className="pm-titles">
+          <span className="ribbon">Pre-match</span>
+          <h1 className="pm-title">Set your lineup</h1>
+        </div>
         <div className="pm-matchup">
-          <Crest club={club} size={44} />
+          <Crest club={club} size={40} />
           <div>
             <strong>
               {club.name} <span className="muted">vs</span> {clubName(opp)}
@@ -139,12 +142,9 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
               {isHome ? 'Home' : 'Away'} · Round {ev.round}
             </small>
           </div>
-          <Crest club={opp} size={44} />
+          <Crest club={opp} size={40} />
         </div>
-        <p className="pm-tagline muted">Choose who starts. Keep your squad ready and motivated.</p>
-      </header>
-
-      <div className="pm-toolbar">
+        <div className="pm-toolbar">
         <Segmented label="View" value={tab} onChange={setAndStore<Tab>('pmTab', setTab)} options={[['field', 'Field'], ['order', 'Batting order'], ['pitchers', 'Pitchers']]} role="tablist" />
         <Segmented label="Data" value={mode} onChange={setAndStore<DataMode>('pmMode', setMode)} options={[['attributes', 'Attributes'], ['stats', 'Stats']]} />
         {mode === 'stats' && (
@@ -156,7 +156,8 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
             hint="Season: this season through the last completed game. Last 5 games: your club's five latest games (a player who did not play shows no sample)."
           />
         )}
-      </div>
+        </div>
+      </header>
 
       {notice && (
         <div className="pm-notice" role="status">
@@ -170,8 +171,10 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
         </div>
       )}
 
-      <OpponentReport gameId={String(ev.data.gameId)} onAdjust={() => setTactics({ playerId: null })} />
-      <MatchPlanSummary />
+      <div className="pm-info">
+        <OpponentReport gameId={String(ev.data.gameId)} onAdjust={() => setTactics({ playerId: null })} />
+        <MatchPlanSummary />
+      </div>
 
       <div className="pm-body">
         {tab === 'field' && <FieldTab api={api} />}

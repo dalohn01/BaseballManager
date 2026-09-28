@@ -220,7 +220,7 @@ function LineupEditor() {
 
   return (
     <Panel title="Lineup" className="lineup-panel">
-      <p className="muted small">Changing the lineup is free and never costs Time. It is used for the next league game when you pick “Your lineup”.</p>
+      <p className="muted small">Changing the lineup is free and never costs Time. It is the starting point for the next pre-match lineup.</p>
       <div className="lineup-actions">
         <button className="btn btn-small btn-secondary" onClick={() => auto('strongest')} disabled={snap.busy}>
           Auto: strongest
