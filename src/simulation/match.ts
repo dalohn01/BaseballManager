@@ -181,17 +181,18 @@ export function tacticShift(b: Pick<SimBatter, 'batting' | 'contact' | 'power'>,
 
 function rollOutcome(b: SimBatter, pitcher: SimPitcher, pitching: number, fielding: number, rng: Rng): Outcome {
   const sh = tacticShift(b, { style: pitcher.style, pitching });
-  const walk = clamp(0.085 + (50 - pitching) * 0.0012 + (b.contact - 50) * 0.0004 + sh.walk, 0.03, 0.16);
-  const k = clamp(0.215 + (pitching - b.contact) * 0.0035 + sh.k, 0.07, 0.4);
+  const O = BALANCE.match.odds;
+  const walk = clamp(O.walk + (50 - pitching) * 0.0012 + (b.contact - 50) * 0.0004 + sh.walk, 0.03, 0.16);
+  const k = clamp(O.strikeout + (pitching - b.contact) * 0.0035 + sh.k, 0.07, 0.4);
   const r = rng.next();
   if (r < k) return 'strikeout';
   if (r < k + walk) return 'walk';
-  const hitChance = clamp(0.315 + (b.contact - pitching) * 0.0022 - (fielding - 50) * 0.0018 + sh.hit, 0.18, 0.42);
+  const hitChance = clamp(O.hit + (b.contact - pitching) * 0.0022 - (fielding - 50) * 0.0018 + sh.hit, 0.18, O.hitMax);
   if (rng.next() < hitChance) {
     // The ceiling only rises when a hitter swings for power; Balanced keeps the old cap.
-    const hr = clamp((0.11 + (b.power - 50) * 0.005) * sh.hr, 0.02, sh.hr > 1 ? 0.36 : 0.28);
-    const triple = clamp(0.02 + (b.speed - 50) * 0.0008, 0.005, 0.05);
-    const dbl = clamp((0.2 + (b.power - 50) * 0.002) * sh.dbl, 0.1, 0.3);
+    const hr = clamp((O.homeRunShare + (b.power - 50) * 0.005) * sh.hr, 0.02, sh.hr > 1 ? 0.36 : 0.28);
+    const triple = clamp(O.tripleShare + (b.speed - 50) * 0.0008, 0.005, 0.05);
+    const dbl = clamp((O.doubleShare + (b.power - 50) * 0.002) * sh.dbl, 0.1, 0.3);
     const t = rng.next();
     if (t < hr) return 'homeRun';
     if (t < hr + triple) return 'triple';
@@ -203,9 +204,12 @@ function rollOutcome(b: SimBatter, pitcher: SimPitcher, pitching: number, fieldi
 
 /** Chance a runner on first tries to steal second, by speed and running style. */
 export function stealAttempt(speed: number, style: RunningStyle): number {
-  if (style === 'aggressive') return speed >= 50 ? 0.08 + (speed - 50) * 0.005 : 0.03;
-  if (style === 'cautious') return speed >= 70 ? (0.05 + (speed - 60) * 0.004) * 0.4 : 0;
-  return speed >= 60 ? 0.05 + (speed - 60) * 0.004 : 0;
+  const O = BALANCE.match.odds;
+  const usual = speed >= O.stealMinSpeed ? O.stealBase + (speed - O.stealMinSpeed) * O.stealPerSpeed : 0;
+  // Aggressive: slower runners go too, everyone more often. Cautious: only the fastest, rarely.
+  if (style === 'aggressive') return speed >= O.stealMinSpeed - 10 ? O.stealBase + 0.03 + (speed - (O.stealMinSpeed - 10)) * O.stealPerSpeed * 1.25 : 0.03;
+  if (style === 'cautious') return speed >= O.stealMinSpeed + 10 ? usual * 0.4 : 0;
+  return usual;
 }
 
 const emptyBatting = (): BattingLine => ({ pa: 0, ab: 0, h: 0, doubles: 0, triples: 0, hr: 0, rbi: 0, r: 0, bb: 0, so: 0, sb: 0 });
@@ -331,7 +335,7 @@ export function simulateMatch(input: MatchInput): MatchResult {
         if (roll < attempt) {
           // The attempt happened only because of the running instruction: tell the viewer.
           const byTactic = roll >= usual ? { playerId: r1, kind: 'steal' as const, source: runner.runningSource } : undefined;
-          const success = clamp(0.62 + (runner.speed - 50) * 0.008 - (def.team.catcherFielding - 50) * 0.004, 0.4, 0.92);
+          const success = clamp(BALANCE.match.odds.stealSuccess + (runner.speed - 50) * 0.008 - (def.team.catcherFielding - 50) * 0.004, 0.4, 0.92);
           const before = snap();
           const catcher = fielderAt('C');
           if (rng.chance(success)) {
@@ -425,13 +429,13 @@ export function simulateMatch(input: MatchInput): MatchResult {
           const next: (PlayerId | null)[] = [batter.id, null, null];
           if (b3) scored.push(b3);
           if (b2) {
-            const go = sendRunner(b2, clamp(0.6 + (speedOf(b2) - 50) * 0.008, 0.3, 0.9));
+            const go = sendRunner(b2, clamp(BALANCE.match.odds.scoreFromSecondOnSingle + (speedOf(b2) - 50) * 0.008, 0.3, 0.92));
             if (go === 'safe') scored.push(b2);
             else if (go === 'out') runnerOut();
             else next[2] = b2;
           }
           if (b1 && outs < 3) {
-            const go = next[2] ? 'held' : sendRunner(b1, clamp(0.28 + (speedOf(b1) - 50) * 0.006, 0.1, 0.55));
+            const go = next[2] ? 'held' : sendRunner(b1, clamp(BALANCE.match.odds.firstToThirdOnSingle + (speedOf(b1) - 50) * 0.006, 0.1, 0.6));
             if (go === 'safe') next[2] = b1;
             else if (go === 'out') runnerOut();
             else next[1] = b1;
@@ -450,7 +454,7 @@ export function simulateMatch(input: MatchInput): MatchResult {
           if (b3) scored.push(b3);
           if (b2) scored.push(b2);
           if (b1) {
-            const go = sendRunner(b1, clamp(0.42 + (speedOf(b1) - 50) * 0.008, 0.15, 0.75));
+            const go = sendRunner(b1, clamp(BALANCE.match.odds.scoreFromFirstOnDouble + (speedOf(b1) - 50) * 0.008, 0.15, 0.8));
             if (go === 'safe') scored.push(b1);
             else if (go === 'out') runnerOut();
             else next[2] = b1;
@@ -507,6 +511,11 @@ export function simulateMatch(input: MatchInput): MatchResult {
               bases[2] = bases[1];
               bases[1] = null;
             }
+            // Productive out: the runner on first moves up while the batter is thrown out.
+            if (bases[0] && !bases[1] && rng.chance(BALANCE.match.odds.groundOutAdvanceFromFirst)) {
+              bases[1] = bases[0];
+              bases[0] = null;
+            }
           }
           break;
         }
@@ -519,6 +528,11 @@ export function simulateMatch(input: MatchInput): MatchResult {
             bases[2] = null;
           } else {
             bLine.ab += 1;
+          }
+          // A runner on second tags up and takes third on a deep enough fly.
+          if (outs < 3 && bases[1] && !bases[2] && rng.chance(clamp(BALANCE.match.odds.tagSecondToThird + (speedOf(bases[1]) - 50) * 0.006, 0.05, 0.6))) {
+            bases[2] = bases[1];
+            bases[1] = null;
           }
           break;
         }

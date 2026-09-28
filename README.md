@@ -266,6 +266,32 @@ Alla åtgärder kontrolleras helt innan något dras. Kostnad, effekt, spärr och
 - Facility-uppgraderingar är fortsatt omedelbara.
 - Pågående orsaker appliceras per match i den befintliga matchkoden, inte vid avslutet. Därför är `ongoingDelta` 0 vid avslutet.
 
+## Matchmotorns kalibrering mot MLB
+
+Grundsannolikheterna ligger i `BALANCE.match.odds`. Spelarnas och motståndarnas betyg förskjuter dem per matchup.
+
+Uppmätt över 1 200 matcher mellan ligans lag (autouppställning, Balanced), per lag och match. MLB-värdena är ungefärliga ligasnitt för 2024.
+
+| Stat | Före | Nu | MLB ≈ |
+| --- | --- | --- | --- |
+| Runs | 3,15 | 4,28 | 4,39 (2022: 4,28) |
+| Hits | 7,05 | 8,46 | 8,2 |
+| AVG / OBP / SLG | .211 / .266 / .362 | .245 / .310 / .403 | .243 / .312 / .399 |
+| OPS | .628 | .713 | .711 |
+| BABIP | .249 | .295 | .291 |
+| HR | 1,06 | 1,15 | 1,12 |
+| K% / BB% | 23,2 / 7,0 | 23,1 / 8,8 | 22,6 / 8,2 (+1 HBP) |
+| SB / CS | 0,08 / 0,03 | 0,61 / 0,19 | ~0,74 / 0,17 |
+
+**Ändringar:**
+- Högre träffchans på bollar i spel och högre walkgrund. Walks står även för hit-by-pitch, som inte modelleras.
+- Något lägre andelar extra-bas-träffar, eftersom antalet träffar ökade.
+- Fler stöldförsök med Balanced och bättre lyckandegrad.
+- Något mer offensivt basspel på hits, som ersättning för errors och wild pitches som saknas.
+- Produktiva outs: en löpare på första avancerar ibland på en groundout, och en löpare på andra kan gå till tredje på en flyout.
+
+`tests/calibration.test.ts` fallerar om nyckeltalen glider utanför realistiska intervall.
+
 ## Spelarvärden: OVR och Fitness
 
 - **OVR (overall)** är ett tal 0–100 som visar hur bra en spelare är på sin primära position. Det är ett positionsviktat snitt av grundvärdena (`src/domain/ratings.ts`): försvaret väger tyngre för C, SS och CF, slaget för 1B, hörnytterfälten och DH, och för pitchers är det i praktiken Pitching. Nivåerna är Elite 80+, Good 70+, Solid 60+, Fringe 50+ och Weak. I lineup-listan visas OVR på just den positionen, med avdrag för att spela ur position. Potential-OVR är scoutingens intervall översatt till samma skala.

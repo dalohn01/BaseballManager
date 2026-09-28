@@ -122,6 +122,38 @@ export const BALANCE = {
     outOfPositionFieldingPenalty: 15,
     starterTiresAfterBatters: 18,
     /**
+     * Base plate-appearance odds for an average batter (50) against an average
+     * pitcher (50) and defense (50), calibrated against MLB league averages
+     * (see tests/calibration.test.ts). Ratings shift these per matchup.
+     */
+    odds: {
+      walk: 0.103,
+      strikeout: 0.215,
+      /** Chance a ball in play (not a strikeout or walk) falls for a hit. */
+      hit: 0.362,
+      hitMax: 0.47,
+      /** Shares of hits that go for extra bases (before power/speed shifts). */
+      homeRunShare: 0.095,
+      doubleShare: 0.18,
+      tripleShare: 0.015,
+      /** Balanced baserunning: runners at least this fast try to steal second. */
+      stealMinSpeed: 45,
+      stealBase: 0.1,
+      stealPerSpeed: 0.006,
+      stealSuccess: 0.72,
+      /**
+       * Extra bases on hits for an average runner (50). Set a little above MLB
+       * rates to stand in for what the engine does not model (errors, wild
+       * pitches, hit batters), so runs per game match real baseball.
+       */
+      scoreFromSecondOnSingle: 0.66,
+      firstToThirdOnSingle: 0.34,
+      scoreFromFirstOnDouble: 0.48,
+      /** Productive outs: runner on first reaches second on a groundout; runner on second tags to third on a fly out. */
+      groundOutAdvanceFromFirst: 0.45,
+      tagSecondToThird: 0.3,
+    },
+    /**
      * When the starter is replaced (one change per game). The starter is pulled after
      * `maxBatters` batters faced, or earlier once he has allowed `pullRuns` runs and
      * faced at least `minBatters`. "balanced" equals the engine's earlier fixed rule.
