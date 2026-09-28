@@ -1,4 +1,5 @@
 import { userClub } from '../../domain/state';
+import { BALANCE } from '../../balance/config';
 import { viewTime } from '../../domain/time';
 import { duration, money } from '../format';
 import { href, useGame, useNow, type Route } from '../hooks';
@@ -54,10 +55,10 @@ export function TopBar({ route }: { route: Route }) {
               </span>
             )}
           </span>
-          <span className="pill" title="Influence">
+          <span className="pill" title={`Influence ${Math.floor(s.influence)} / ${BALANCE.influence.cap}`}>
             <Icon name="influence" className="ico-influence" />
             <span className="sr-only">Influence</span>
-            {s.influence}
+            {Math.floor(s.influence)}
           </span>
           <a className="icon-btn" href={href('settings')} aria-label="Settings" aria-current={active === 'settings' ? 'page' : undefined}>
             <Icon name="gear" size={24} />

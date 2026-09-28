@@ -184,7 +184,7 @@ function EventDecision({ ev }: { ev: EventInstance }) {
                   </strong>
                   <small>
                     {p.isPitcher ? `PIT ${p.ratings.pitching}` : `CON ${p.ratings.contact} · POW ${p.ratings.power}`} · age {p.age}
-                    {theirs ? '' : ` · Sat. ${p.satisfaction}`}
+                    {theirs ? '' : ` · Sat. ${Math.round(p.satisfaction)}`}
                   </small>
                 </span>
               </a>

@@ -3,7 +3,7 @@ import { BALANCE } from '../../balance/config';
 import { absoluteRound, userClub } from '../../domain/state';
 import type { Club, FacilityId, FacilityModifier } from '../../domain/types';
 import { FACILITY_LABELS } from '../../simulation/economy';
-import { FACILITY_EFFECTS, FACILITY_IDS, FACILITY_TAGLINE, facilityUpkeep, listPrice, MAX_FACILITY_LEVEL, modifierEffect, modifiersFor, upgradeBlocker, upgradePrice } from '../../simulation/facilities';
+import { FACILITY_EFFECTS, FACILITY_IDS, FACILITY_TAGLINE, facilityUpkeep, listPrice, MAX_FACILITY_LEVEL, modifierEffect, modifiersFor, upgradeBlocker, upgradePrice, cashDue, earmarkedCredit, UPGRADE_INFLUENCE } from '../../simulation/facilities';
 import { Icon } from '../components/icons';
 import { money, moneyExact } from '../format';
 import { useController, useGame, useSnapshot } from '../hooks';
@@ -105,6 +105,8 @@ function UpgradePanel({ id, ref }: { id: FacilityId; ref: Ref<HTMLElement> }) {
   const max = level >= MAX_FACILITY_LEVEL;
   const next = level + 1;
   const price = upgradePrice(club, id);
+  const due = cashDue(s, id);
+  const credit = earmarkedCredit(s, id);
   const list = listPrice(club, id);
   const blocker = upgradeBlocker(s, id);
   const discount = modifiersFor(club, id).find((m) => m.kind === 'upgradeDiscount');
@@ -184,6 +186,10 @@ function UpgradePanel({ id, ref }: { id: FacilityId; ref: Ref<HTMLElement> }) {
                     <s>{money(list!)}</s> · {Math.round(discount.value * 100)}% sponsor discount
                   </small>
                 )}
+                {credit > 0 && <small>{money(credit)} from the fundraiser · you pay {money(due)}</small>}
+                <small className="fac-inf">
+                  <Icon name="influence" size={14} /> + {UPGRADE_INFLUENCE} Influence to start (you have {Math.floor(s.influence)})
+                </small>
               </span>
             </div>
             <dl className="fac-funds">
@@ -193,7 +199,7 @@ function UpgradePanel({ id, ref }: { id: FacilityId; ref: Ref<HTMLElement> }) {
               </div>
               <div>
                 <dt>After upgrade</dt>
-                <dd className={club.cash - price! < 0 ? 'bad' : 'good'}>{moneyExact(club.cash - price!)}</dd>
+                <dd className={club.cash - due < 0 ? 'bad' : 'good'}>{moneyExact(club.cash - due)}</dd>
               </div>
               <div>
                 <dt>Running cost</dt>
@@ -202,14 +208,14 @@ function UpgradePanel({ id, ref }: { id: FacilityId; ref: Ref<HTMLElement> }) {
             </dl>
           </div>
           <button className="btn btn-primary fac-buy" onClick={buy} disabled={!!blocker || snap.busy}>
-            <Icon name="check" /> {snap.busy ? 'Saving…' : `Upgrade to level ${next} · ${money(price!)}`}
+            <Icon name="check" /> {snap.busy ? 'Saving…' : `Upgrade to level ${next} · ${money(due)} + ${UPGRADE_INFLUENCE} Influence`}
           </button>
           {blocker ? (
             <p className="blocker" role="note">
               <Icon name="warning" size={18} /> {blocker}
             </p>
           ) : (
-            <p className="small muted fac-hint">Takes effect right away. Available any time from Facilities; no Time or event needed.</p>
+            <p className="small muted fac-hint">Takes effect right away. Available any time from Facilities; no Time and no event slot needed.</p>
           )}
         </>
       )}

@@ -3,6 +3,7 @@ import { fansAfterLoss, fansCommunityDay, fansTicketPrices } from './templates/f
 import { fansProtest, mediaStanceReview, promiseFollowUp, tradeRequest } from './templates/followUps';
 import { individualProspect, individualVeteran, teamScrimmage } from './templates/individualTraining';
 import { leagueGame } from './templates/leagueGame';
+import { mediaPostgame } from './templates/media';
 import { draft, freeAgent, tryouts } from './templates/recruitment';
 import { boardCourseChange, boardUltimatum, contracts, seasonPlan, seasonReview } from './templates/season';
 import { teamTraining } from './templates/teamTraining';
@@ -35,6 +36,7 @@ export const TEMPLATES: EventTemplate[] = [
   tradeRequest,
   sponsorOffer,
   leagueGame,
+  mediaPostgame,
   seasonPlan,
   promiseFollowUp,
   mediaStanceReview,
@@ -51,4 +53,6 @@ export function getTemplate(id: string): EventTemplate {
   return t;
 }
 
-export const managementTemplates = () => TEMPLATES.filter((t) => t.slot === 'management');
+/** Club-slot templates in the weighted pool (calendar-placed board checkpoints excluded). */
+export const managementTemplates = () => TEMPLATES.filter((t) => t.slot === 'management' && !t.scheduledOnly);
+export const mediaTemplates = () => TEMPLATES.filter((t) => t.slot === 'media');

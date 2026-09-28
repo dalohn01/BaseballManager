@@ -3,9 +3,9 @@ import { BALANCE } from '../balance/config';
 export type MoodActor = 'player' | 'owners' | 'fans';
 
 const LABELS: Record<MoodActor, [string, string, string, string, string]> = {
-  player: ['Miserable', 'Unhappy', 'Content', 'Happy', 'Delighted'],
-  owners: ['Furious', 'Doubtful', 'Neutral', 'Confident', 'Delighted'],
-  fans: ['Hostile', 'Frustrated', 'Neutral', 'Supportive', 'Euphoric'],
+  player: ['Miserable', 'Unhappy', 'Uneasy', 'Content', 'Delighted'],
+  owners: ['Furious', 'Doubtful', 'Uneasy', 'Satisfied', 'Delighted'],
+  fans: ['Hostile', 'Frustrated', 'Restless', 'Supportive', 'Euphoric'],
 };
 
 export function moodBand(value: number): 0 | 1 | 2 | 3 | 4 {

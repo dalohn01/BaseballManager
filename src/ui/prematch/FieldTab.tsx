@@ -344,6 +344,6 @@ function compareRows(api: DraftApi, a: Player, b: Player, aPos: LineupPosition |
     const wb = pitcherWorkload(s, b).last;
     rows.push({ label: 'Last outing', out: wa ? `${wa.gamesAgo} game${wa.gamesAgo > 1 ? 's' : ''} ago` : 'None yet', in: wb ? `${wb.gamesAgo} game${wb.gamesAgo > 1 ? 's' : ''} ago` : 'None yet', better: null });
   }
-  rows.push(num('Fitness', a.fitness, b.fitness, (v) => `${v}%`), num('Happiness', a.satisfaction, b.satisfaction));
+  rows.push(num('Fitness', a.fitness, b.fitness, (v) => `${v}%`), num('Happiness', Math.round(a.satisfaction), Math.round(b.satisfaction)));
   return rows;
 }

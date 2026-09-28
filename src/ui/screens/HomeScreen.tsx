@@ -1,4 +1,5 @@
 import { useEffect, useRef } from 'react';
+import { CycleNotice } from './InfluenceView';
 import { BALANCE } from '../../balance/config';
 import { fitnessLabel, moodLabel } from '../../domain/mood';
 import type { GameState } from '../../domain/state';
@@ -56,6 +57,7 @@ export function HomeScreen() {
       </p>
       <div className="home-grid">
         <div className="home-main" ref={mainRef}>
+          <CycleNotice />
           <EventCard />
         </div>
         <aside className="home-left">
@@ -142,10 +144,10 @@ function PlayerNotes() {
     if (p.fitness < BALANCE.fitness.needsRestBelow && notes.length < 4) notes.push({ id: p.id, text: `Needs rest (${p.fitness}%)`, icon: 'rest' });
   }
   for (const p of [...players].sort((a, b) => a.satisfaction - b.satisfaction)) {
-    if (p.satisfaction < 45 && notes.length < 4) notes.push({ id: p.id, text: `${moodLabel('player', p.satisfaction)}: ${p.moodLog[0]?.text ?? 'wants more'}`, icon: 'warning' });
+    if (p.satisfaction < 50 && notes.length < 4) notes.push({ id: p.id, text: `${moodLabel('player', p.satisfaction)}: ${p.moodLog[0]?.text ?? 'wants more'}`, icon: 'warning' });
   }
   for (const p of [...players].sort((a, b) => b.satisfaction - a.satisfaction)) {
-    if (p.satisfaction >= 80 && notes.length < 4) notes.push({ id: p.id, text: 'Happy with his role', icon: 'person' });
+    if (p.satisfaction >= 85 && notes.length < 4) notes.push({ id: p.id, text: 'Happy with his role', icon: 'person' });
   }
   return (
     <Panel title="Player notes" action={<a className="link small" href={href('team')}>View team →</a>}>

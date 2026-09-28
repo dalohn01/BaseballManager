@@ -197,6 +197,75 @@ Exempel på kommentarer: "Miller takes his chance for second — his aggressive 
 - effektriktningar och att attribut spelar roll
 - att kommentarer bara förekommer vid registrerade taktikbeslut, och motståndarrapportens gränser
 
+## Influence, nöjdhet och matchcykel
+
+**Rytm per omgång** (`BALANCE.season.slotsPerRound`, `events/planner.ts`): klubbevent → lineup och match → eftermatchsmedia → cykelavslut. Det kostar 3 Time som tidigare, ett per beslut. Förut var det två slumpade management-event före matchen.
+
+- **Klubbplatsens prioritet:**
+  1. Kassakris
+  2. Förfallen uppföljning (högst en)
+  3. Styrelseavstämning från kalendern: Off Track en tredjedel och två tredjedelar in om laget ligger efter, Owners' Check-in vid halva säsongen
+  4. Viktat situationsevent
+  5. Team Training som reserv
+- **Mediaplatsens prioritet:**
+  1. Förfallen mediauppföljning (The Herald Revisits Your Words)
+  2. Säsongsöppnaren What's the Target?
+  3. Frustration After the Loss efter förlust
+  4. Magazine Feature ibland
+  5. Den nya generiska `media_postgame` (After the Win/Loss), som alltid finns
+- **Kassakris efter betald klubbplats:** kommer en gång som extra event utan Time (`phase: 'extra'`). Den flyttar varken match eller media.
+- **Legacy:** Facility Proposal ligger kvar med vikt 0.
+
+**Nöjdhet** (0–100, 75 neutralt): ägare, fans och varje spelare i truppen.
+- **Återgång vid varje cykelavslut:** `(75 − v) × 0,05`. Varje spelare återgår individuellt, och truppsnittet räknas efteråt utan en andra återgång.
+- **Engångseffekter** (event, match, media) appliceras när de händer och aldrig igen vid avslutet.
+- **Pågående orsaker** läggs vid matchen, en gång per match. Ett exempel är bänkad spelare med rollproblem.
+- **Decimaler:** värdena sparas med decimaler och visas som heltal.
+- **Etiketter:** banden är ändrade så att 75 läses som neutralt.
+- **Allvarliga event** (Trade Request, Protest, ultimatum) kräver minst två avslutade cykler i rad under tröskeln. Trade Request använder spelarens eget värde.
+
+**Influence** (skala 2, ×10 mot prototypen):
+- **Start och tak:** start 180 och tak 360.
+- **Påfyllning:** kommer bara vid cykelavslut, aldrig över tid.
+- **Inkomst:** per grupp `20 + s/6 + s²/750`. Tre grupper vid 75 ger 120, vid 0 ger de 60 och vid 100 ger de 150.
+- **Tak:** krediteringen stannar vid taket, och ett större migrerat saldo sparas.
+- **Säsongsbelöningar** följer samma takregel.
+- **Idempotens:** avslutet nycklas på `c-<säsong>-<omgång>` och kan aldrig köras två gånger.
+- **Visning:** påfyllningen syns diskret i nästa klubbfas och under Club → Influence, med prognos, grupper, orsaker och cykellogg.
+
+**Direktåtgärder** (`simulation/actions.ts`, kommandot `managerAction`): Influence och ibland pengar, aldrig Time eller eventplats.
+
+| Åtgärd | Kostnad | Effekt | Spärr |
+| --- | --- | --- | --- |
+| Pep talk | 40 | +3 i betyg nästa match | en per spelare och match |
+| Extra training | 60 | samma utvecklingspass som Individual program | delar programplats med eventens program och extra cage work |
+| Recovery | 60 | fitness +10 nu | samma programplats |
+| Facility upgrade | 100 plus pris | nästa nivå direkt | fundraiserpengar används som kredit |
+| Board meeting | 80 | ett ärende med exakt utfall: finansiering (delar säsongsbudget med Owners' Check-in), ompröva målet (bara om laget ligger efter) eller presentera resultat | en per 3 matcher |
+| Community initiative | 60 + $3 000 | fans +3, local +1 | en per 2 matcher, delar spärr med fanforumet i Fans Push Back |
+| Fundraiser | 100 | pengar öronmärkta för facilities efter 3 matcher, utbetalas en gång | en aktiv kampanj |
+
+Alla åtgärder kontrolleras helt innan något dras. Kostnad, effekt, spärr och logg sparas tillsammans, och `revision` stoppar dubbelklick.
+
+**Migrering v7 → v8:**
+- Influence ×10 en gång, även för sparade eventkostnader och belöningar.
+- Nöjdhetsvärden behålls.
+- Pågående omgång avslutas enligt sin gamla kö, utan media och utan cykelinkomst. Den nya cykeln startar vid nästa omgångsgräns.
+
+**Tester:** `cycle.test.ts` täcker:
+- bidragsformeln och återgången
+- taket och att ett avslut inte kan köras två gånger
+- 20-cykelsimulering, rollproblem, normal cykel (3 Time, ett avslut) och flera säsonger
+- brist på Time vid media och kassakris efter betald klubbplats
+- direktåtgärder med spärrar och delade lås, fundraiser och migrering
+
+**Avvikelser från briefen:**
+- Säsongsövergången behåller kodens ordning: draft → kontrakt → Season Complete → Season Plan.
+- Motivation fanns inte som egenskap. Pep talk ger därför en tillfällig betygsbonus nästa match.
+- Recovery ger fitness direkt, eftersom det saknas skadesystem.
+- Facility-uppgraderingar är fortsatt omedelbara.
+- Pågående orsaker appliceras per match i den befintliga matchkoden, inte vid avslutet. Därför är `ongoingDelta` 0 vid avslutet.
+
 ## Spelarvärden: OVR och Fitness
 
 - **OVR (overall)** är ett tal 0–100 som visar hur bra en spelare är på sin primära position. Det är ett positionsviktat snitt av grundvärdena (`src/domain/ratings.ts`): försvaret väger tyngre för C, SS och CF, slaget för 1B, hörnytterfälten och DH, och för pitchers är det i praktiken Pitching. Nivåerna är Elite 80+, Good 70+, Solid 60+, Fringe 50+ och Weak. I lineup-listan visas OVR på just den positionen, med avdrag för att spela ur position. Potential-OVR är scoutingens intervall översatt till samma skala.

@@ -1,4 +1,5 @@
 import { BALANCE } from '../../balance/config';
+import { boardFundingLeft, grantBoardFunding } from '../../simulation/locks';
 import { absoluteRound, clubPlayers, nextId, playerName, shortName, userClub } from '../../domain/state';
 import type { GameState } from '../../domain/state';
 import type { FacilityId, FacilityModifier } from '../../domain/types';
@@ -15,6 +16,7 @@ export const boardCheckin: EventTemplate = {
   version: 1,
   type: 'boardMeeting',
   slot: 'management',
+  scheduledOnly: true,
   cooldownRounds: 7,
   weight: (s) => (userClub(s).cash >= 0 ? 2 : 0),
   build: ({ state }) => {
@@ -53,11 +55,14 @@ export const boardCheckin: EventTemplate = {
   },
   optionBlocker: (s, _ev, id) =>
     id === 'funds' && userClub(s).ownerConfidence < BALANCE.board.investmentMinConfidence
-      ? `The owners need confidence ${BALANCE.board.investmentMinConfidence}+ to invest (now ${userClub(s).ownerConfidence}).`
-      : null,
+      ? `The owners need confidence ${BALANCE.board.investmentMinConfidence}+ to invest (now ${Math.round(userClub(s).ownerConfidence)}).`
+      : id === 'funds' && boardFundingLeft(s) < BALANCE.board.investmentFunds
+        ? "This season's board budget is used up."
+        : null,
   resolve: ({ state, sink, option }) => {
     const c = userClub(state);
     if (option.id === 'funds') {
+      grantBoardFunding(state, BALANCE.board.investmentFunds);
       sink.cash(c.id, BALANCE.board.investmentFunds, 'event', 'Owner investment');
       sink.clubMood(c.id, 'ownerConfidence', -6, 'Asked the owners for more money');
       return { headline: 'The owners open their wallets.', narrative: ['They expect to see the money put to work.'] };
@@ -429,7 +434,7 @@ export const mediaExpectations: EventTemplate = {
   id: 'media_expectations',
   version: 1,
   type: 'media',
-  slot: 'management',
+  slot: 'media',
   cooldownRounds: 8,
   weight: (s) => (s.calendar.round >= 2 ? 2 : 0),
   build: ({ state }) => {
@@ -477,7 +482,7 @@ export const mediaSpotlight: EventTemplate = {
   id: 'media_spotlight',
   version: 1,
   type: 'media',
-  slot: 'management',
+  slot: 'media',
   cooldownRounds: 8,
   weight: () => 1.5,
   build: ({ state }) => {

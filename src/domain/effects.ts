@@ -38,7 +38,7 @@ export class EffectSink {
   ): number {
     const p = this.state.players[playerId];
     const before = p[stat];
-    const after = clamp(Math.round(before + delta), 0, 100);
+    const after = clamp(before + Math.round(delta), 0, 100);
     p[stat] = after;
     if (stat === 'satisfaction' && after !== before) this.pushReason(p.moodLog, after - before, reason);
     if (opts.record !== false) {
@@ -58,7 +58,7 @@ export class EffectSink {
   clubMood(clubId: ClubId, stat: 'fanSupport' | 'ownerConfidence', delta: number, reason: string) {
     const c = this.state.clubs[clubId];
     const before = c[stat];
-    const after = clamp(Math.round(before + delta), 0, 100);
+    const after = clamp(before + Math.round(delta), 0, 100);
     c[stat] = after;
     if (after !== before) this.pushReason(c.reasons[stat], after - before, reason);
     if (c.isUser) {

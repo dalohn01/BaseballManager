@@ -10,7 +10,7 @@ import type {
 } from './types';
 import { BALANCE } from '../balance/config';
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export type EventType =
   | 'leagueGame'
@@ -113,14 +113,25 @@ export interface EventInstance {
   rerollCost: number | null;
   rerolled: boolean;
   resolution: Resolution | null;
+  /**
+   * Place in the match cycle: club event, league game, post-match media, or an
+   * extra event outside the paid slots (e.g. a cash crisis after the club slot).
+   * Absent on legacy events planned before the cycle existed.
+   */
+  phase?: CyclePhase;
 }
 
+export type CyclePhase = 'club' | 'match' | 'media' | 'extra';
+
 export interface QueuedSlot {
-  kind: 'management' | 'match' | 'seasonEnd';
+  /** 'management' is the club slot (kept for older saves), 'media' the post-match slot. */
+  kind: 'management' | 'match' | 'media' | 'seasonEnd';
   templateId: string;
   gameId: GameId | null;
   /** Set when this slot delivers a scheduled follow-up. */
   followUpId?: string;
+  /** Placed by the calendar (board checkpoint): not swapped for a weighted pick at build time. */
+  scheduled?: boolean;
 }
 
 /** A checkable commitment. Evaluated from real data (e.g. actual starts), never from text. */
@@ -251,6 +262,76 @@ export interface GameState {
   promises: PromiseRecord[];
   followUps: FollowUp[];
   seasonSummaries: SeasonSummary[];
+  /** Match cycle bookkeeping: closes, satisfaction drift and Influence income. */
+  cycle: CycleState;
+  /** Manager initiatives paid with Influence (direct actions). */
+  actions: ActionState;
+}
+
+export interface GroupChange {
+  /** Value when the cycle closed, before drift. */
+  before: number;
+  drift: number;
+  after: number;
+}
+
+/** One closed match cycle: exactly one per league round, saved with the close. */
+export interface CycleRecord {
+  id: string;
+  season: number;
+  round: number;
+  board: GroupChange;
+  fans: GroupChange;
+  /** Squad mean (each player drifts individually; the mean is not drifted again). */
+  players: GroupChange;
+  contributions: { board: number; fans: number; players: number };
+  income: number;
+  credited: number;
+  balanceAfter: number;
+}
+
+export interface CycleState {
+  /** Id of the last closed cycle ("c-<season>-<round>"): a close for the same id never runs twice. */
+  lastClosedId: string | null;
+  /** League games completed by the user's club (all seasons); durations and cooldowns count these. */
+  matchesPlayed: number;
+  /** Closed cycles, newest last (capped). */
+  log: CycleRecord[];
+  /** Cycle whose income has not been shown in the club phase yet. */
+  unseen: string | null;
+  /** Scheduled board checkpoints already handled, e.g. "1:third", "1:mid". */
+  boardChecks: string[];
+  /** Consecutive closed cycles below the serious-event thresholds. */
+  lowStreak: { owners: number; fans: number; players: Record<PlayerId, number> };
+}
+
+export type ActionKind = 'pepTalk' | 'extraTraining' | 'recovery' | 'boardMeeting' | 'communityInitiative' | 'fundraiser';
+
+export interface ActionRecord {
+  id: string;
+  kind: ActionKind | 'facilityUpgrade';
+  target: string | null;
+  option: string | null;
+  cost: { influence: number; cash: number };
+  season: number;
+  round: number;
+  summary: string;
+}
+
+export interface ActionState {
+  /** matchesPlayed when an action (or the event option sharing its lock) was last used. Keys: action kind or "pepTalk:<playerId>". */
+  lastUse: Record<string, number>;
+  /** One individual program per player (event or direct), active until the given matchesPlayed. */
+  programs: Record<PlayerId, { kind: 'training' | 'recovery'; until: number; source: string }>;
+  /** Players motivated for their next league game (pep talk). */
+  motivated: PlayerId[];
+  /** Active fundraiser: pays out once when it ends. */
+  fundraiser: { purpose: string; startedAt: number; endsAt: number; amount: number } | null;
+  /** Money raised for facility upgrades only (a credit, not free cash). */
+  earmarked: number;
+  /** Board money granted this season (events and meetings share it). */
+  boardFunding: { season: number; granted: number };
+  log: ActionRecord[];
 }
 
 export const absoluteRound = (season: number, round: number) =>

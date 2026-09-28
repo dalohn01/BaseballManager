@@ -1,4 +1,8 @@
 import { BALANCE } from '../balance/config';
+import { nextId } from '../domain/state';
+import type { ActionKind } from '../domain/state';
+import { actionPreview, applyAction } from '../simulation/actions';
+import { closeCycle } from '../simulation/cycle';
 import { applyUpgrade, FACILITY_IDS, upgradeBlocker } from '../simulation/facilities';
 import { EffectSink } from '../domain/effects';
 import { autoLineup, validateLineup, validatePitchingPlan } from '../domain/lineup';
@@ -35,7 +39,9 @@ export type Command =
   /** Player exception; value 'team' = follow team. */
   | { type: 'setInstruction'; playerId: string; area: TacticArea; value: string; scope: TacticScope }
   /** Drops every match-only change; the saved plan stays. */
-  | { type: 'resetMatchTactics' };
+  | { type: 'resetMatchTactics' }
+  /** Direct manager initiative paid with Influence (and sometimes cash); never Time or an event slot. */
+  | { type: 'managerAction'; kind: ActionKind; target: string | null; option: string | null; revision: number };
 
 export type CommandError = { ok: false; code: 'stale' | 'duplicate' | 'invalid' | 'unaffordable'; error: string };
 export type CommandResult = { ok: true; state: GameState } | CommandError;
@@ -173,6 +179,30 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       next.revision += 1;
       return { ok: true, state: next };
     }
+    case 'managerAction': {
+      // The revision makes a repeated click or a second tab fail instead of paying twice.
+      if (cmd.revision !== state.revision) return fail('stale', 'The club changed since this screen was opened.');
+      const pv = actionPreview(state, cmd.kind, cmd.target, cmd.option);
+      if (pv.blocker) return fail(pv.blocker.startsWith('Needs') ? 'unaffordable' : 'invalid', pv.blocker);
+      const next = structuredClone(state);
+      const rng = createRng(next.rngState);
+      const sink = new EffectSink(next, null);
+      const summary = applyAction(next, cmd.kind, cmd.target, cmd.option, sink, rng);
+      next.actions.log.push({
+        id: nextId(next, 'act'),
+        kind: cmd.kind,
+        target: cmd.target,
+        option: cmd.option,
+        cost: pv.cost,
+        season: next.calendar.season,
+        round: next.calendar.round,
+        summary,
+      });
+      if (next.actions.log.length > 60) next.actions.log.splice(0, next.actions.log.length - 60);
+      next.rngState = rng.getState();
+      next.revision += 1;
+      return { ok: true, state: next };
+    }
     case 'resetMatchTactics': {
       const next = structuredClone(state);
       clearMatchTactics(userClub(next));
@@ -187,6 +217,7 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       if (blocker) return fail(blocker.startsWith('Not enough') ? 'unaffordable' : 'invalid', blocker);
       const next = structuredClone(state);
       applyUpgrade(next, cmd.facility, new EffectSink(next, null));
+      next.actions.log.push({ id: nextId(next, 'act'), kind: 'facilityUpgrade', target: cmd.facility, option: null, cost: { influence: BALANCE.actions.facilityUpgrade.influence, cash: 0 }, season: next.calendar.season, round: next.calendar.round, summary: `Upgraded ${cmd.facility}` });
       next.revision += 1;
       return { ok: true, state: next };
     }
@@ -313,6 +344,10 @@ function resolveEvent(state: GameState, cmd: Extract<Command, { type: 'resolveEv
     costPaid: cost,
     effects: sink.records,
   });
+
+  // The media decision closes the match cycle: drift and Influence income, saved together
+  // with the decision. The close is keyed by round, so it can never run twice.
+  if (ev.phase === 'media') closeCycle(next, ev.season, ev.round);
 
   next.nextEvent = prepareNextEvent(next, rng, ev);
   next.rngState = rng.getState();

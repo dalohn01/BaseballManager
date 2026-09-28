@@ -1,4 +1,5 @@
 import { defaultPitchingPlan } from '../domain/lineup';
+import { cycleId, defaultActions, defaultCycle } from '../simulation/cycle';
 import { defaultTactics } from '../domain/tactics';
 import { createRng } from '../domain/rng';
 import { SCHEMA_VERSION, type GameState } from '../domain/state';
@@ -85,6 +86,29 @@ export function migrate(input: AnyState): GameState {
     // Tactics: older saves play Balanced and every player follows the team.
     for (const c of Object.values(s.clubs)) c.tactics ??= defaultTactics();
     s.schemaVersion = 7;
+  }
+  if (s.schemaVersion === 7) {
+    // Influence moved to a ×10 scale (it was start 10, costs 2). Converted exactly once:
+    // the balance, and any Influence amounts frozen in saved events. A balance above the
+    // new cap is kept; income simply pauses until it is below the cap.
+    const x10 = (n: number) => Math.round(n * 10);
+    s.influence = x10(s.influence ?? 1);
+    for (const ev of [s.currentEvent, s.nextEvent]) {
+      if (!ev) continue;
+      for (const o of ev.options) o.cost.influence = x10(o.cost.influence);
+      for (const b of ev.boosts) b.cost.influence = x10(b.cost.influence);
+      if (ev.rerollCost !== null && ev.rerollCost !== undefined) ev.rerollCost = x10(ev.rerollCost);
+      if (ev.resolution) ev.resolution.costPaid.influence = x10(ev.resolution.costPaid.influence);
+    }
+    // Satisfaction already uses 0–100 with the club's normal level around 75: values are kept as they are.
+    // The round in progress finishes on its old two-event plan (no media, no cycle income for it);
+    // the new cycle starts at the next round boundary, when the planner builds club → match → media.
+    s.cycle ??= defaultCycle();
+    s.actions ??= defaultActions();
+    const done = Object.values(s.schedule ?? []).filter((g) => g.result && (g.homeId === s.userClubId || g.awayId === s.userClubId)).length;
+    s.cycle.matchesPlayed = done;
+    s.cycle.lastClosedId = cycleId(s.calendar.season, s.calendar.round);
+    s.schemaVersion = 8;
   }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;

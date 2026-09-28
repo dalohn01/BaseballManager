@@ -5,8 +5,8 @@
 export const BALANCE = {
   season: {
     rounds: 20,
-    /** Slots per round: two management events, then the league game. */
-    slotsPerRound: ['management', 'management', 'match'] as const,
+    /** The match cycle: one club event, the league game, then post-match media (3 Time). */
+    slotsPerRound: ['management', 'match', 'media'] as const,
   },
 
   time: {
@@ -16,11 +16,39 @@ export const BALANCE = {
   },
 
   influence: {
-    start: 10,
-    trainingBoostCost: 2,
+    /** Scale 2 (×10 of the first prototype). New games start here; older saves are converted once. */
+    start: 180,
+    /** Normal storage cap; income never lifts the balance above it (a larger migrated balance is kept). */
+    cap: 360,
+    trainingBoostCost: 20,
     trainingBoostMultiplier: 1.5,
     /** Re-scouting recruitment candidates: Influence only, no Time, once per event. */
-    rerollCost: 2,
+    rerollCost: 20,
+    /** Per group: 20 + s/6 + s²/750 → 20 at 0, 40 at 75, 50 at 100 (three equal groups: 60/120/150). */
+    contribution: { base: 20, linear: 1 / 6, quadratic: 1 / 750 },
+  },
+
+  /** Post-match media: small effects so a good standard reply cannot max out support every match. */
+  media: { squad: 1, fans: 1, owners: 1, star: 3, sessionFans: 3, sessionInfluence: 20, spotlightChance: 0.35 },
+
+  satisfaction: {
+    /** Balance point every group drifts toward once per closed cycle. */
+    neutral: 75,
+    /** Share of the distance to neutral recovered per closed cycle. */
+    driftRate: 0.05,
+    /** Serious events need this many closed cycles in a row below their threshold. */
+    persistCycles: 2,
+  },
+
+  /** Direct manager actions (Influence, no Time). Durations and cooldowns count completed league games. */
+  actions: {
+    pepTalk: { influence: 40, ratingBoost: 3 },
+    extraTraining: { influence: 60, base: 45, fitness: -2, satisfaction: 2, duration: 1 },
+    recovery: { influence: 60, cash: 0, fitnessNow: 10, duration: 1 },
+    facilityUpgrade: { influence: 100 },
+    boardMeeting: { influence: 80, cooldown: 3, funding: 40_000, fundingConfidenceCost: 4, presentOnTrack: 5, presentBehind: 1, lowerTargetCost: 4 },
+    communityInitiative: { influence: 60, cash: 3_000, cooldown: 2, fans: 3, local: 1 },
+    fundraiser: { influence: 100, cooldown: 3, duration: 3, amountPerSupport: 200 },
   },
 
   roster: {
@@ -64,6 +92,8 @@ export const BALANCE = {
   board: {
     investmentFunds: 40_000,
     investmentMinConfidence: 60,
+    /** Board money per season, shared by the check-in event and direct meetings. */
+    fundingPerSeason: 80_000,
     emergencyInjection: 60_000,
     emergencyAdDeal: 35_000,
   },
@@ -148,10 +178,10 @@ export const BALANCE = {
   },
 
   seasonPlan: {
-    winNow: { winsTarget: 12, budget: 60_000, lossFanMultiplier: 1.5, met: { owners: 8, influence: 3 }, missed: { owners: -12 } },
-    rebuild: { prospectStartsTarget: 60, prospectMaxAge: 23, lossFanMultiplier: 0.5, met: { owners: 6, influence: 3, fans: 3 }, missed: { owners: -8 } },
-    balanced: { winsTarget: 10, met: { owners: 6, influence: 2 }, missed: { owners: -6 } },
-    seasonEndInfluence: 1,
+    winNow: { winsTarget: 12, budget: 60_000, lossFanMultiplier: 1.5, met: { owners: 8, influence: 30 }, missed: { owners: -12 } },
+    rebuild: { prospectStartsTarget: 60, prospectMaxAge: 23, lossFanMultiplier: 0.5, met: { owners: 6, influence: 30, fans: 3 }, missed: { owners: -8 } },
+    balanced: { winsTarget: 10, met: { owners: 6, influence: 20 }, missed: { owners: -6 } },
+    seasonEndInfluence: 10,
   },
 
   promises: {
@@ -196,8 +226,8 @@ export const BALANCE = {
     freezeRounds: 5,
   },
 
-  /** 0–19 critical, 20–39 unhappy, 40–69 neutral, 70–89 positive, 90–100 very positive. */
-  moodBands: [20, 40, 70, 90] as const,
+  /** 75 is neutral: 0–34 critical, 35–49 serious, 50–64 uneasy, 65–84 around neutral, 85–100 very positive. */
+  moodBands: [35, 50, 65, 85] as const,
 } as const;
 
 export type Balance = typeof BALANCE;

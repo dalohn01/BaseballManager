@@ -27,9 +27,11 @@ export function FitnessMeter({ value, showLabel = false }: { value: number; show
 }
 
 /** Happiness: face icon + value. */
-export function HappinessMeter({ value }: { value: number }) {
-  const tone = value < 40 ? 'bad' : value < 60 ? 'warn' : 'good';
-  const mouth = value < 40 ? 'M8 16 Q12 12 16 16' : value < 60 ? 'M8 15 H16' : 'M8 14 Q12 18 16 14';
+export function HappinessMeter({ value: exact }: { value: number }) {
+  const value = Math.round(exact);
+  // 75 is neutral: below 50 is serious, 50–64 uneasy.
+  const tone = value < 50 ? 'bad' : value < 65 ? 'warn' : 'good';
+  const mouth = value < 50 ? 'M8 16 Q12 12 16 16' : value < 65 ? 'M8 15 H16' : 'M8 14 Q12 18 16 14';
   return (
     <span className={`hap-meter hap-${tone}`} title={`Happiness ${value} · ${moodLabel('player', value)}`}>
       <svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true">

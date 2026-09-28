@@ -32,7 +32,7 @@ function playOneGame(s: GameState): GameState {
 }
 
 describe('direct facility upgrades', () => {
-  it('charges cash once, raises the level, logs it and costs no Time or event', () => {
+  it('charges cash and Influence once, raises the level, logs it and costs no Time or event', () => {
     const s = newGame(21, 'economy');
     const price = BALANCE.facilities.cost.training[0];
     const r = upgrade(s, 'training');
@@ -42,7 +42,8 @@ describe('direct facility upgrades', () => {
     expect(n.clubs.hfx.facilities.training).toBe(2);
     expect(n.clubs.hfx.cash).toBe(s.clubs.hfx.cash - price);
     expect(n.time.current).toBe(s.time.current);
-    expect(n.influence).toBe(s.influence);
+    // Starting a build is a manager initiative: Influence, never Time.
+    expect(n.influence).toBe(s.influence - BALANCE.actions.facilityUpgrade.influence);
     expect(n.currentEvent).toEqual(s.currentEvent);
     expect(n.ledger.at(-1)).toMatchObject({ category: 'facility', amount: -price });
     // A repeated click carries the old revision and is rejected: no second purchase.

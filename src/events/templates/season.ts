@@ -1,4 +1,5 @@
 import { BALANCE } from '../../balance/config';
+import { creditInfluence } from '../../simulation/cycle';
 import type { SeasonDirection, SeasonPlan } from '../../domain/state';
 import { absoluteRound, playerName, userClub } from '../../domain/state';
 import { payrollPerSeason } from '../../simulation/economy';
@@ -89,6 +90,8 @@ export const boardCourseChange: EventTemplate = {
   version: 1,
   type: 'boardMeeting',
   slot: 'management',
+  // Off Track comes at the season checkpoints (a third and two thirds in), if the team is behind.
+  scheduledOnly: true,
   cooldownRounds: 20,
   weight: (s) => {
     const g = goalProgress(s);
@@ -162,7 +165,7 @@ export const boardUltimatum: EventTemplate = {
   type: 'boardMeeting',
   slot: 'management',
   cooldownRounds: 6,
-  weight: (s) => (userClub(s).ownerConfidence < BALANCE.lowMood.ultimatumBelow ? 6 : 0),
+  weight: (s) => (userClub(s).ownerConfidence < BALANCE.lowMood.ultimatumBelow && s.cycle.lowStreak.owners >= BALANCE.satisfaction.persistCycles ? 6 : 0),
   build: ({ state }) => {
     const c = userClub(state);
     return {
@@ -338,7 +341,7 @@ export const seasonReview: EventTemplate = {
       narrative.push('No season plan was agreed.');
     }
     const before = state.influence;
-    state.influence += influenceGain;
+    creditInfluence(state, influenceGain);
     sink.record({ targetKind: 'resource', targetId: 'influence', targetLabel: 'Manager', stat: 'influence', statLabel: 'Influence', before, after: state.influence });
 
     const rec = userRecord(state);

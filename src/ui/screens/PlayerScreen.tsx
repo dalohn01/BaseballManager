@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ActionConfirm } from '../components/ActionConfirm';
 import { releaseBlocker, releaseCost } from '../../application/engine';
 import { effectiveRating } from '../../domain/lineup';
 import { BALANCE } from '../../balance/config';
@@ -281,6 +282,15 @@ export function PlayerScreen({ id }: { id: string }) {
             </div>
           )}
           {p.clubId === s.userClubId && <PlayerInstructions id={p.id} />}
+          {p.clubId === s.userClubId && (
+            <div className="player-actions">
+              <h3 className="subhead">Manager initiatives</h3>
+              <p className="small muted">Paid with Influence, no Time.{s.actions.motivated.includes(p.id) ? ' Motivated for the next game.' : ''}{s.actions.programs[p.id] ? ` Program: ${s.actions.programs[p.id].source}.` : ''}</p>
+              <ActionConfirm kind="pepTalk" target={p.id} compact />
+              <ActionConfirm kind="extraTraining" target={p.id} compact />
+              <ActionConfirm kind="recovery" target={p.id} compact />
+            </div>
+          )}
         </Panel>
       </div>
     </div>

@@ -128,6 +128,7 @@ export const mediaStanceReview: EventTemplate = {
   version: 1,
   type: 'media',
   slot: 'followUp',
+  phase: 'media',
   cooldownRounds: 0,
   weight: () => 0,
   followUpValid: (s, fu) => userClub(s).publicStance?.eventId === fu.originEventId && s.calendar.phase === 'regular',
@@ -222,7 +223,8 @@ function sinceRecord(state: GameState, fromRound: number) {
 
 function unhappiest(s: GameState): Player | undefined {
   return clubPlayers(s, s.userClubId)
-    .filter((p) => p.satisfaction < BALANCE.lowMood.tradeRequestBelow)
+    // His own value and history, not the squad average: the conflict must have lasted.
+    .filter((p) => p.satisfaction < BALANCE.lowMood.tradeRequestBelow && (s.cycle.lowStreak.players[p.id] ?? 0) >= BALANCE.satisfaction.persistCycles)
     .sort((a, b) => a.satisfaction - b.satisfaction || a.id.localeCompare(b.id))[0];
 }
 
@@ -338,7 +340,7 @@ export const fansProtest: EventTemplate = {
   type: 'fanInteraction',
   slot: 'management',
   cooldownRounds: 5,
-  weight: (s) => (userClub(s).fanSupport < BALANCE.lowMood.protestBelow ? 6 : 0),
+  weight: (s) => (userClub(s).fanSupport < BALANCE.lowMood.protestBelow && s.cycle.lowStreak.fans >= BALANCE.satisfaction.persistCycles ? 6 : 0),
   build: ({ state }) => {
     const c = userClub(state);
     const now = projectedTicketRevenue(c);

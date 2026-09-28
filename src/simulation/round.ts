@@ -1,4 +1,5 @@
 import { BALANCE } from '../balance/config';
+import { settleFundraiser } from './actions';
 import type { EffectSink } from '../domain/effects';
 import { autoLineup, bestRestedPitcher, isLineupValid } from '../domain/lineup';
 import { clearMatchTactics, pruneInstructions } from '../domain/tactics';
@@ -68,6 +69,10 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
   userClubState.lineup = { ...userClubState.lineup, pitcherId: bestRestedPitcher(state, state.userClubId) };
   // Reliever and rest applied to this game only; the hook setting is a standing preference.
   userClubState.pitchingPlan = { relieverId: null, rest: [], hook: userClubState.pitchingPlan.hook };
+  // One more completed league game for durations and cooldowns; a pep talk lasts one game.
+  state.cycle.matchesPlayed += 1;
+  state.actions.motivated = [];
+  const raised = settleFundraiser(state);
   // Match-only tactics end with the match; the saved style and instructions stay.
   clearMatchTactics(userClubState);
   pruneInstructions(userClubState);
@@ -81,6 +86,7 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
     after: Math.round(avg(clubPlayers(state, state.userClubId).map((p) => p.fitness))),
   });
   const notes: string[] = [];
+  if (raised > 0) notes.push(`Fundraiser complete: $${raised.toLocaleString('en-US')} set aside for facility upgrades.`);
   const reactions = applyUserMoods(state, userGame, match, expectedWin, sink, notes);
   notes.push(...evaluatePromises(state, sink));
   const settlement = settleRound(state, state.userClubId, userGame.homeId === state.userClubId, sink);

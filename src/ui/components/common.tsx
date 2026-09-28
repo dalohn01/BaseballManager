@@ -105,7 +105,8 @@ export function RatingBar({ value, max = 100 }: { value: number; max?: number })
 function formatValue(e: EffectRecord, v: number) {
   if (e.format === 'cash') return money(v);
   if (e.outOf) return `${v}/${e.outOf}`;
-  return String(v);
+  // Satisfaction is kept with decimals internally; the main UI shows whole numbers.
+  return String(Math.round(v));
 }
 
 /** Before → after list. Positive/negative is judged per stat (for the legacy "fatigue" stat, up is bad). */

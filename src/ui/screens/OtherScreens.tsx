@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { InfluenceView } from './InfluenceView';
 import { BALANCE } from '../../balance/config';
 import { moodLabel } from '../../domain/mood';
 import { clubName, userClub } from '../../domain/state';
@@ -17,19 +18,22 @@ export function ClubScreen({ tab }: { tab: ClubTab }) {
     <div className="page">
       <div className="club-head">
         <div>
-          <h1 className="page-title">{tab === 'facilities' ? 'Facilities' : 'Finances'}</h1>
-          <p className="muted club-tagline">{tab === 'facilities' ? 'Build your club. Shape its future.' : 'Money, owners, fans and every transaction.'}</p>
+          <h1 className="page-title">{tab === 'facilities' ? 'Facilities' : tab === 'influence' ? 'Influence' : 'Finances'}</h1>
+          <p className="muted club-tagline">{tab === 'facilities' ? 'Build your club. Shape its future.' : tab === 'influence' ? 'Your room for own initiatives — and where it comes from.' : 'Money, owners, fans and every transaction.'}</p>
         </div>
         <nav className="segmented club-tabs" aria-label="Club sections">
           <a href={href('club')} className={tab === 'facilities' ? 'on' : ''} aria-current={tab === 'facilities' ? 'page' : undefined}>
             Facilities
+          </a>
+          <a href={href('club/influence')} className={tab === 'influence' ? 'on' : ''} aria-current={tab === 'influence' ? 'page' : undefined}>
+            Influence
           </a>
           <a href={href('club/finances')} className={tab === 'finances' ? 'on' : ''} aria-current={tab === 'finances' ? 'page' : undefined}>
             Finances
           </a>
         </nav>
       </div>
-      {tab === 'facilities' ? <FacilitiesView /> : <FinancesView />}
+      {tab === 'facilities' ? <FacilitiesView /> : tab === 'influence' ? <InfluenceView /> : <FinancesView />}
     </div>
   );
 }
@@ -308,7 +312,7 @@ export function HistoryScreen() {
                     </td>
                     <td className="num">{money(x.payrollEnd)}</td>
                     <td>
-                      {x.ownerConfidence} / {x.fanSupport}
+                      {Math.round(x.ownerConfidence)} / {Math.round(x.fanSupport)}
                     </td>
                     <td>{s.clubs[x.championId]?.name}</td>
                   </tr>

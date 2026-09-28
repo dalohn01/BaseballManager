@@ -1,4 +1,5 @@
 import { BALANCE } from '../../balance/config';
+import { communityBlocker, markCommunity } from '../../simulation/locks';
 import type { GameState } from '../../domain/state';
 import { clubPlayers, playerName, shortName, userClub } from '../../domain/state';
 import { projectedTicketRevenue } from '../../simulation/economy';
@@ -81,6 +82,7 @@ export const fansTicketPrices: EventTemplate = {
       boosts: [],
     };
   },
+  optionBlocker: (s, _ev, id) => (id === 'forum' ? communityBlocker(s) : null),
   resolve: ({ state, sink, option }) => {
     const c = userClub(state);
     if (option.id === 'lower') {
@@ -91,6 +93,7 @@ export const fansTicketPrices: EventTemplate = {
       return { headline: 'Cheaper seats, warmer stands.', narrative: ['The petition is withdrawn. Expect a slightly smaller gate per fan but a friendlier crowd.'] };
     }
     if (option.id === 'forum') {
+      markCommunity(state);
       sink.clubMood(c.id, 'fanSupport', 3, 'Held an open fan forum');
       sink.brand(c.id, 'local', 2);
       return { headline: 'The forum clears the air.', narrative: ['Fans appreciated being heard, even if prices stay.'] };
@@ -193,7 +196,7 @@ export const fansAfterLoss: EventTemplate = {
   id: 'fans_after_loss',
   version: 1,
   type: 'fanInteraction',
-  slot: 'management',
+  slot: 'media',
   cooldownRounds: 3,
   weight: (s) => {
     const last = lastUserGame(s);

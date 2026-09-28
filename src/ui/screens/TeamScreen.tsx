@@ -155,8 +155,8 @@ function RosterRow({ p, starting }: { p: Player; starting: boolean }) {
       <td className="num">{p.isPitcher ? '–' : p.ratings.power}</td>
       <td className="num">{p.ratings.speed}</td>
       <td className="num">{p.ratings.fielding}</td>
-      <td className={`num ${p.satisfaction < 40 ? 'bad' : ''}`} title={moodLabel('player', p.satisfaction)}>
-        {p.satisfaction}
+      <td className={`num ${p.satisfaction < 50 ? 'bad' : ''}`} title={moodLabel('player', p.satisfaction)}>
+        {Math.round(p.satisfaction)}
       </td>
       <td className={`num ${p.fitness < BALANCE.fitness.warnBelow ? 'bad' : ''}`} title={fitnessLabel(p.fitness)}>
         {p.fitness}%

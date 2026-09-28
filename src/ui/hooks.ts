@@ -33,7 +33,7 @@ export function useNow(ms = 1000): number {
   return now;
 }
 
-export type ClubTab = 'facilities' | 'finances';
+export type ClubTab = 'facilities' | 'influence' | 'finances';
 
 export type Route =
   | { name: 'home' }
@@ -51,7 +51,7 @@ function parseHash(hash: string): Route {
       if (parts[1] === 'style') return { name: 'team', tab: 'style' };
       return parts[1] ? { name: 'player', id: parts[1] } : { name: 'team', tab: 'roster' };
     case 'club':
-      return { name: 'club', tab: parts[1] === 'finances' ? 'finances' : 'facilities' };
+      return { name: 'club', tab: parts[1] === 'finances' ? 'finances' : parts[1] === 'influence' ? 'influence' : 'facilities' };
     case 'league':
     case 'history':
     case 'settings':

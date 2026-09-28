@@ -195,10 +195,15 @@ describe('low values have different, payable consequences', () => {
   it('an unhappy player asks for a trade; unhappy owners impose a freeze; unhappy fans protest', () => {
     let s = structuredClone(toRound1(newGame(17)));
     s.players.p2.satisfaction = 20;
-    expect(getTemplate('trade_request').weight(s)).toBeGreaterThan(0);
     s.clubs.hfx.ownerConfidence = 30;
-    expect(getTemplate('board_ultimatum').weight(s)).toBeGreaterThan(0);
     s.clubs.hfx.fanSupport = 30;
+    // A single low reading is not enough: serious events need the problem to have lasted.
+    expect(getTemplate('trade_request').weight(s)).toBe(0);
+    expect(getTemplate('board_ultimatum').weight(s)).toBe(0);
+    expect(getTemplate('fans_protest').weight(s)).toBe(0);
+    s.cycle.lowStreak = { owners: 2, fans: 2, players: { p2: 2 } };
+    expect(getTemplate('trade_request').weight(s)).toBeGreaterThan(0);
+    expect(getTemplate('board_ultimatum').weight(s)).toBeGreaterThan(0);
     expect(getTemplate('fans_protest').weight(s)).toBeGreaterThan(0);
 
     for (const id of ['trade_request', 'board_ultimatum', 'fans_protest']) {

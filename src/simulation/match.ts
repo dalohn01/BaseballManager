@@ -69,15 +69,18 @@ export interface SimTeam {
 
 export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): SimTeam {
   const club = state.clubs[clubId];
+  // A pep talk lifts the player's ratings in his next game only (user club).
+  const motivation = (id: PlayerId) => (club.isUser && state.actions?.motivated.includes(id) ? BALANCE.actions.pepTalk.ratingBoost : 0);
   const batters = lineup.battingOrder.map((slot) => {
     const p = state.players[slot.playerId];
     const running = resolveTactic(club.tactics, p.id, 'baserunning');
+    const lift = motivation(p.id);
     return {
       id: p.id,
       name: p.lastName,
-      contact: effectiveRating(p, 'contact'),
-      power: effectiveRating(p, 'power'),
-      speed: effectiveRating(p, 'speed'),
+      contact: effectiveRating(p, 'contact') + lift,
+      power: effectiveRating(p, 'power') + lift,
+      speed: effectiveRating(p, 'speed') + lift,
       batting: resolveTactic(club.tactics, p.id, 'batting').value as BattingStyle,
       running: running.value as RunningStyle,
       runningSource: running.source === 'instruction' || running.source === 'matchInstruction' ? ('instruction' as const) : ('team' as const),
@@ -90,10 +93,10 @@ export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): 
 
   const sp = state.players[lineup.pitcherId];
   const pitchStyle = (id: PlayerId) => resolveTactic(club.tactics, id, 'pitching').value as PitchingStyle;
-  const starter = { id: sp.id, name: sp.lastName, pitching: effectiveRating(sp, 'pitching'), style: pitchStyle(sp.id) };
+  const starter = { id: sp.id, name: sp.lastName, pitching: effectiveRating(sp, 'pitching') + motivation(sp.id), style: pitchStyle(sp.id) };
   const plan = club.pitchingPlan;
   const rp = chooseReliever(state, clubId, sp.id, plan);
-  const reliever = rp ? { id: rp.id, name: rp.lastName, pitching: effectiveRating(rp, 'pitching'), style: pitchStyle(rp.id) } : null;
+  const reliever = rp ? { id: rp.id, name: rp.lastName, pitching: effectiveRating(rp, 'pitching') + motivation(rp.id), style: pitchStyle(rp.id) } : null;
 
   return {
     clubId,

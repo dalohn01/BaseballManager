@@ -62,12 +62,28 @@ export function upgradePrice(club: Club, id: FacilityId): number | null {
   return d ? Math.round(list * (1 - d.value)) : list;
 }
 
+/** Money raised by a fundraiser for facilities is a credit toward the price, not free cash. */
+export function earmarkedCredit(state: GameState, id: FacilityId): number {
+  const price = upgradePrice(userClub(state), id);
+  return price === null ? 0 : Math.min(state.actions.earmarked, price);
+}
+
+/** Club Cash actually charged: price after discount, minus earmarked fundraiser money. */
+export function cashDue(state: GameState, id: FacilityId): number {
+  const price = upgradePrice(userClub(state), id);
+  return price === null ? 0 : price - earmarkedCredit(state, id);
+}
+
+/** Starting a build is a manager initiative: Influence on top of the price (never on happenings' repairs). */
+export const UPGRADE_INFLUENCE = BALANCE.actions.facilityUpgrade.influence;
+
 /** Why the facility cannot be upgraded right now, or null. */
 export function upgradeBlocker(state: GameState, id: FacilityId): string | null {
   const club = userClub(state);
   if (club.facilities[id] >= MAX_FACILITY_LEVEL) return `Max level reached: the ${FACILITY_LABELS[id]} is at level ${MAX_FACILITY_LEVEL}.`;
   if (club.project?.facility === id) return 'Construction is already under way here.';
-  const price = upgradePrice(club, id)!;
+  const price = cashDue(state, id);
+  if (state.influence < UPGRADE_INFLUENCE) return `Needs ${UPGRADE_INFLUENCE} Influence to start the build (you have ${Math.floor(state.influence)}).`;
   if (club.cash < 0) return 'Cash is negative: new voluntary spending is blocked.';
   const until = club.spendingFreezeUntil;
   if (until > 0 && until >= absoluteRound(state.calendar.season, state.calendar.round)) {
@@ -86,10 +102,17 @@ export function upgradeBlocker(state: GameState, id: FacilityId): string | null 
  */
 export function applyUpgrade(state: GameState, id: FacilityId, sink: EffectSink) {
   const club = userClub(state);
-  const price = upgradePrice(club, id)!;
+  const credit = earmarkedCredit(state, id);
+  const price = cashDue(state, id);
   const before = club.facilities[id];
   const discount = discountFor(club, id);
-  sink.cash(club.id, -price, 'facility', `${FACILITY_LABELS[id]} → level ${before + 1}${discount ? ` (${Math.round(discount.value * 100)}% sponsor discount)` : ''}`);
+  const notes = [discount ? `${Math.round(discount.value * 100)}% sponsor discount` : '', credit ? `${credit.toLocaleString('en-US')} from the fundraiser` : ''].filter(Boolean).join(', ');
+  if (price > 0) sink.cash(club.id, -price, 'facility', `${FACILITY_LABELS[id]} → level ${before + 1}${notes ? ` (${notes})` : ''}`);
+  // Earmarked money is used once, for this purpose only.
+  state.actions.earmarked -= credit;
+  const inf = state.influence;
+  state.influence -= UPGRADE_INFLUENCE;
+  sink.record({ targetKind: 'resource', targetId: 'influence', targetLabel: 'Manager', stat: 'influence', statLabel: 'Influence', before: inf, after: state.influence });
   club.facilities[id] = before + 1;
   // A discount is used up by the purchase it applied to.
   if (discount) club.modifiers = club.modifiers.filter((m) => m.id !== discount.id);

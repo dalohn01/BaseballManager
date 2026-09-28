@@ -1,4 +1,5 @@
 import { BALANCE } from '../../balance/config';
+import { programBlocker, startProgram } from '../../simulation/locks';
 import { trainingModifier } from '../../simulation/economy';
 import type { GameState } from '../../domain/state';
 import { clubPlayers, playerName, userClub } from '../../domain/state';
@@ -23,7 +24,7 @@ function benchedProspect(s: GameState): Player | undefined {
     .sort((a, b) => a.satisfaction - b.satisfaction || a.id.localeCompare(b.id))[0];
 }
 
-const growthKeys = (p: Player): RatingKey[] =>
+export const growthKeys = (p: Player): RatingKey[] =>
   p.isPitcher ? ['pitching'] : (['contact', 'power', 'fielding'] as RatingKey[]).sort((a, b) => p.ratings[a] - p.ratings[b]).slice(0, 2);
 
 /** The brief's concrete example: a prospect wants a bigger role; a starter competes for the same spot. */
@@ -71,6 +72,7 @@ export const individualProspect: EventTemplate = {
   optionBlocker: (s, ev, id) => {
     const p = s.players[String(ev.data.playerId)];
     if (!p || p.clubId !== s.userClubId) return 'He is no longer with the club.';
+    if (id === 'program') return programBlocker(s, p.id);
     if (id === 'promise') {
       if (!canPromiseStarts(s)) return 'Too few games left this season for this promise.';
       if (!isInLineup(s, s.userClubId, String(ev.data.rivalId)) && !isInLineup(s, s.userClubId, p.id)) return 'His rival is not in the lineup any more.';
@@ -102,6 +104,7 @@ export const individualProspect: EventTemplate = {
       for (const k of growthKeys(p)) recordProgress(sink, p, k, applyProgress(p, k, 45, userClub(state).facilities.training, rng, mult * trainingModifier(userClub(state))));
       sink.playerMood(p.id, 'satisfaction', 2, 'Given an individual program');
       sink.playerMood(p.id, 'fitness', -2, 'Extra sessions');
+      startProgram(state, p.id, 'training', 'individual program');
       return { headline: `${p.lastName} hits the extra sessions.`, narrative: ['Development, not a promise of minutes.'] };
     }
     sink.playerMood(p.id, 'satisfaction', -5, 'Asked for a bigger role and was told no');
@@ -160,13 +163,14 @@ export const individualVeteran: EventTemplate = {
       boosts: [boost],
     };
   },
-  optionBlocker: (_s, ev, id) => (id === 'rest' && !ev.data.subId ? 'No bench player can cover his position.' : null),
+  optionBlocker: (s, ev, id) => (id === 'rest' && !ev.data.subId ? 'No bench player can cover his position.' : id === 'extra' ? programBlocker(s, String(ev.data.playerId)) : null),
   resolve: ({ state, rng, sink, option, event, boost: b }) => {
     const p = state.players[String(event.data.playerId)];
     if (option.id === 'extra') {
       const r = applyProgress(p, 'contact', 35, userClub(state).facilities.training, rng, (b ? BALANCE.influence.trainingBoostMultiplier : 1) * trainingModifier(userClub(state)));
       recordProgress(sink, p, 'contact', r);
       sink.playerMood(p.id, 'fitness', -2, 'Extra cage work');
+      startProgram(state, p.id, 'training', 'extra cage work');
       return { headline: `${p.lastName} stays late in the cage.`, narrative: [`Cost ${fmt(3_000)} for the extra coach.`] };
     }
     if (option.id === 'rest') {

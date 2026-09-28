@@ -1,4 +1,5 @@
 import { BALANCE } from '../balance/config';
+import { defaultActions, defaultCycle } from '../simulation/cycle';
 import { defaultTactics } from '../domain/tactics';
 import { AI_CLUBS, GENERATED_ROSTER_SHAPE, USER_CLUB, USER_ROSTER, type ClubSeed, type PlayerSeed } from '../content/clubs';
 import { FIRST_NAMES, LAST_NAMES } from '../content/names';
@@ -111,8 +112,8 @@ function makeClub(seed: ClubSeed, isUser: boolean): Club {
     lineup: { battingOrder: [], pitcherId: '' },
     pitchingPlan: defaultPitchingPlan(),
     cash: BALANCE.economy.startingCash,
-    ownerConfidence: 74,
-    fanSupport: 82,
+    ownerConfidence: BALANCE.satisfaction.neutral,
+    fanSupport: BALANCE.satisfaction.neutral,
     fanBase: seed.fanBase,
     brand: { local: 55, commercial: 40 },
     ticketPriceLevel: 3,
@@ -157,6 +158,8 @@ export function createNewGame(opts: NewGameOptions): GameState {
     currentEvent: null,
     nextEvent: null,
     queue: [],
+    cycle: defaultCycle(),
+    actions: defaultActions(),
     templateLastUsed: {},
     history: [],
     ledger: [],

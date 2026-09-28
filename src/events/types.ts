@@ -42,7 +42,12 @@ export interface EventTemplate {
   id: string;
   version: number;
   type: EventType;
-  slot: 'management' | 'match' | 'seasonEnd' | 'preseason' | 'followUp';
+  /** 'management' = the club slot, 'media' = the post-match media slot. */
+  slot: 'management' | 'match' | 'media' | 'seasonEnd' | 'preseason' | 'followUp';
+  /** For follow-ups: which cycle slot delivers it (default: the club slot). */
+  phase?: 'club' | 'media';
+  /** Only placed by the calendar (board checkpoints), never drawn from the weighted pool. */
+  scheduledOnly?: boolean;
   cooldownRounds: number;
   /** For follow-up templates: can this follow-up still be delivered? (e.g. the player is still here) */
   followUpValid?(state: GameState, fu: FollowUp): boolean;
