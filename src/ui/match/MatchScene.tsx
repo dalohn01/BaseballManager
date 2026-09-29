@@ -154,7 +154,7 @@ function TeamScore({ club, runs, scored, home }: { club: ReturnType<typeof useGa
     <div className={`cm-team ${home ? 'home' : ''}`}>
       <Crest club={club} size={52} />
       <span className="cm-team-name">{clubName(club)}</span>
-      <span className={`cm-runs ${scored ? 'just' : ''}`} aria-label={`${club.name} ${runs}`}>
+      <span key={scored ? `r${runs}` : 'r'} className={`cm-runs ${scored ? 'just' : ''}`} aria-label={`${club.name} ${runs}`}>
         {runs}
       </span>
       {scored > 0 && <span className="run-chip">+{scored} RUN{scored > 1 ? 'S' : ''}</span>}
@@ -204,7 +204,8 @@ function Commentary({ steps, index, match }: { steps: CommentaryStep[]; index: n
           </li>
         ))}
       </ol>
-      <div key={step.id} className={`cm-now tone-${step.tone} ${step.headline ? 'big' : ''}`} aria-live="polite" aria-atomic="true">
+      <div key={step.id} className={`cm-now tone-${step.tone} ${step.headline ? 'big' : ''} em-${step.emphasis}`} aria-live="polite" aria-atomic="true">
+        {step.badge && <span className="cm-badge">{step.badge}</span>}
         {step.headline && <strong className="cm-headline">{step.headline}</strong>}
         <p className="cm-text">{step.text}</p>
         {step.runs > 0 && (

@@ -53,7 +53,17 @@ export interface CommentaryStep {
   playDone: boolean;
   /** Runs this step added (for the "+1 RUN" chip). */
   runs: number;
+  /**
+   * How strongly the moment is highlighted: 0 routine, 1 notable (single,
+   * steal, double play), 2 big (extra-base hit, a run), 3 huge (home run,
+   * late tying or go-ahead run, walk-off). Higher levels stay longer on screen.
+   */
+  emphasis: Emphasis;
+  /** Short context tag for key moments, e.g. "GO-AHEAD RUN". */
+  badge: string | null;
 }
+
+export type Emphasis = 0 | 1 | 2 | 3;
 
 export interface CommentaryContext {
   match: MatchResult;
@@ -73,6 +83,8 @@ export const PACE = {
   inning: 1500,
   inningEnd: 1200,
   final: 2600,
+  /** Extra display time per emphasis level (0–3), so key moments linger. */
+  emphasisExtra: [0, 300, 700, 1300] as const,
   /** Extra reading time per character over `readFree`, capped at `readMax`. */
   perChar: 28,
   readFree: 48,
@@ -105,12 +117,12 @@ export function buildCommentary(ctx: CommentaryContext): CommentaryStep[] {
   let seqIndex = -1;
   const pick = (options: string[]) => options[hash(`${match.id}:${seqIndex}:${part}`) % options.length];
 
-  const push = (s: Omit<CommentaryStep, 'id' | 'index' | 'seqIndex' | 'part' | 'duration' | 'runs'> & { base: number }) => {
+  const push = (s: Omit<CommentaryStep, 'id' | 'index' | 'seqIndex' | 'part' | 'duration' | 'runs' | 'emphasis' | 'badge'> & { base: number }) => {
     const prev = steps[steps.length - 1]?.state;
     const runs = prev ? s.state.score.home + s.state.score.away - (prev.score.home + prev.score.away) : 0;
     const extra = Math.min(PACE.readMax, Math.max(0, s.text.length + (s.headline?.length ?? 0) - PACE.readFree) * PACE.perChar);
     const { base, ...rest } = s;
-    steps.push({ ...rest, id: `${match.id}:${seqIndex}:${part}`, index: steps.length, seqIndex, part, duration: base + extra, runs: Math.max(0, runs) });
+    steps.push({ ...rest, id: `${match.id}:${seqIndex}:${part}`, index: steps.length, seqIndex, part, duration: base + extra, runs: Math.max(0, runs), emphasis: 0, badge: null });
     part++;
   };
   const clone = (st: ShownState): ShownState => ({ ...st, bases: [...st.bases] as ShownState['bases'], score: { ...st.score }, advancing: [...st.advancing] });
@@ -236,6 +248,7 @@ export function buildCommentary(ctx: CommentaryContext): CommentaryStep[] {
       base: PACE.final,
     });
   }
+  applyEmphasis(steps, match);
   return steps;
 
   function plateAppearance(s: MatchSequence, before: ShownState, after: ShownState) {
@@ -518,4 +531,57 @@ export function batterFocus(match: MatchResult, steps: CommentaryStep[], index: 
   }
   const at = lastBatter ? (order.indexOf(lastBatter) + 1) % order.length : 0;
   return { id: order[at], label: 'Due up', clubId: club };
+}
+
+const LEVEL_BY_HEADLINE: Record<string, Emphasis> = {
+  'HOME RUN!': 3,
+  'GRAND SLAM!': 3,
+  'SUDDEN DEATH': 3,
+  'WALK-OFF WIN!': 3,
+  'TRIPLE!': 2,
+  'DOUBLE!': 2,
+  'BASES-LOADED WALK': 2,
+  'OUT AT HOME!': 2,
+  'OUT AT THIRD!': 2,
+  'BASE HIT!': 1,
+  'SAFE!': 1,
+  'DOUBLE PLAY!': 1,
+  'STRIKEOUT!': 1,
+  'CAUGHT STEALING': 1,
+  'PITCHING CHANGE': 1,
+  'EXTRA INNINGS': 1,
+  FINAL: 1,
+};
+
+/**
+ * Emphasis levels from what actually happened: the kind of play, runs on the
+ * step, and the game situation (a late tying or go-ahead run, a walk-off).
+ * Each level adds display time from PACE.emphasisExtra.
+ */
+function applyEmphasis(steps: CommentaryStep[], match: MatchResult) {
+  let lastRunStep = -1;
+  for (let i = 0; i < steps.length; i++) {
+    const st = steps[i];
+    let level: Emphasis = st.headline ? LEVEL_BY_HEADLINE[st.headline] ?? 0 : 0;
+    if (st.runs > 0) {
+      lastRunStep = i;
+      level = Math.max(level, 2) as Emphasis;
+      const side: 'home' | 'away' = st.state.battingClubId === match.homeId ? 'home' : 'away';
+      const other = side === 'home' ? 'away' : 'home';
+      const before = steps[i - 1]?.state.score ?? { home: 0, away: 0 };
+      const wasAhead = before[side] > before[other];
+      const nowTied = st.state.score[side] === st.state.score[other];
+      const nowAhead = st.state.score[side] > st.state.score[other];
+      if (!wasAhead && nowAhead) st.badge = 'GO-AHEAD RUN';
+      else if (!wasAhead && nowTied) st.badge = 'TIES IT';
+      // A tying or go-ahead run late in the game is a huge moment.
+      if (st.badge && st.state.inning >= 7) level = 3;
+    }
+    st.emphasis = level;
+  }
+  if (match.walkOff && lastRunStep >= 0) {
+    steps[lastRunStep].emphasis = 3;
+    steps[lastRunStep].badge = 'WALK-OFF';
+  }
+  for (const st of steps) st.duration += PACE.emphasisExtra[st.emphasis];
 }

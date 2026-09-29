@@ -158,6 +158,37 @@ describe('commentary steps', () => {
     }
   });
 
+  it('key moments get emphasis levels and extra time: home run > extra-base hit or run > single > routine', () => {
+    let seenGoAhead = false;
+    let seenWalkOff = false;
+    for (let seed = 1; seed <= 60; seed++) {
+      const { m, s } = simMatch(seed);
+      const steps = stepsFor(m, s);
+      for (let i = 0; i < steps.length; i++) {
+        const st = steps[i];
+        if (st.headline === 'HOME RUN!' || st.headline === 'GRAND SLAM!') expect(st.emphasis).toBe(3);
+        if (st.headline === 'DOUBLE!' || st.headline === 'TRIPLE!') expect(st.emphasis).toBeGreaterThanOrEqual(2);
+        if (st.headline === 'BASE HIT!') expect(st.emphasis).toBe(1);
+        if (st.runs > 0) expect(st.emphasis).toBeGreaterThanOrEqual(2);
+        if (st.tone === 'build' || (st.tone === 'routine' && !st.headline)) expect(st.emphasis).toBe(0);
+        if (st.badge === 'GO-AHEAD RUN') {
+          seenGoAhead = true;
+          const side = st.state.battingClubId === m.homeId ? 'home' : 'away';
+          const other = side === 'home' ? 'away' : 'home';
+          expect(st.state.score[side]).toBeGreaterThan(st.state.score[other]);
+          expect(steps[i - 1].state.score[side]).toBeLessThanOrEqual(steps[i - 1].state.score[other]);
+        }
+        if (st.badge === 'WALK-OFF') seenWalkOff = true;
+      }
+      if (m.walkOff) expect(steps.some((x) => x.badge === 'WALK-OFF' && x.emphasis === 3)).toBe(true);
+    }
+    expect(seenGoAhead).toBe(true);
+    expect(seenWalkOff).toBe(true);
+    // Higher levels linger longer.
+    expect(PACE.emphasisExtra[3]).toBeGreaterThan(PACE.emphasisExtra[2]);
+    expect(PACE.emphasisExtra[2]).toBeGreaterThan(PACE.emphasisExtra[1]);
+  });
+
   it('are deterministic and stable across rebuilds (ids, texts, durations)', () => {
     const { m, s } = simMatch(3);
     expect(stepsFor(m, s)).toEqual(stepsFor(m, s));
