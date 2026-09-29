@@ -1,4 +1,5 @@
 import type { ClubId, MatchResult, MatchSequence, PlayerId, RunnerMove } from '../domain/types';
+import { finishedPlays, presentedBox } from './boxscore';
 
 /**
  * Commentary presentation: turns the simulator's recorded match sequence into
@@ -442,64 +443,28 @@ export function buildCommentary(ctx: CommentaryContext): CommentaryStep[] {
   }
 }
 
-/** Hits, walks and strikeouts per club, counted only from steps already presented. */
+/*
+ * Player and team numbers for the match view all come from one model,
+ * presentedBox (presentation/boxscore.ts): only plays shown to the end count.
+ */
+
+/** Hits, walks and strikeouts per club, counted only from plays already presented. */
 export function gameSoFar(match: MatchResult, steps: CommentaryStep[], through: number) {
-  const seq = match.sequence ?? [];
-  const done = new Set<number>();
-  for (let k = 0; k <= through && k < steps.length; k++) if (steps[k].playDone && steps[k].seqIndex >= 0) done.add(steps[k].seqIndex);
-  const row = () => ({ h: 0, bb: 0, k: 0 });
-  const out: Record<string, ReturnType<typeof row>> = { [match.homeId]: row(), [match.awayId]: row() };
-  for (const i of done) {
-    const st = seq[i];
-    if (st.kind !== 'plateAppearance') continue;
-    const r = out[st.battingClubId];
-    if (['single', 'double', 'triple', 'homeRun'].includes(st.outcome!)) r.h++;
-    if (st.outcome === 'walk') r.bb++;
-    if (st.outcome === 'strikeout') r.k++;
-  }
-  return out;
+  const box = presentedBox(match, steps, through);
+  const row = (id: ClubId) => ({ h: box.teams[id].h, bb: box.teams[id].bb, k: box.teams[id].k });
+  return { [match.homeId]: row(match.homeId), [match.awayId]: row(match.awayId) };
 }
 
 /** A batter's line today (hits for at-bats), counted only from finished, presented plays. */
 export function todayLine(match: MatchResult, steps: CommentaryStep[], through: number, id: PlayerId) {
-  const seq = match.sequence ?? [];
-  let ab = 0;
-  let h = 0;
-  const seen = new Set<number>();
-  for (let k = 0; k <= through && k < steps.length; k++) {
-    const st = steps[k];
-    if (!st.playDone || st.seqIndex < 0 || seen.has(st.seqIndex)) continue;
-    seen.add(st.seqIndex);
-    const p = seq[st.seqIndex];
-    if (p.kind !== 'plateAppearance' || p.batterId !== id) continue;
-    if (p.outcome !== 'walk' && p.outcome !== 'sacFly') ab++;
-    if (['single', 'double', 'triple', 'homeRun'].includes(p.outcome!)) h++;
-  }
-  return { ab, h };
+  const l = Object.values(presentedBox(match, steps, through).batting).flat().find((x) => x.id === id);
+  return { ab: l?.ab ?? 0, h: l?.h ?? 0 };
 }
 
 /** A pitcher's line today, counted only from finished, presented plays (never ahead of the commentary). */
 export function pitcherLine(match: MatchResult, steps: CommentaryStep[], through: number, pitcherId: PlayerId) {
-  const seq = match.sequence ?? [];
-  const line = { bf: 0, outs: 0, h: 0, r: 0, bb: 0, k: 0, hr: 0 };
-  const seen = new Set<number>();
-  for (let k = 0; k <= through && k < steps.length; k++) {
-    const st = steps[k];
-    if (!st.playDone || st.seqIndex < 0 || seen.has(st.seqIndex)) continue;
-    seen.add(st.seqIndex);
-    const p = seq[st.seqIndex];
-    if (p.pitcherId !== pitcherId || p.kind === 'pitchingChange') continue;
-    const off: 'home' | 'away' = p.half === 'top' ? 'away' : 'home';
-    line.outs += Math.max(0, Math.min(3, p.after.outs) - p.before.outs);
-    line.r += p.after.score[off] - p.before.score[off];
-    if (p.kind !== 'plateAppearance') continue;
-    line.bf += 1;
-    if (['single', 'double', 'triple', 'homeRun'].includes(p.outcome!)) line.h += 1;
-    if (p.outcome === 'homeRun') line.hr += 1;
-    if (p.outcome === 'walk') line.bb += 1;
-    if (p.outcome === 'strikeout') line.k += 1;
-  }
-  return line;
+  const l = Object.values(presentedBox(match, steps, through).pitching).flat().find((x) => x.id === pitcherId);
+  return { bf: l?.bf ?? 0, outs: l?.outs ?? 0, h: l?.h ?? 0, r: l?.r ?? 0, bb: l?.bb ?? 0, k: l?.k ?? 0, hr: l?.hr ?? 0 };
 }
 
 const RESULT_LABEL: Record<string, string> = {
@@ -518,22 +483,39 @@ const RESULT_LABEL: Record<string, string> = {
 /** A batter's game so far: H–AB, runs, RBI, walks and one label per finished plate appearance. */
 export function batterToday(match: MatchResult, steps: CommentaryStep[], through: number, playerId: PlayerId) {
   const seq = match.sequence ?? [];
-  const out = { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, results: [] as string[] };
-  const seen = new Set<number>();
-  for (let k = 0; k <= through && k < steps.length; k++) {
-    const st = steps[k];
-    if (!st.playDone || st.seqIndex < 0 || seen.has(st.seqIndex)) continue;
-    seen.add(st.seqIndex);
-    const p = seq[st.seqIndex];
-    if (p.runners.some((r) => r.playerId === playerId && r.to === 4)) out.r += 1;
-    if (p.kind !== 'plateAppearance' || p.batterId !== playerId) continue;
-    const off: 'home' | 'away' = p.half === 'top' ? 'away' : 'home';
-    if (p.outcome !== 'walk' && p.outcome !== 'sacFly') out.ab += 1;
-    if (['single', 'double', 'triple', 'homeRun'].includes(p.outcome!)) out.h += 1;
-    if (p.outcome === 'walk') out.bb += 1;
-    // No RBI on a double play (engine rule).
-    if (p.outcome !== 'doublePlay') out.rbi += p.after.score[off] - p.before.score[off];
-    out.results.push(RESULT_LABEL[p.outcome!] ?? p.outcome!);
+  const l = Object.values(presentedBox(match, steps, through).batting).flat().find((x) => x.id === playerId);
+  const results = finishedPlays(steps, through)
+    .map((i) => seq[i])
+    .filter((p) => p.kind === 'plateAppearance' && p.batterId === playerId)
+    .map((p) => RESULT_LABEL[p.outcome!] ?? p.outcome!);
+  return { ab: l?.ab ?? 0, h: l?.h ?? 0, r: l?.r ?? 0, rbi: l?.rbi ?? 0, bb: l?.bb ?? 0, results };
+}
+
+/**
+ * The batter the commentary is about. While a plate appearance is being told —
+ * including its final step ("X grounds out") and the "three outs" line after
+ * it — that batter stays in focus; the next one only takes over when his own
+ * plate appearance starts. Between plays (half-inning start, pitching change,
+ * steal) the next batter is shown as due up. Panel, batting order and chips
+ * all use this one function, so they always name the same player as the text.
+ */
+export function batterFocus(match: MatchResult, steps: CommentaryStep[], index: number): { id: PlayerId; label: 'At bat' | 'Due up'; clubId: ClubId } {
+  const seq = match.sequence!;
+  const step = steps[index];
+  const club = step.state.battingClubId;
+  const cur = step.seqIndex >= 0 ? seq[step.seqIndex] : null;
+  const halfStart = step.tone === 'inning' && !step.playDone;
+  if (cur?.kind === 'plateAppearance' && !halfStart) return { id: cur.batterId!, label: 'At bat', clubId: club };
+  const side = club === match.homeId ? 'home' : 'away';
+  const order = match.lineups[side].battingOrder.map((x) => x.playerId);
+  let lastBatter: PlayerId | null = null;
+  for (let k = index; k >= 0; k--) {
+    const sq = steps[k].seqIndex >= 0 ? seq[steps[k].seqIndex] : null;
+    if (sq?.kind === 'plateAppearance' && sq.battingClubId === club && steps[k].playDone) {
+      lastBatter = sq.batterId;
+      break;
+    }
   }
-  return out;
+  const at = lastBatter ? (order.indexOf(lastBatter) + 1) % order.length : 0;
+  return { id: order[at], label: 'Due up', clubId: club };
 }

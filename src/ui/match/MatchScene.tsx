@@ -1,10 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { MatchSummaryPanel } from './MatchSummaryPanel';
 import { TEMPO, type Speed } from '../../presentation/playback';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import type { EventInstance } from '../../domain/state';
 import { clubName, shortName } from '../../domain/state';
 import type { ClubId, MatchResult, PlayerId } from '../../domain/types';
-import { batterToday, buildCommentary, gameSoFar, ordinalOf, pitcherLine, type CommentaryStep } from '../../presentation/commentary';
+import { batterFocus, batterToday, buildCommentary, ordinalOf, pitcherLine, type CommentaryStep } from '../../presentation/commentary';
 import { battingBeforeMatch, fmtRate } from '../../domain/playerStats';
 import { tiresAfterBatters } from '../../simulation/match';
 import { Crest } from '../components/art';
@@ -73,7 +74,6 @@ export function MatchScene({ ev, match }: { ev: EventInstance; match: MatchResul
 
       <aside className="cm-left">
         <BattingOrder match={match} steps={steps} index={pb.index} />
-        <GameSoFar match={match} steps={steps} index={pb.index} />
       </aside>
 
       <section className="cm-center panel" aria-label="Live commentary">
@@ -99,7 +99,7 @@ export function MatchScene({ ev, match }: { ev: EventInstance; match: MatchResul
           <SchematicField match={match} state={st} focus={step.focus} reduced={reduced} />
           {st.advancing.length > 0 && <p className="cm-advancing small">Runners advancing…</p>}
         </section>
-        <LastRun steps={steps} index={pb.index} match={match} />
+        <MatchSummaryPanel match={match} steps={steps} index={pb.index} />
       </aside>
 
       <footer className="cm-controls" aria-label="Playback">
@@ -230,26 +230,6 @@ function Commentary({ steps, index, match }: { steps: CommentaryStep[]; index: n
   );
 }
 
-/** At-bat batter while a play is told; otherwise the next batter due up. */
-function batterFocus(match: MatchResult, steps: CommentaryStep[], index: number): { id: PlayerId; label: 'At bat' | 'Due up'; clubId: ClubId } {
-  const seq = match.sequence!;
-  const step = steps[index];
-  const club = step.state.battingClubId;
-  const cur = step.seqIndex >= 0 ? seq[step.seqIndex] : null;
-  if (cur?.kind === 'plateAppearance' && !step.playDone && step.tone !== 'inning') return { id: cur.batterId!, label: 'At bat', clubId: club };
-  const side = club === match.homeId ? 'home' : 'away';
-  const order = match.lineups[side].battingOrder.map((x) => x.playerId);
-  let lastBatter: PlayerId | null = null;
-  for (let k = index; k >= 0; k--) {
-    const sq = steps[k].seqIndex >= 0 ? seq[steps[k].seqIndex] : null;
-    if (sq?.kind === 'plateAppearance' && sq.battingClubId === club && steps[k].playDone) {
-      lastBatter = sq.batterId;
-      break;
-    }
-  }
-  const at = lastBatter ? (order.indexOf(lastBatter) + 1) % order.length : 0;
-  return { id: order[at], label: 'Due up', clubId: club };
-}
 
 function BattingOrder({ match, steps, index }: { match: MatchResult; steps: CommentaryStep[]; index: number }) {
   const s = useGame();
@@ -284,40 +264,6 @@ function BattingOrder({ match, steps, index }: { match: MatchResult; steps: Comm
   );
 }
 
-function GameSoFar({ match, steps, index }: { match: MatchResult; steps: CommentaryStep[]; index: number }) {
-  const s = useGame();
-  const rows = gameSoFar(match, steps, index);
-  const score = steps[index].state.score;
-  return (
-    <section className="panel cm-sofar" aria-label="Game so far">
-      <header className="cm-head">
-        <h2>Game so far</h2>
-      </header>
-      <table className="mini-table">
-        <thead>
-          <tr>
-            <th scope="col">Team</th>
-            <th scope="col">R</th>
-            <th scope="col">H</th>
-            <th scope="col">BB</th>
-            <th scope="col">K</th>
-          </tr>
-        </thead>
-        <tbody>
-          {[match.awayId, match.homeId].map((id) => (
-            <tr key={id} className={id === s.userClubId ? 'me' : ''}>
-              <td>{s.clubs[id].name}</td>
-              <td>{id === match.homeId ? score.home : score.away}</td>
-              <td>{rows[id].h}</td>
-              <td>{rows[id].bb}</td>
-              <td>{rows[id].k}</td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </section>
-  );
-}
 
 function Players({ match, steps, index }: { match: MatchResult; steps: CommentaryStep[]; index: number }) {
   const s = useGame();
@@ -441,7 +387,7 @@ function PitcherCard({ match, pitcherId, line, fieldingClubId }: { match: MatchR
             Workload
           </span>
           <span className={`mp-workload ${status}`}>
-            {line.bf} BF · {drop > 0 ? `tired: −${drop} pitching` : `~${left} until tired`}
+            {line.bf} BF · {drop > 0 ? `tired: −${drop} pitching` : left <= 0 ? 'tires from the next batter' : `~${left} until tired`}
           </span>
           <span className="mp-bar" aria-hidden="true">
             <span style={{ width: `${Math.min(100, (line.bf / limit) * 100)}%` }} />
@@ -474,38 +420,6 @@ function PitcherCard({ match, pitcherId, line, fieldingClubId }: { match: MatchR
   );
 }
 
-/** Most recent run already presented; a fixed slot so the layout never jumps. */
-function LastRun({ steps, index, match }: { steps: CommentaryStep[]; index: number; match: MatchResult }) {
-  const s = useGame();
-  let k = index;
-  while (k >= 0 && !steps[k].state.scoredId) k--;
-  const hit = k >= 0 ? steps[k] : null;
-  const p = hit ? s.players[hit.state.scoredId!] : null;
-  const clubId = hit?.state.battingClubId ?? match.homeId;
-  const runs = hit ? hit.state.score[clubId === match.homeId ? 'home' : 'away'] : 0;
-  return (
-    <section className={`panel cm-scored ${k === index ? 'now' : ''}`} aria-label="Runs">
-      <header className="cm-head">
-        <h2>{k === index ? 'Just scored' : 'Last run'}</h2>
-      </header>
-      {!p ? (
-        <p className="muted small cm-norun">No runs yet.</p>
-      ) : (
-        <div className="ap">
-          <PlayerAvatar player={p} club={s.clubs[p.clubId] ?? s.clubs[clubId]} size={56} />
-          <div>
-            <strong>
-              {p.firstName} {p.lastName}
-            </strong>
-            <span className="muted small">
-              Run #{runs} for {s.clubs[clubId].name}
-            </span>
-          </div>
-        </div>
-      )}
-    </section>
-  );
-}
 
 function FullLog({ steps, index, match, onClose }: { steps: CommentaryStep[]; index: number; match: MatchResult; onClose: () => void }) {
   const s = useGame();

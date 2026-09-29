@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchResult, MatchSequence } from '../src/domain/types';
-import { batterToday, buildCommentary, gameSoFar, PACE, pitcherLine, todayLine, type CommentaryStep } from '../src/presentation/commentary';
+import { batterFocus, batterToday, buildCommentary, gameSoFar, PACE, pitcherLine, todayLine, type CommentaryStep } from '../src/presentation/commentary';
 import { battingBeforeMatch } from '../src/domain/playerStats';
 import { CommentaryPlayback } from '../src/presentation/playback';
 import { simMatch } from './helpers';
@@ -129,6 +129,33 @@ describe('commentary steps', () => {
     const before = battingBeforeMatch({ ...s, calendar: { ...s.calendar, season: m.season } }, p, m);
     expect([before.pa, before.ab, before.h, before.hr, before.rbi]).toEqual([20, 18, 5, 1, 4]);
     expect(before.avg).toBeCloseTo(5 / 18, 6);
+  });
+
+  it('the batter in focus (panel and batting order) is the one the commentary is about', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const { m, s } = simMatch(seed);
+      const steps = stepsFor(m, s);
+      const seq = m.sequence!;
+      for (let k = 0; k < steps.length; k++) {
+        const st = steps[k];
+        const focus = batterFocus(m, steps, k);
+        const play = st.seqIndex >= 0 ? seq[st.seqIndex] : null;
+        const halfStart = st.tone === 'inning' && !st.playDone;
+        if (play?.kind === 'plateAppearance' && !halfStart) {
+          // Every step of his plate appearance, including the result line, keeps him in focus.
+          expect(focus.id).toBe(play.batterId);
+          expect(focus.label).toBe('At bat');
+          // The result line (first step after any build-up) names him.
+          const firstResult = steps.find((x) => x.seqIndex === st.seqIndex && x.tone !== 'build' && x.tone !== 'inning');
+          if (firstResult === st && play.outcome !== 'doublePlay') expect(st.text).toContain(s.players[play.batterId!].lastName);
+        }
+        if (halfStart) {
+          // Due up at the start of a half is the one who actually bats first in it.
+          const first = seq.slice(st.seqIndex).find((p) => p.kind === 'plateAppearance');
+          if (first && first.battingClubId === st.state.battingClubId) expect(focus.id).toBe(first.batterId);
+        }
+      }
+    }
   });
 
   it('are deterministic and stable across rebuilds (ids, texts, durations)', () => {

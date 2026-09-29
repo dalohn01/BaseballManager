@@ -122,6 +122,18 @@ export const BALANCE = {
     outOfPositionFieldingPenalty: 15,
     starterTiresAfterBatters: 18,
     /**
+     * Match summary standouts: an internal score from this game only. A pick
+     * is kept unless someone is better by `margin`; below `minScore` nobody is shown.
+     */
+    standouts: {
+      slots: 2,
+      minScore: 2.5,
+      margin: 1,
+      batter: { hit: 1, extraBase: 0.5, homeRun: 1.5, rbi: 0.8, run: 0.4, walk: 0.4, out: 0.35 },
+      /** Pitchers qualify after 6 outs (two innings), so one scoreless out never beats a long outing. */
+      pitcher: { minOuts: 6, out: 0.35, strikeout: 0.25, run: 1, hitOrWalk: 0.3 },
+    },
+    /**
      * Base plate-appearance odds for an average batter (50) against an average
      * pitcher (50) and defense (50), calibrated against MLB league averages
      * (see tests/calibration.test.ts). Ratings shift these per matchup.
