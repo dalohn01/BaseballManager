@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchResult, MatchSequence } from '../src/domain/types';
-import { buildCommentary, gameSoFar, PACE, pitcherLine, todayLine, type CommentaryStep } from '../src/presentation/commentary';
+import { batterToday, buildCommentary, gameSoFar, PACE, pitcherLine, todayLine, type CommentaryStep } from '../src/presentation/commentary';
+import { battingBeforeMatch } from '../src/domain/playerStats';
 import { CommentaryPlayback } from '../src/presentation/playback';
 import { simMatch } from './helpers';
 
@@ -102,6 +103,32 @@ describe('commentary steps', () => {
       }
       expect(m.pitchStyles).toBeTruthy();
     }
+  });
+
+  it('the batter panel: today equals the box score at the end, is empty at the start, and labels every finished plate appearance', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const { m, s } = simMatch(seed);
+      const steps = stepsFor(m, s);
+      const last = steps.length - 1;
+      for (const [id, box] of Object.entries(m.batting)) {
+        const t = batterToday(m, steps, last, id);
+        expect([t.h, t.ab, t.bb, t.rbi, t.r]).toEqual([box.h, box.ab, box.bb, box.rbi, box.r]);
+        expect(t.results.length).toBe(box.pa);
+        expect(batterToday(m, steps, 0, id)).toEqual({ ab: 0, h: 0, r: 0, rbi: 0, bb: 0, results: [] });
+      }
+    }
+  });
+
+  it('season numbers exclude the saved match being watched', () => {
+    const { m, s } = simMatch(8);
+    const id = Object.keys(m.batting)[0];
+    const p = structuredClone(s.players[id]);
+    const l = m.batting[id];
+    // As if the match had already been added to his season line.
+    p.stats = { ...p.stats, games: 5, pa: 20 + l.pa, ab: 18 + l.ab, h: 5 + l.h, hr: 1 + l.hr, rbi: 4 + l.rbi, bb: 2 + l.bb, doubles: 1 + l.doubles, triples: l.triples, so: 4 + l.so };
+    const before = battingBeforeMatch({ ...s, calendar: { ...s.calendar, season: m.season } }, p, m);
+    expect([before.pa, before.ab, before.h, before.hr, before.rbi]).toEqual([20, 18, 5, 1, 4]);
+    expect(before.avg).toBeCloseTo(5 / 18, 6);
   });
 
   it('are deterministic and stable across rebuilds (ids, texts, durations)', () => {

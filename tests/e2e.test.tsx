@@ -48,7 +48,9 @@ async function advance(): Promise<string> {
     await click(intro);
     // The live view shows the pitcher's line for today and his stamina (nothing played yet).
     expect(screen.getByLabelText("Today's pitching line").textContent).toMatch(/0\.0\s*IP/);
-    expect(screen.getByText(/0 of ~\d+ batters · Fresh/)).toBeTruthy();
+    expect(screen.getByText(/^0 BF · ~\d+ until tired$/)).toBeTruthy();
+    // Today's batter line starts empty, and his season excludes the saved match.
+    expect(screen.getByLabelText('Today').textContent).toMatch(/0–0/);
     return 'intro';
   }
   const skip = screen.queryByRole('button', { name: /Skip to result/i });

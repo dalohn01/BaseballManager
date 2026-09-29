@@ -4,7 +4,8 @@ import { PlayerAvatar } from '../components/PlayerAvatar';
 import type { EventInstance } from '../../domain/state';
 import { clubName, shortName } from '../../domain/state';
 import type { ClubId, MatchResult, PlayerId } from '../../domain/types';
-import { buildCommentary, gameSoFar, ordinalOf, pitcherLine, todayLine, type CommentaryStep } from '../../presentation/commentary';
+import { batterToday, buildCommentary, gameSoFar, ordinalOf, pitcherLine, type CommentaryStep } from '../../presentation/commentary';
+import { battingBeforeMatch, fmtRate } from '../../domain/playerStats';
 import { tiresAfterBatters } from '../../simulation/match';
 import { Crest } from '../components/art';
 import { Icon } from '../components/icons';
@@ -324,27 +325,76 @@ function Players({ match, steps, index }: { match: MatchResult; steps: Commentar
   const focus = batterFocus(match, steps, index);
   const batter = s.players[focus.id];
   const pitcher = s.players[step.state.pitcherId];
-  const side = focus.clubId === match.homeId ? 'home' : 'away';
-  const pos = match.lineups[side].battingOrder.find((x) => x.playerId === focus.id)?.position;
-  const line = todayLine(match, steps, index, focus.id);
   const pl = pitcher ? pitcherLine(match, steps, index, pitcher.id) : null;
+  const fieldingClubId = step.state.battingClubId === match.homeId ? match.awayId : match.homeId;
   return (
     <div className="cm-players">
-      {batter && (
-        <div className="ap">
-          <PlayerAvatar player={batter} club={s.clubs[batter.clubId] ?? s.clubs[focus.clubId]} size={56} />
-          <div>
-            <small>{focus.label}</small>
-            <strong>
-              {batter.firstName} {batter.lastName}
-            </strong>
-            <span className="muted small">
-              {pos} · {line.ab === 0 && line.h === 0 ? 'first time up' : `${line.h} for ${line.ab} today`}
+      {batter && <BatterPanel match={match} steps={steps} index={index} playerId={batter.id} label={focus.label} clubId={focus.clubId} />}
+      {pitcher && pl && <PitcherCard match={match} pitcherId={pitcher.id} line={pl} fieldingClubId={fieldingClubId} />}
+    </div>
+  );
+}
+
+/** Rates need a few plate appearances before they mean anything. */
+const MIN_PA_FOR_RATES = 5;
+
+/**
+ * The batter in focus: identity, his season before this game (the saved
+ * match is subtracted so nothing leaks) and today's line from plays already
+ * shown. Label, name and numbers always refer to the same player.
+ */
+function BatterPanel({ match, steps, index, playerId, label, clubId }: { match: MatchResult; steps: CommentaryStep[]; index: number; playerId: string; label: 'At bat' | 'Due up'; clubId: string }) {
+  const s = useGame();
+  const p = s.players[playerId];
+  const side = clubId === match.homeId ? 'home' : 'away';
+  const pos = match.lineups[side].battingOrder.find((x) => x.playerId === playerId)?.position ?? '—';
+  const season = battingBeforeMatch(s, p, match);
+  const enough = season.pa >= MIN_PA_FOR_RATES;
+  const today = batterToday(match, steps, index, playerId);
+  const extras = [today.r ? `${today.r} R` : '', today.rbi ? `${today.rbi} RBI` : '', today.bb ? `${today.bb} BB` : ''].filter(Boolean);
+  return (
+    <div className="mp-panel mp-batter">
+      <PlayerAvatar player={p} club={s.clubs[p.clubId] ?? s.clubs[clubId]} size={104} />
+      <div className="mp-main">
+        <p className="mp-meta">
+          <span className={`mp-role ${label === 'At bat' ? 'at-bat' : ''}`}>{label}</span>
+          <span>
+            {pos} · Bats {p.bats === 'S' ? 'S (switch)' : p.bats}
+          </span>
+        </p>
+        <strong className="mp-name">
+          {p.firstName} {p.lastName}
+        </strong>
+        <div className="mp-row" aria-label="Season before this game">
+          <span className="mp-key" title={enough ? undefined : `Rates shown from ${MIN_PA_FOR_RATES} plate appearances (${season.pa} so far).`}>
+            Season
+          </span>
+          <span className="mp-stats">
+            <span>
+              <b>{enough ? fmtRate(season.avg) : '—'}</b> AVG
             </span>
-          </div>
+            <span>
+              <b>{season.hr}</b> HR
+            </span>
+            <span>
+              <b>{season.rbi}</b> RBI
+            </span>
+            <span>
+              <b>{enough ? fmtRate(season.ops) : '—'}</b> OPS
+            </span>
+          </span>
         </div>
-      )}
-      {pitcher && pl && <PitcherCard match={match} pitcherId={pitcher.id} line={pl} fieldingClubId={step.state.battingClubId === match.homeId ? match.awayId : match.homeId} />}
+        <div className="mp-row" aria-label="Today">
+          <span className="mp-key">Today</span>
+          <b className="mp-today">
+            {today.h}–{today.ab}
+          </b>
+          {extras.length > 0 && <span className="mp-extras">{extras.join(' · ')}</span>}
+          <span className="mp-chips" aria-label="Plate appearances today">
+            {today.results.length === 0 ? <span className="muted small">First time up</span> : today.results.map((r, i) => <span key={i} className="mp-chip">{r}</span>)}
+          </span>
+        </div>
+      </div>
     </div>
   );
 }
@@ -352,9 +402,10 @@ function Players({ match, steps, index }: { match: MatchResult; steps: Commentar
 const ip = (outs: number) => `${Math.floor(outs / 3)}.${outs % 3}`;
 
 /**
- * Today's pitching line (only plays already shown) and his stamina, using the
- * engine's own rule: after a set number of batters (by pitching style) every
- * further batter costs him 1 pitching. No pitch counts: the engine has none.
+ * The pitcher: identity, today's line (IP in baseball notation, only plays
+ * already shown), workload against the engine's tiring rule, and the planned
+ * automatic change. Tiring and the change plan are separate rules and may
+ * point at different moments.
  */
 function PitcherCard({ match, pitcherId, line, fieldingClubId }: { match: MatchResult; pitcherId: string; line: ReturnType<typeof pitcherLine>; fieldingClubId: string }) {
   const s = useGame();
@@ -362,38 +413,61 @@ function PitcherCard({ match, pitcherId, line, fieldingClubId }: { match: MatchR
   const style = match.pitchStyles?.[pitcherId] ?? 'balanced';
   const limit = tiresAfterBatters(style);
   const drop = Math.max(0, line.bf - limit);
-  const status = drop > 0 ? 'tired' : line.bf >= limit - 3 ? 'tiring' : 'fresh';
-  const statusText = drop > 0 ? `Tired: −${drop} pitching` : status === 'tiring' ? `Tiring soon (${limit - line.bf} batter${limit - line.bf === 1 ? '' : 's'} left)` : 'Fresh';
+  const left = limit - line.bf;
+  const status = drop > 0 ? 'tired' : left <= 3 ? 'tiring' : 'fresh';
   const side = fieldingClubId === match.homeId ? 'home' : 'away';
   const isStarter = match.lineups[side].pitcherId === pitcherId;
   const hook = match.hooks?.[side];
   const ours = fieldingClubId === s.userClubId;
   return (
-    <div className={`ap ap-pitcher-card ${status}`}>
-      <PlayerAvatar player={p} club={s.clubs[p.clubId] ?? s.clubs[fieldingClubId]} size={56} />
-      <div className="apc-main">
-        <small>
-          Pitching · {p.throws}HP · pitching {p.ratings.pitching}
-          {style !== 'balanced' ? ` · ${style}` : ''}
-        </small>
-        <strong>
+    <div className={`mp-panel mp-pitcher ${status}`}>
+      <PlayerAvatar player={p} club={s.clubs[p.clubId] ?? s.clubs[fieldingClubId]} size={104} />
+      <div className="mp-main">
+        <p className="mp-meta">
+          <span className="mp-role pitching">Pitching</span>
+          <span>
+            {p.throws}HP · Pitching {p.ratings.pitching}
+            {style !== 'balanced' ? ` · ${style}` : ''}
+          </span>
+        </p>
+        <strong className="mp-name">
           {p.firstName} {p.lastName}
         </strong>
-        <span className="apc-line" aria-label="Today's pitching line">
+        <p className="mp-line" aria-label="Today's pitching line" title="IP in baseball notation: 3.2 = three innings and two outs.">
           <b>{ip(line.outs)}</b> IP · <b>{line.h}</b> H · <b>{line.r}</b> R · <b>{line.bb}</b> BB · <b>{line.k}</b> K{line.hr ? <> · <b>{line.hr}</b> HR</> : null}
-        </span>
-        <span className="apc-stamina">
-          <span className="apc-bar" aria-hidden="true">
+        </p>
+        <div className="mp-row mp-work">
+          <span className="mp-key" title="BF = batters faced. After about this many batters he tires: each further batter costs 1 pitching.">
+            Workload
+          </span>
+          <span className={`mp-workload ${status}`}>
+            {line.bf} BF · {drop > 0 ? `tired: −${drop} pitching` : `~${left} until tired`}
+          </span>
+          <span className="mp-bar" aria-hidden="true">
             <span style={{ width: `${Math.min(100, (line.bf / limit) * 100)}%` }} />
           </span>
-          <span className={`apc-status ${status}`}>
-            {line.bf} of ~{limit} batters · {statusText}
-          </span>
-        </span>
-        {ours && isStarter && hook && (
-          <span className="muted small">
-            Planned change: after {hook.maxBatters} batters, or {hook.pullRuns} runs allowed (from batter {hook.minBatters}).
-          </span>
+        </div>
+        {ours && (
+          <div className="mp-row">
+            <span className="mp-key" title="Your pitching plan: the starter is replaced automatically when either condition is met (one change per game).">
+              Auto change
+            </span>
+            {!isStarter ? (
+              <span className="muted small">None — one change per game</span>
+            ) : hook && hook.reliever !== false ? (
+              <span className="mp-chips">
+                <span className="mp-chip" title={`Replaced after facing ${hook.maxBatters} batters.`}>
+                  {hook.maxBatters} BF
+                </span>
+                <span className="mp-or">or</span>
+                <span className="mp-chip" title={`Replaced when he has allowed ${hook.pullRuns} runs, once he has faced at least ${hook.minBatters} batters.`}>
+                  {hook.pullRuns} R after {hook.minBatters} BF
+                </span>
+              </span>
+            ) : (
+              <span className="muted small">No reliever available: he pitches the whole game</span>
+            )}
+          </div>
         )}
       </div>
     </div>

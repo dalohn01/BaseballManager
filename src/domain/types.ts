@@ -321,6 +321,14 @@ export interface MatchSequence {
   tactic?: { playerId: PlayerId; kind: 'steal' | 'extraBase' | 'thrownOut'; source: 'instruction' | 'team' };
 }
 
+/** The automatic change rule a starter played under, and whether a reliever was ready. */
+export interface MatchHook {
+  maxBatters: number;
+  pullRuns: number;
+  minBatters: number;
+  reliever?: boolean;
+}
+
 export interface MatchResult {
   id: GameId;
   season: number;
@@ -343,7 +351,7 @@ export interface MatchResult {
   /** Pitching style each pitcher used (absent in older saves: balanced). */
   pitchStyles?: Record<PlayerId, PitchingStyle>;
   /** When each side's starter was due to be replaced (absent in older saves). */
-  hooks?: { home: { maxBatters: number; pullRuns: number; minBatters: number }; away: { maxBatters: number; pullRuns: number; minBatters: number } };
+  hooks?: { home: MatchHook; away: MatchHook };
   /** Complete ordered sequence for the visual match view (absent in older saves). */
   sequence?: MatchSequence[];
 }

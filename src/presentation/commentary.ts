@@ -501,3 +501,39 @@ export function pitcherLine(match: MatchResult, steps: CommentaryStep[], through
   }
   return line;
 }
+
+const RESULT_LABEL: Record<string, string> = {
+  single: 'Single',
+  double: 'Double',
+  triple: 'Triple',
+  homeRun: 'Home run',
+  walk: 'Walk',
+  strikeout: 'Strikeout',
+  groundOut: 'Groundout',
+  flyOut: 'Flyout',
+  sacFly: 'Sac fly',
+  doublePlay: 'Double play',
+};
+
+/** A batter's game so far: H–AB, runs, RBI, walks and one label per finished plate appearance. */
+export function batterToday(match: MatchResult, steps: CommentaryStep[], through: number, playerId: PlayerId) {
+  const seq = match.sequence ?? [];
+  const out = { ab: 0, h: 0, r: 0, rbi: 0, bb: 0, results: [] as string[] };
+  const seen = new Set<number>();
+  for (let k = 0; k <= through && k < steps.length; k++) {
+    const st = steps[k];
+    if (!st.playDone || st.seqIndex < 0 || seen.has(st.seqIndex)) continue;
+    seen.add(st.seqIndex);
+    const p = seq[st.seqIndex];
+    if (p.runners.some((r) => r.playerId === playerId && r.to === 4)) out.r += 1;
+    if (p.kind !== 'plateAppearance' || p.batterId !== playerId) continue;
+    const off: 'home' | 'away' = p.half === 'top' ? 'away' : 'home';
+    if (p.outcome !== 'walk' && p.outcome !== 'sacFly') out.ab += 1;
+    if (['single', 'double', 'triple', 'homeRun'].includes(p.outcome!)) out.h += 1;
+    if (p.outcome === 'walk') out.bb += 1;
+    // No RBI on a double play (engine rule).
+    if (p.outcome !== 'doublePlay') out.rbi += p.after.score[off] - p.before.score[off];
+    out.results.push(RESULT_LABEL[p.outcome!] ?? p.outcome!);
+  }
+  return out;
+}

@@ -90,6 +90,32 @@ export function battingStats(state: GameState, player: Player, period: StatsPeri
   return finishBatting(sum);
 }
 
+/**
+ * A batter's season before the match being watched. The match is saved (and
+ * counted in his season line) before it is played back, so its box line is
+ * subtracted: the panel never shows today's outcome early.
+ */
+export function battingBeforeMatch(state: GameState, player: Player, match: MatchResult) {
+  const s = player.stats;
+  const l = match.batting[player.id];
+  // The season line is reset at a new season; the watched match belongs to the current one.
+  const sameSeason = match.season === state.calendar.season;
+  const minus = (a: number, b: number | undefined) => a - (sameSeason && b ? b : 0);
+  const base = finishBatting({
+    g: minus(s.games, l ? 1 : 0),
+    pa: minus(s.pa, l?.pa),
+    ab: minus(s.ab, l?.ab),
+    h: minus(s.h, l?.h),
+    doubles: minus(s.doubles, l?.doubles),
+    triples: minus(s.triples, l?.triples),
+    hr: minus(s.hr, l?.hr),
+    rbi: minus(s.rbi, l?.rbi),
+    bb: minus(s.bb, l?.bb),
+    so: minus(s.so, l?.so),
+  });
+  return { ...base, ops: base.obp !== null && base.slg !== null ? base.obp + base.slg : null };
+}
+
 export function pitchingStats(state: GameState, player: Player, period: StatsPeriod): PitchingPeriod {
   if (period === 'season') {
     const s = player.stats;

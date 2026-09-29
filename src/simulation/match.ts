@@ -682,7 +682,7 @@ export function simulateMatch(input: MatchInput): MatchResult {
     homeId: home.clubId,
     awayId: away.clubId,
     pitchStyles,
-    hooks: { home: { ...home.hook }, away: { ...away.hook } },
+    hooks: { home: { ...home.hook, reliever: !!home.reliever }, away: { ...away.hook, reliever: !!away.reliever } },
     // Copies: a stored result must not share objects with the clubs' live lineups.
     lineups: structuredClone({ home: home.lineup, away: away.lineup }),
     linescore,

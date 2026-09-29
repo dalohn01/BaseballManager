@@ -1142,3 +1142,39 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 .apc-status.tired { color: var(--bad); }
 .cm-players { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); }
 @media (max-width: 720px) { .cm-players { grid-template-columns: minmax(0, 1fr); } }
+
+/* Match view: compact batter and pitcher panels with large portraits */
+.cm-players { grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: stretch; gap: 12px; }
+.mp-panel { display: flex; gap: 14px; align-items: flex-start; background: var(--card); border: 1.5px solid #cfe0f5; border-radius: 14px; padding: 10px 12px; min-width: 0; }
+.mp-panel > .avatar-link, .mp-panel > .avatar { flex: none; }
+.mp-panel .avatar { width: 104px; height: 104px; }
+.mp-main { display: grid; gap: 4px; min-width: 0; flex: 1; }
+.mp-meta { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 10px; margin: 0; font-family: var(--display); font-weight: 700; text-transform: uppercase; font-size: 0.9rem; color: var(--slate); }
+.mp-role { padding-left: 7px; border-left: 4px solid var(--navy); color: var(--navy); }
+.mp-role.at-bat { border-color: var(--warn); color: #b35f00; }
+.mp-name { font-family: var(--display); font-weight: 900; text-transform: uppercase; font-size: 1.45rem; line-height: 1.05; color: var(--ink); overflow-wrap: anywhere; }
+.mp-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; border-top: 1px solid var(--line); padding-top: 4px; }
+.mp-key { font-family: var(--display); font-weight: 700; text-transform: uppercase; font-size: 0.8rem; color: var(--muted); min-width: 60px; cursor: help; }
+.mp-stats { display: flex; flex-wrap: wrap; gap: 2px 12px; font-size: 0.85rem; color: var(--muted); text-transform: uppercase; }
+.mp-stats b, .mp-line b { font-family: var(--display); font-size: 1.15rem; color: var(--ink); text-transform: none; }
+.mp-today { font-family: var(--display); font-size: 1.3rem; color: var(--ink); }
+.mp-extras { font-size: 0.85rem; font-weight: 600; color: var(--ink-2); }
+.mp-chips { display: flex; gap: 5px; align-items: center; overflow-x: auto; max-width: 100%; scrollbar-width: thin; }
+.mp-chip { flex: none; padding: 2px 8px; border-radius: 7px; background: var(--blue-soft); color: var(--navy); font-size: 0.82rem; font-weight: 600; white-space: nowrap; }
+.mp-or { font-family: var(--display); font-weight: 700; text-transform: uppercase; font-size: 0.8rem; color: var(--muted); }
+.mp-line { margin: 0; font-size: 0.85rem; color: var(--muted); text-transform: uppercase; font-variant-numeric: tabular-nums; }
+.mp-work { display: grid; grid-template-columns: auto 1fr; }
+.mp-workload { justify-self: end; font-weight: 700; font-size: 0.88rem; color: #b35f00; }
+.mp-workload.fresh { color: var(--slate); }
+.mp-workload.tired { color: var(--bad); }
+.mp-bar { grid-column: 1 / -1; display: block; height: 7px; border-radius: 99px; background: #e3e9f1; overflow: hidden; }
+.mp-bar span { display: block; height: 100%; background: var(--warn); }
+.mp-pitcher.tired .mp-bar span { background: var(--bad); }
+@media (max-width: 1180px) {
+  .mp-panel .avatar { width: 88px; height: 88px; }
+}
+@media (max-width: 720px) {
+  /* Stacked on narrow screens; portraits keep their size, text wraps instead. */
+  .cm-players { display: grid; grid-template-columns: minmax(0, 1fr); }
+  .mp-name { font-size: 1.25rem; }
+}
