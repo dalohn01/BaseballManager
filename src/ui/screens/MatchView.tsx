@@ -118,8 +118,6 @@ export function MatchSummary({ ev, m }: { ev: EventInstance; m: MatchResult }) {
   const r = ev.resolution!;
   const userSide = m.homeId === s.userClubId ? 'home' : 'away';
   const ours = m.lineups[userSide];
-  const innings = m.linescore.away.length;
-  const headers = Array.from({ length: innings }, (_, i) => (m.decidedBy === 'suddenDeath' && i === innings - 1 ? 'SD' : String(i + 1)));
   const performers = ours.battingOrder
     .map((slot) => ({ p: s.players[slot.playerId], line: m.batting[slot.playerId] }))
     .filter((x) => x.line.h > 0 || x.line.rbi > 0 || x.line.sb > 0)
@@ -129,35 +127,7 @@ export function MatchSummary({ ev, m }: { ev: EventInstance; m: MatchResult }) {
   return (
     <>
       <h1 className="event-title result-title">{r.headline}</h1>
-      <div className="table-wrap">
-        <table className="linescore">
-          <caption className="sr-only">Line score</caption>
-          <thead>
-            <tr>
-              <th scope="col">Team</th>
-              {headers.map((h) => (
-                <th key={h} scope="col">
-                  {h}
-                </th>
-              ))}
-              <th scope="col">R</th>
-              <th scope="col">H</th>
-            </tr>
-          </thead>
-          <tbody>
-            {(['away', 'home'] as const).map((side) => (
-              <tr key={side}>
-                <th scope="row">{s.clubs[side === 'home' ? m.homeId : m.awayId].abbreviation}</th>
-                {m.linescore[side].map((v, i) => (
-                  <td key={i}>{v === null ? 'X' : v}</td>
-                ))}
-                <td className="strong">{m.runs[side]}</td>
-                <td>{m.hits[side]}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+      <LineScore m={m} />
       {r.narrative.map((n, i) => (
         <p key={i} className="event-context">
           {n}
@@ -203,5 +173,43 @@ export function MatchSummary({ ev, m }: { ev: EventInstance; m: MatchResult }) {
       )}
       <ContinueButton ev={ev} />
     </>
+  );
+}
+
+/** Runs per inning, total runs and hits for both teams. */
+export function LineScore({ m }: { m: MatchResult }) {
+  const s = useGame();
+  const innings = m.linescore.away.length;
+  const headers = Array.from({ length: innings }, (_, i) => (m.decidedBy === 'suddenDeath' && i === innings - 1 ? 'SD' : String(i + 1)));
+  return (
+    <div className="table-wrap">
+      <table className="linescore">
+        <caption className="sr-only">Line score</caption>
+        <thead>
+          <tr>
+            <th scope="col">Team</th>
+            {headers.map((h) => (
+              <th key={h} scope="col">
+                {h}
+              </th>
+            ))}
+            <th scope="col">R</th>
+            <th scope="col">H</th>
+          </tr>
+        </thead>
+        <tbody>
+          {(['away', 'home'] as const).map((side) => (
+            <tr key={side}>
+              <th scope="row">{s.clubs[side === 'home' ? m.homeId : m.awayId].abbreviation}</th>
+              {m.linescore[side].map((v, i) => (
+                <td key={i}>{v === null ? 'X' : v}</td>
+              ))}
+              <td className="strong">{m.runs[side]}</td>
+              <td>{m.hits[side]}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
   );
 }

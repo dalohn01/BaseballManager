@@ -1218,3 +1218,29 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 @media (prefers-reduced-motion: reduce) {
   .cm-now.em-1, .cm-now.em-2, .cm-now.em-3, .cm-now .cm-headline, .cm-runs.just { animation: none; }
 }
+
+/* Post-match screen (transition from the match view) */
+.post-match { display: grid; gap: 16px; animation: post-in 0.6s ease-out; }
+.post-match.reduced { animation: none; }
+@keyframes post-in { from { opacity: 0; transform: translateY(16px); } to { opacity: 1; transform: none; } }
+.post-hero { display: grid; justify-items: center; gap: 8px; padding: 18px 20px 12px; border-radius: var(--radius); background: linear-gradient(180deg, #0f2a5c, #1c3f7d); color: #fff; box-shadow: var(--shadow); outline: none; }
+.post-hero.won { background: linear-gradient(180deg, #0f2a5c, #17622f); }
+.post-final { padding: 3px 12px; border-radius: 99px; background: rgba(255, 255, 255, 0.15); font-family: var(--display); font-weight: 800; text-transform: uppercase; letter-spacing: 0.08em; }
+.post-score { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 18px; width: 100%; max-width: 760px; }
+.post-side { display: flex; flex-direction: column; align-items: center; gap: 6px; font-family: var(--display); font-weight: 800; text-transform: uppercase; font-size: 1.2rem; text-align: center; }
+.post-runs { font-family: var(--display); font-weight: 900; font-size: clamp(3rem, 8vw, 5rem); line-height: 1; font-variant-numeric: tabular-nums; }
+.post-headline { margin: 0; font-family: var(--display); font-weight: 800; font-style: italic; text-transform: uppercase; font-size: clamp(1.4rem, 3vw, 2rem); text-align: center; }
+.post-hero .table-wrap { width: 100%; max-width: 760px; background: #fff; border-radius: 10px; color: var(--ink); padding: 2px 8px; }
+.post-columns { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.post-columns .panel + .panel { margin-top: 0; }
+.post-narrative { margin: 0 0 8px; padding-left: 18px; display: grid; gap: 4px; }
+.post-changes .btn-primary { width: 100%; margin-top: 12px; }
+.post-back { display: inline-flex; gap: 6px; align-items: center; margin-top: 10px; }
+@media (max-width: 900px) {
+  .post-columns { grid-template-columns: minmax(0, 1fr); }
+}
+@media (max-width: 560px) {
+  .post-side { font-size: 0.95rem; }
+  .post-side svg { width: 44px; height: 44px; }
+  .post-score { gap: 8px; }
+}

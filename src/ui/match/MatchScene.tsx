@@ -11,7 +11,7 @@ import { tiresAfterBatters } from '../../simulation/match';
 import { Crest } from '../components/art';
 import { Icon } from '../components/icons';
 import { useGame, useReducedMotion } from '../hooks';
-import { MatchSummary } from '../screens/MatchView';
+import { PostMatch } from './PostMatch';
 import { MatchIntro } from './MatchIntro';
 import { SchematicField } from './SchematicField';
 import { readPosition, useCommentaryPlayback } from './usePlayback';
@@ -21,6 +21,9 @@ import { readPosition, useCommentaryPlayback } from './usePlayback';
  * one commentary step at a time with scoreboard, outs and the schematic field
  * all driven by the same presented step.
  */
+/** How long the FINAL line stays before the post-match screen (ms). */
+const POST_MATCH_DELAY_MS = 2600;
+
 export function MatchScene({ ev, match }: { ev: EventInstance; match: MatchResult }) {
   const s = useGame();
   const reduced = useReducedMotion();
@@ -40,6 +43,27 @@ export function MatchScene({ ev, match }: { ev: EventInstance; match: MatchResul
   useEffect(() => {
     if (ready) nextRef.current?.focus({ preventScroll: true });
   }, [ready]);
+
+  // After the final comment the view moves on to its own post-match screen.
+  // Reloading a finished match opens that screen directly; after going back
+  // to the match view it only returns on request.
+  const [post, setPost] = useState(() => (readPosition(match.id) ?? -1) >= steps.length - 1 && steps.length > 0);
+  const [stayOnMatch, setStayOnMatch] = useState(false);
+  const ended = started && pb.finished;
+  useEffect(() => {
+    if (!ended || post || stayOnMatch) return;
+    // Let the FINAL line land first, then transition.
+    const id = window.setTimeout(() => setPost(true), reduced ? 900 : POST_MATCH_DELAY_MS);
+    return () => window.clearTimeout(id);
+  }, [ended, post, stayOnMatch, reduced]);
+  const skipToResult = () => {
+    skip();
+    setPost(true);
+  };
+
+  if (started && post && pb.finished) {
+    return <PostMatch ev={ev} match={match} steps={steps} reduced={reduced} onBack={() => { setStayOnMatch(true); setPost(false); }} />;
+  }
 
   if (!started) return <MatchIntro match={match} round={ev.round} reduced={reduced} onDone={() => setStarted(true)} />;
 
@@ -109,7 +133,7 @@ export function MatchScene({ ev, match }: { ev: EventInstance; match: MatchResul
             <button ref={nextRef} className="btn btn-primary cm-next" onClick={next}>
               Next moment <Icon name="play" size={18} />
             </button>
-            <button className="btn btn-secondary cm-skip" onClick={skip} aria-label="Skip to result">
+            <button className="btn btn-secondary cm-skip" onClick={skipToResult} aria-label="Skip to result">
               <span className="lbl">Skip to result</span> <Icon name="forward" size={18} />
             </button>
             <label className="auto-toggle">
@@ -128,16 +152,15 @@ export function MatchScene({ ev, match }: { ev: EventInstance; match: MatchResul
             </div>
           </>
         )}
+        {finished && (
+          <button className="btn btn-primary cm-next" onClick={() => setPost(true)}>
+            Match summary <Icon name="chevron" size={18} />
+          </button>
+        )}
         <button className="btn btn-secondary btn-small cm-logbtn" onClick={() => setLogOpen(true)} aria-label="Full match log">
           <Icon name="list" size={18} /> <span className="lbl">Full match log</span>
         </button>
       </footer>
-
-      {finished && (
-        <section className="event-card match-summary cm-summary">
-          <MatchSummary ev={ev} m={match} />
-        </section>
-      )}
 
       {logOpen && <FullLog steps={steps} index={pb.index} match={match} onClose={() => setLogOpen(false)} />}
     </div>
