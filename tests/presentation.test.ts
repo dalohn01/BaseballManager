@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { MatchResult, MatchSequence } from '../src/domain/types';
-import { buildCommentary, gameSoFar, PACE, todayLine, type CommentaryStep } from '../src/presentation/commentary';
+import { buildCommentary, gameSoFar, PACE, pitcherLine, todayLine, type CommentaryStep } from '../src/presentation/commentary';
 import { CommentaryPlayback } from '../src/presentation/playback';
 import { simMatch } from './helpers';
 
@@ -86,6 +86,22 @@ describe('commentary steps', () => {
     const first = gameSoFar(m, steps, 0);
     expect(first[m.homeId].h + first[m.awayId].h + first[m.homeId].k + first[m.awayId].k + first[m.homeId].bb + first[m.awayId].bb).toBe(0);
     expect(todayLine(m, steps, 0, seq[0].batterId!)).toEqual({ ab: 0, h: 0 });
+  });
+
+  it('the pitcher card line equals the engine box score at the end and never runs ahead', () => {
+    for (let seed = 1; seed <= 20; seed++) {
+      const { m, s } = simMatch(seed);
+      const steps = stepsFor(m, s);
+      const last = steps.length - 1;
+      for (const [id, box] of Object.entries(m.pitching)) {
+        const l = pitcherLine(m, steps, last, id);
+        expect([l.bf, l.outs, l.h, l.bb, l.k, l.r]).toEqual([box.battersFaced, box.outs, box.h, box.bb, box.so, box.r]);
+        // Midway, never more than the final line.
+        const mid = pitcherLine(m, steps, Math.floor(last / 2), id);
+        expect(mid.bf).toBeLessThanOrEqual(box.battersFaced);
+      }
+      expect(m.pitchStyles).toBeTruthy();
+    }
   });
 
   it('are deterministic and stable across rebuilds (ids, texts, durations)', () => {
@@ -195,8 +211,10 @@ describe('commentary playback', () => {
     const pb = new CommentaryPlayback(steps, 0);
     const d1 = pb.delay()!;
     expect(d1).toBe(steps[0].duration);
-    pb.speed = 2;
+    pb.speed = 'fast';
     expect(pb.delay()).toBe(Math.round(steps[0].duration / 2));
+    pb.speed = 'slow';
+    expect(pb.delay()).toBeGreaterThan(steps[0].duration);
     pb.auto = false;
     expect(pb.delay()).toBeNull();
   });

@@ -672,7 +672,11 @@ td.num, th.num { text-align: right; white-space: nowrap; }
   .cm-logbtn { display: none; }
   .cm-next { white-space: nowrap; padding-left: 10px; padding-right: 10px; }
   .cm-skip, .cm-logbtn, .cm-autobtn { flex: none; min-width: 44px; padding-left: 10px; padding-right: 10px; }
-  .cm-speed button { padding: 6px 8px; }
+  .cm-speed button { padding: 6px 12px; }
+  /* Three tempo choices get their own row so Next moment keeps its width. */
+  .cm-controls { flex-wrap: wrap; }
+  .cm-controls .cm-speed { order: 5; flex: 1 1 100%; justify-content: center; }
+  .cm-controls .cm-speed button { flex: 1; }
   .intro-stage { min-height: 520px; padding: 12px; }
   .intro-confirmed { position: relative; top: 0; left: 0; justify-self: start; font-size: 0.9rem; }
   .intro-teams { grid-template-columns: minmax(0, 1fr); gap: 6px; }
@@ -1122,3 +1126,19 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 .causes { margin: 6px 0 4px; }
 .causes summary { cursor: pointer; min-height: 32px; font-weight: 600; color: var(--blue); }
 .causes ul { margin: 4px 0; padding-left: 18px; display: grid; gap: 3px; }
+
+/* Match view: pitcher card with today's line and stamina */
+.ap-pitcher-card { align-items: flex-start; }
+.apc-main { display: grid; gap: 3px; min-width: 0; flex: 1; }
+.apc-line { font-variant-numeric: tabular-nums; font-size: 0.95rem; color: var(--ink-2); }
+.apc-line b { color: var(--ink); }
+.apc-stamina { display: grid; gap: 3px; }
+.apc-bar { display: block; height: 6px; border-radius: 99px; background: #e3e9f1; overflow: hidden; }
+.apc-bar span { display: block; height: 100%; background: var(--green); }
+.ap-pitcher-card.tiring .apc-bar span { background: var(--warn); }
+.ap-pitcher-card.tired .apc-bar span { background: var(--bad); }
+.apc-status { font-size: 0.85rem; font-weight: 600; color: var(--muted); }
+.apc-status.tiring { color: #9a6200; }
+.apc-status.tired { color: var(--bad); }
+.cm-players { grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr); }
+@media (max-width: 720px) { .cm-players { grid-template-columns: minmax(0, 1fr); } }

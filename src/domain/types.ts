@@ -340,6 +340,10 @@ export interface MatchResult {
   pitchersUsed: { home: PlayerId[]; away: PlayerId[] };
   /** Highlights: only things that actually happened in the simulation. */
   plays: PlayRecord[];
+  /** Pitching style each pitcher used (absent in older saves: balanced). */
+  pitchStyles?: Record<PlayerId, PitchingStyle>;
+  /** When each side's starter was due to be replaced (absent in older saves). */
+  hooks?: { home: { maxBatters: number; pullRuns: number; minBatters: number }; away: { maxBatters: number; pullRuns: number; minBatters: number } };
   /** Complete ordered sequence for the visual match view (absent in older saves). */
   sequence?: MatchSequence[];
 }

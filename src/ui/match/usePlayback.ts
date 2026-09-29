@@ -32,9 +32,10 @@ function writePosition(matchId: string, index: number) {
 }
 function readSpeed(): Speed {
   try {
-    return localStorage.getItem('bm.matchSpeed') === '2' ? 2 : 1;
+    const v = localStorage.getItem('bm.matchTempo');
+    return v === 'slow' || v === 'fast' ? v : 'medium';
   } catch {
-    return 1;
+    return 'medium';
   }
 }
 
@@ -101,7 +102,7 @@ export function useCommentaryPlayback(steps: CommentaryStep[], matchId: string, 
     setSpeed: (speed: Speed) => {
       pb.speed = speed;
       try {
-        localStorage.setItem('bm.matchSpeed', String(speed));
+        localStorage.setItem('bm.matchTempo', speed);
       } catch {
         /* per-viewer convenience only */
       }

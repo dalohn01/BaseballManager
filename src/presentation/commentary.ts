@@ -477,3 +477,27 @@ export function todayLine(match: MatchResult, steps: CommentaryStep[], through: 
   }
   return { ab, h };
 }
+
+/** A pitcher's line today, counted only from finished, presented plays (never ahead of the commentary). */
+export function pitcherLine(match: MatchResult, steps: CommentaryStep[], through: number, pitcherId: PlayerId) {
+  const seq = match.sequence ?? [];
+  const line = { bf: 0, outs: 0, h: 0, r: 0, bb: 0, k: 0, hr: 0 };
+  const seen = new Set<number>();
+  for (let k = 0; k <= through && k < steps.length; k++) {
+    const st = steps[k];
+    if (!st.playDone || st.seqIndex < 0 || seen.has(st.seqIndex)) continue;
+    seen.add(st.seqIndex);
+    const p = seq[st.seqIndex];
+    if (p.pitcherId !== pitcherId || p.kind === 'pitchingChange') continue;
+    const off: 'home' | 'away' = p.half === 'top' ? 'away' : 'home';
+    line.outs += Math.max(0, Math.min(3, p.after.outs) - p.before.outs);
+    line.r += p.after.score[off] - p.before.score[off];
+    if (p.kind !== 'plateAppearance') continue;
+    line.bf += 1;
+    if (['single', 'double', 'triple', 'homeRun'].includes(p.outcome!)) line.h += 1;
+    if (p.outcome === 'homeRun') line.hr += 1;
+    if (p.outcome === 'walk') line.bb += 1;
+    if (p.outcome === 'strikeout') line.k += 1;
+  }
+  return line;
+}

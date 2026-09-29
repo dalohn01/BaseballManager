@@ -1,6 +1,12 @@
 import type { CommentaryStep } from './commentary';
 
-export type Speed = 1 | 2;
+/** Match tempo. Medium is the original pace; slow gives more reading time, fast halves it. */
+export type Speed = 'slow' | 'medium' | 'fast';
+export const TEMPO: Record<Speed, { label: string; factor: number }> = {
+  slow: { label: 'Slow', factor: 0.65 },
+  medium: { label: 'Medium', factor: 1 },
+  fast: { label: 'Fast', factor: 2 },
+};
 
 /**
  * Playback position over precomputed commentary steps. It has no side effects
@@ -11,7 +17,7 @@ export class CommentaryPlayback {
   /** Step currently shown; −1 before the first. */
   index: number;
   auto = true;
-  speed: Speed = 1;
+  speed: Speed = 'medium';
 
   constructor(
     readonly steps: CommentaryStep[],
@@ -45,6 +51,6 @@ export class CommentaryPlayback {
   delay(): number | null {
     if (!this.auto || this.finished) return null;
     const d = this.step?.duration ?? 600;
-    return Math.round(d / this.speed);
+    return Math.round(d / TEMPO[this.speed].factor);
   }
 }

@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { TEMPO, type Speed } from '../../presentation/playback';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import type { EventInstance } from '../../domain/state';
 import { clubName, shortName } from '../../domain/state';
 import type { ClubId, MatchResult, PlayerId } from '../../domain/types';
-import { buildCommentary, gameSoFar, ordinalOf, todayLine, type CommentaryStep } from '../../presentation/commentary';
+import { buildCommentary, gameSoFar, ordinalOf, pitcherLine, todayLine, type CommentaryStep } from '../../presentation/commentary';
+import { tiresAfterBatters } from '../../simulation/match';
 import { Crest } from '../components/art';
 import { Icon } from '../components/icons';
 import { useGame, useReducedMotion } from '../hooks';
@@ -116,10 +118,10 @@ export function MatchScene({ ev, match }: { ev: EventInstance; match: MatchResul
             <button className="btn btn-secondary cm-autobtn" aria-pressed={pb.auto} aria-label={pb.auto ? 'Pause auto play' : 'Start auto play'} onClick={() => setAuto(!pb.auto)}>
               <Icon name={pb.auto ? 'pause' : 'play'} size={18} />
             </button>
-            <div className="segmented cm-speed" role="group" aria-label="Speed">
-              {([1, 2] as const).map((v) => (
-                <button key={v} className={pb.speed === v ? 'on' : ''} aria-pressed={pb.speed === v} onClick={() => setSpeed(v)}>
-                  {v}×
+            <div className="segmented cm-speed" role="radiogroup" aria-label="Tempo">
+              {(Object.keys(TEMPO) as Speed[]).map((v) => (
+                <button key={v} role="radio" className={pb.speed === v ? 'on' : ''} aria-checked={pb.speed === v} onClick={() => setSpeed(v)}>
+                  {TEMPO[v].label}
                 </button>
               ))}
             </div>
@@ -325,11 +327,7 @@ function Players({ match, steps, index }: { match: MatchResult; steps: Commentar
   const side = focus.clubId === match.homeId ? 'home' : 'away';
   const pos = match.lineups[side].battingOrder.find((x) => x.playerId === focus.id)?.position;
   const line = todayLine(match, steps, index, focus.id);
-  // Batters faced by this pitcher in plays already finished on screen.
-  const seq = match.sequence!;
-  const seen = new Set<number>();
-  for (let k = 0; k <= index; k++) if (steps[k].playDone && steps[k].seqIndex >= 0) seen.add(steps[k].seqIndex);
-  const faced = [...seen].filter((i) => seq[i].kind === 'plateAppearance' && seq[i].pitcherId === step.state.pitcherId).length;
+  const pl = pitcher ? pitcherLine(match, steps, index, pitcher.id) : null;
   return (
     <div className="cm-players">
       {batter && (
@@ -346,20 +344,58 @@ function Players({ match, steps, index }: { match: MatchResult; steps: Commentar
           </div>
         </div>
       )}
-      {pitcher && (
-        <div className="ap">
-          <PlayerAvatar player={pitcher} club={s.clubs[pitcher.clubId] ?? s.clubs[match.homeId]} size={56} />
-          <div>
-            <small>Pitching</small>
-            <strong>
-              {pitcher.firstName} {pitcher.lastName}
-            </strong>
-            <span className="muted small">
-              {pitcher.throws}HP · {faced} batter{faced === 1 ? '' : 's'} faced
-            </span>
-          </div>
-        </div>
-      )}
+      {pitcher && pl && <PitcherCard match={match} pitcherId={pitcher.id} line={pl} fieldingClubId={step.state.battingClubId === match.homeId ? match.awayId : match.homeId} />}
+    </div>
+  );
+}
+
+const ip = (outs: number) => `${Math.floor(outs / 3)}.${outs % 3}`;
+
+/**
+ * Today's pitching line (only plays already shown) and his stamina, using the
+ * engine's own rule: after a set number of batters (by pitching style) every
+ * further batter costs him 1 pitching. No pitch counts: the engine has none.
+ */
+function PitcherCard({ match, pitcherId, line, fieldingClubId }: { match: MatchResult; pitcherId: string; line: ReturnType<typeof pitcherLine>; fieldingClubId: string }) {
+  const s = useGame();
+  const p = s.players[pitcherId];
+  const style = match.pitchStyles?.[pitcherId] ?? 'balanced';
+  const limit = tiresAfterBatters(style);
+  const drop = Math.max(0, line.bf - limit);
+  const status = drop > 0 ? 'tired' : line.bf >= limit - 3 ? 'tiring' : 'fresh';
+  const statusText = drop > 0 ? `Tired: −${drop} pitching` : status === 'tiring' ? `Tiring soon (${limit - line.bf} batter${limit - line.bf === 1 ? '' : 's'} left)` : 'Fresh';
+  const side = fieldingClubId === match.homeId ? 'home' : 'away';
+  const isStarter = match.lineups[side].pitcherId === pitcherId;
+  const hook = match.hooks?.[side];
+  const ours = fieldingClubId === s.userClubId;
+  return (
+    <div className={`ap ap-pitcher-card ${status}`}>
+      <PlayerAvatar player={p} club={s.clubs[p.clubId] ?? s.clubs[fieldingClubId]} size={56} />
+      <div className="apc-main">
+        <small>
+          Pitching · {p.throws}HP · pitching {p.ratings.pitching}
+          {style !== 'balanced' ? ` · ${style}` : ''}
+        </small>
+        <strong>
+          {p.firstName} {p.lastName}
+        </strong>
+        <span className="apc-line" aria-label="Today's pitching line">
+          <b>{ip(line.outs)}</b> IP · <b>{line.h}</b> H · <b>{line.r}</b> R · <b>{line.bb}</b> BB · <b>{line.k}</b> K{line.hr ? <> · <b>{line.hr}</b> HR</> : null}
+        </span>
+        <span className="apc-stamina">
+          <span className="apc-bar" aria-hidden="true">
+            <span style={{ width: `${Math.min(100, (line.bf / limit) * 100)}%` }} />
+          </span>
+          <span className={`apc-status ${status}`}>
+            {line.bf} of ~{limit} batters · {statusText}
+          </span>
+        </span>
+        {ours && isStarter && hook && (
+          <span className="muted small">
+            Planned change: after {hook.maxBatters} batters, or {hook.pullRuns} runs allowed (from batter {hook.minBatters}).
+          </span>
+        )}
+      </div>
     </div>
   );
 }

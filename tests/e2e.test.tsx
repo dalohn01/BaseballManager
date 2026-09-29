@@ -46,6 +46,9 @@ async function advance(): Promise<string> {
   const intro = screen.queryByRole('button', { name: /Skip intro/i });
   if (intro) {
     await click(intro);
+    // The live view shows the pitcher's line for today and his stamina (nothing played yet).
+    expect(screen.getByLabelText("Today's pitching line").textContent).toMatch(/0\.0\s*IP/);
+    expect(screen.getByText(/0 of ~\d+ batters · Fresh/)).toBeTruthy();
     return 'intro';
   }
   const skip = screen.queryByRole('button', { name: /Skip to result/i });

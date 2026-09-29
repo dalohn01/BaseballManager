@@ -202,6 +202,14 @@ function rollOutcome(b: SimBatter, pitcher: SimPitcher, pitching: number, fieldi
   return rng.chance(0.5) ? 'groundOut' : 'flyOut';
 }
 
+/**
+ * Batters a pitcher faces before he tires; each batter beyond costs 1 pitching.
+ * Attacking the zone saves pitches, working the corners tires him sooner.
+ */
+export function tiresAfterBatters(style: PitchingStyle = 'balanced'): number {
+  return BALANCE.match.starterTiresAfterBatters + (style === 'attack' ? 3 : style === 'careful' ? -4 : 0);
+}
+
 /** Chance a runner on first tries to steal second, by speed and running style. */
 export function stealAttempt(speed: number, style: RunningStyle): number {
   const O = BALANCE.match.odds;
@@ -360,8 +368,7 @@ export function simulateMatch(input: MatchInput): MatchResult {
       const pitcher = def.pitcher;
       const pLine = pitching[pitcher.id];
       // Attacking the zone saves pitches; working the corners tires a pitcher sooner.
-      const tiresAfter = cfg.starterTiresAfterBatters + (pitcher.style === 'attack' ? 3 : pitcher.style === 'careful' ? -4 : 0);
-      const tiredBy = Math.max(0, pLine.battersFaced - tiresAfter);
+      const tiredBy = Math.max(0, pLine.battersFaced - tiresAfterBatters(pitcher.style));
       const pitchValue = pitcher.pitching - tiredBy * 1.0;
       pLine.battersFaced += 1;
       const bLine = batting[batter.id];
@@ -662,12 +669,20 @@ export function simulateMatch(input: MatchInput): MatchResult {
     score: { ...score },
   });
 
+  // What each pitcher was told and when each starter was due out, for the match view's pitcher card.
+  const pitchStyles: Record<PlayerId, PitchingStyle> = {};
+  for (const team of [home, away]) {
+    pitchStyles[team.starter.id] = team.starter.style;
+    if (team.reliever) pitchStyles[team.reliever.id] = team.reliever.style;
+  }
   return {
     id: input.id,
     season: input.season,
     round: input.round,
     homeId: home.clubId,
     awayId: away.clubId,
+    pitchStyles,
+    hooks: { home: { ...home.hook }, away: { ...away.hook } },
     // Copies: a stored result must not share objects with the clubs' live lineups.
     lineups: structuredClone({ home: home.lineup, away: away.lineup }),
     linescore,
