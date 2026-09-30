@@ -4,7 +4,7 @@ import { validateLineup } from '../src/domain/lineup';
 import { createRng } from '../src/domain/rng';
 import { squadProblem } from '../src/domain/roster';
 import type { GameState } from '../src/domain/state';
-import { newGame, run, T0 } from './helpers';
+import { newGame, run, T0, toNextEvent } from './helpers';
 
 /**
  * Stability, not balance: long random careers must never reach a state with
@@ -18,7 +18,8 @@ describe('long careers', () => {
       const rng = createRng(seed);
       let negativeRounds = 0;
       let lastRound = -1;
-      for (let i = 0; i < 2000 && s.calendar.season <= 4; i++) {
+      for (let i = 0; i < 4000 && s.calendar.season <= 4; i++) {
+        s = toNextEvent(s);
         const ev = s.currentEvent!;
         expect(ev, `seed ${seed}: no current event`).toBeTruthy();
         const avail = ev.options.filter((o) => optionBlocker(s, ev, o, null, T0) === null);

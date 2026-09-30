@@ -7,10 +7,10 @@ import { createRng } from '../src/domain/rng';
 import type { GameState } from '../src/domain/state';
 import type { PitchingPlan } from '../src/domain/types';
 import { buildSimTeam, simulateMatch } from '../src/simulation/match';
-import { newGame, run, T0 } from './helpers';
+import { newGame, run, T0, toNextEvent } from './helpers';
 
 function toLeagueGame(s: GameState): GameState {
-  for (let i = 0; i < 20 && s.currentEvent!.type !== 'leagueGame'; i++) {
+  for (let i = 0; i < 40 && (s = toNextEvent(s)).currentEvent!.type !== 'leagueGame'; i++) {
     const ev = s.currentEvent!;
     s = run(s, { type: 'resolveEvent', eventId: ev.id, revision: s.revision, optionId: ev.options[ev.options.length - 1].id, boostId: null });
     s = run(s, { type: 'acknowledgeEvent', eventId: ev.id });

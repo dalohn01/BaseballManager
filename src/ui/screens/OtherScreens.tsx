@@ -240,7 +240,7 @@ export function LeagueScreen() {
             {rounds.map((r) => {
               const games = s.schedule.filter((g) => g.season === season && g.round === r);
               return (
-                <div key={r} className={`sched-round ${r === (s.currentEvent?.round ?? 0) ? 'current' : ''}`}>
+                <div key={r} className={`sched-round ${r === s.calendar.round ? 'current' : ''}`}>
                   <h3>Round {r}</h3>
                   <ul>
                     {games.map((g) => {
@@ -416,7 +416,7 @@ export function SettingsScreen() {
           <span>
             <strong>Unlimited Time (test mode)</strong>
             <small className="muted">
-              For playtesting whole seasons. Shown as “∞ TEST” in the top bar. Economy mode: cap {BALANCE.time.cap}, +1 every {BALANCE.time.regenIntervalMs / 60000} minutes.
+              For playtesting whole seasons. Shown as “∞ TEST” in the top bar. Economy mode: each new day costs {BALANCE.time.costPerDay} Time; cap {BALANCE.time.cap}, +1 every {BALANCE.time.regenIntervalMs / 60000} minutes.
             </small>
           </span>
         </label>

@@ -150,7 +150,7 @@ export function createNewGame(opts: NewGameOptions): GameState {
     clubs: {},
     clubOrder: seeds.map((s) => s.id),
     players: {},
-    calendar: { season: 1, round: 0, slot: 0, phase: 'preseason' },
+    calendar: { season: 1, round: 0, slot: 0, phase: 'preseason', day: 1 },
     schedule: [],
     matches: {},
     time: { current: BALANCE.time.cap, lastRegenAt: opts.now, mode: opts.timeMode ?? 'economy' },

@@ -8,6 +8,9 @@ import type { EventInstance, EventOption } from '../../domain/state';
 import { clubName, shortName, userClub } from '../../domain/state';
 import { leagueGameForecast, leagueGameOptionNotes, type LeagueGameChoice, lineupForChoice } from '../../events/templates/leagueGame';
 import { SLOT_LABELS } from '../../events/planner';
+import { advanceBlocker } from '../../application/engine';
+import { dayLabel, describeDay, nextDay } from '../../domain/calendar';
+import { viewTime } from '../../domain/time';
 import { Avatar, Crest, EventArt } from '../components/art';
 import { EffectList, OvrBadge, Ribbon } from '../components/common';
 import { overallAt } from '../../domain/ratings';
@@ -19,25 +22,55 @@ import { MatchView } from './MatchView';
 export function EventCard() {
   const s = useGame();
   const ev = s.currentEvent;
-  if (!ev) return <SeasonDone />;
+  if (!ev) return <DayDone />;
   if (ev.status === 'pending') return <EventDecision ev={ev} key={ev.id} />;
   if (ev.type === 'leagueGame' && ev.resolution?.matchId) return <MatchView ev={ev} key={ev.id} />;
   return <EventResult ev={ev} key={ev.id} />;
 }
 
-function SeasonDone() {
+/**
+ * Every event of today is handled: the manager moves the calendar on. One day
+ * costs 1 Time; tomorrow is previewed so the choice to advance is informed.
+ */
+function DayDone() {
   const s = useGame();
+  const c = useController();
+  const snap = useSnapshot();
+  const now = useNow();
+  const ref = useRef<HTMLButtonElement>(null);
+  useEffect(() => ref.current?.focus({ preventScroll: true }), []);
+  const tomorrow = nextDay(s.calendar);
+  const blocker = advanceBlocker(s, now);
+  const t = viewTime(s.time, now);
+  const quiet = s.calendar.planned === 0;
+  const wait = t.msToNext !== null && t.current < BALANCE.time.costPerDay ? ` Next Time in ${Math.ceil(t.msToNext / 60000)} min.` : '';
   return (
-    <section className="event-card">
-      <Ribbon>Season {s.calendar.season}</Ribbon>
-      <h1 className="event-title">Season Complete</h1>
-      <p className="event-context">
-        Every league game has been played. Contracts, the draft, ageing and season two arrive in a later build step. Review the League table and History in the
-        meantime.
-      </p>
-      <a className="btn btn-secondary" href={href('league')}>
-        View final table
-      </a>
+    <section className="event-card day-done" aria-live="polite">
+      <Ribbon>{dayLabel(s.calendar)}</Ribbon>
+      <h1 className="event-title">{quiet ? 'A quiet day' : 'Day complete'}</h1>
+      <p className="event-context">{quiet ? 'Nothing needed your attention today.' : "Every event of today has been handled."}</p>
+      <div className="day-next">
+        <small>Tomorrow</small>
+        <strong>{describeDay(s, tomorrow)}</strong>
+      </div>
+      <button ref={ref} className="btn btn-primary btn-confirm" onClick={() => void c.dispatch({ type: 'advanceDay', revision: s.revision })} disabled={!!blocker || snap.busy}>
+        <span>Next day</span>
+        <span className="btn-cost">
+          <Icon name="time" size={18} /> {t.unlimited ? '∞' : BALANCE.time.costPerDay}
+          <Icon name="chevron" />
+        </span>
+      </button>
+      {blocker && (
+        <p className="muted small">
+          {blocker}
+          {wait}
+        </p>
+      )}
+      {snap.commandError && (
+        <p className="pm-blocker small" role="alert">
+          {snap.commandError}
+        </p>
+      )}
     </section>
   );
 }
@@ -239,10 +272,14 @@ function EventDecision({ ev }: { ev: EventInstance }) {
       )}
       <button className="btn btn-primary btn-confirm" onClick={confirm} disabled={!!blocker || snap.busy}>
         <span>{snap.busy ? 'Saving…' : `Confirm ${ev.type === 'leagueGame' ? 'lineup & play' : ev.kicker}`}</span>
-        <span className="btn-cost">
-          <CostTags cost={cost} unlimited={unlimited} />
+        {cost.cash > 0 || cost.influence > 0 || cost.time > 0 ? (
+          <span className="btn-cost">
+            <CostTags cost={cost} unlimited={unlimited} />
+            <Icon name="chevron" />
+          </span>
+        ) : (
           <Icon name="chevron" />
-        </span>
+        )}
       </button>
     </section>
   );
@@ -355,7 +392,7 @@ export function ContinueButton({ ev }: { ev: EventInstance }) {
   const s = useGame();
   const snap = useSnapshot();
   const next = s.nextEvent;
-  const label = next ? (next.type === 'leagueGame' ? 'League game' : SLOT_LABELS[next.templateId] ?? next.title) : 'Finish';
+  const label = next ? (next.type === 'leagueGame' ? 'League game' : SLOT_LABELS[next.templateId] ?? next.title) : 'End of the day';
   const onClick = () => void c.dispatch({ type: 'acknowledgeEvent', eventId: ev.id });
   const ref = useRef<HTMLButtonElement>(null);
   // The confirm button that had focus is gone; keep keyboard users on the primary action.
@@ -391,7 +428,7 @@ function EventResult({ ev }: { ev: EventInstance }) {
       <h2 className="subhead">What changed</h2>
       <EffectList effects={r.effects} />
       <ContinueButton ev={ev} />
-      {s.nextEvent === null && ev.type !== 'seasonReview' && <p className="muted">No further events.</p>}
+      {s.nextEvent === null && <p className="muted">That was the last event today.</p>}
     </section>
   );
 }

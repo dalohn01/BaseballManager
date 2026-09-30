@@ -1,3 +1,4 @@
+import { BALANCE } from '../balance/config';
 import { defaultPitchingPlan } from '../domain/lineup';
 import { cycleId, defaultActions, defaultCycle } from '../simulation/cycle';
 import { defaultTactics } from '../domain/tactics';
@@ -109,6 +110,40 @@ export function migrate(input: AnyState): GameState {
     s.cycle.matchesPlayed = done;
     s.cycle.lastClosedId = cycleId(s.calendar.season, s.calendar.round);
     s.schemaVersion = 8;
+  }
+  if (s.schemaVersion === 8) {
+    // Time moved from events to days: a round is club days plus match day, and
+    // advancing a day costs the Time. The save is placed on the day of the event
+    // in progress; slots that belong to a later day are planned again then.
+    const D = BALANCE.season.daysPerRound;
+    const cur = s.currentEvent;
+    const cal = s.calendar;
+    if (cur) {
+      cal.season = cur.season;
+      cal.round = cur.round;
+      cal.phase = cur.round === 0 ? 'preseason' : ['draft', 'contracts', 'seasonReview'].includes(cur.type) ? 'postseason' : 'regular';
+    }
+    if (cal.phase === 'preseason') cal.day = cur ? 1 : 0;
+    else if (cal.phase === 'postseason') cal.day = D + 1;
+    else if (cur && (cur.phase === 'club' || (!cur.phase && cur.type !== 'leagueGame'))) {
+      cal.day = 1;
+      // The game and media of this round come on match day.
+      s.queue = s.queue.filter((q) => q.kind === 'management');
+      if (s.nextEvent && (s.nextEvent.type === 'leagueGame' || s.nextEvent.round !== cur.round)) s.nextEvent = null;
+    } else {
+      cal.day = cur ? D : 1;
+      // An event already prepared for the next round belongs to a later day.
+      if (cur && s.nextEvent && s.nextEvent.round !== cur.round) {
+        s.nextEvent = null;
+        s.queue = [];
+      }
+    }
+    for (const ev of [s.currentEvent, s.nextEvent]) {
+      if (!ev || ev.status !== 'pending') continue;
+      for (const o of ev.options) o.cost.time = 0;
+      for (const b of ev.boosts) b.cost.time = 0;
+    }
+    s.schemaVersion = 9;
   }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;

@@ -1,3 +1,4 @@
+import { dayKind } from '../../domain/calendar';
 import { useState } from 'react';
 import { BALANCE } from '../../balance/config';
 import { moodLabel } from '../../domain/mood';
@@ -139,7 +140,7 @@ function Causes() {
 /** The fixed rhythm and the next board checkpoint (not every random event in advance). */
 function Rhythm() {
   const s = useGame();
-  const phase = s.currentEvent?.phase;
+  const phase = s.currentEvent?.phase ?? (dayKind(s.calendar) === 'match' ? 'media' : 'club');
   const steps = [
     { key: 'club', label: 'Club' },
     { key: 'match', label: 'Lineup & match' },
@@ -234,7 +235,8 @@ export function CycleNotice() {
   const s = useGame();
   const ev = s.currentEvent;
   const last = s.cycle.log.at(-1);
-  if (!ev || !last || ev.phase !== 'club' || absoluteRound(ev.season, ev.round) !== absoluteRound(last.season, last.round) + 1) return null;
+  const cal = s.calendar;
+  if (!last || cal.phase !== 'regular' || dayKind(cal) !== 'club' || (ev && ev.phase !== 'club') || absoluteRound(cal.season, cal.round) !== absoluteRound(last.season, last.round) + 1) return null;
   return (
     <p className="cycle-notice" role="status">
       <Icon name="influence" size={16} /> Round {last.round} closed: Influence +{Math.floor(last.credited)}

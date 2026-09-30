@@ -1,6 +1,7 @@
 import { BALANCE } from '../balance/config';
 import type { Rng } from '../domain/rng';
-import type { CyclePhase, EventInstance, FollowUp, GameState, QueuedSlot } from '../domain/state';
+import { dayKind } from '../domain/calendar';
+import type { Calendar, CyclePhase, EventInstance, FollowUp, GameState, QueuedSlot } from '../domain/state';
 import { absoluteRound, nextId, userClub } from '../domain/state';
 import { getTemplate, managementTemplates } from './registry';
 import type { EventTemplate } from './types';
@@ -36,8 +37,8 @@ const phaseOf = (t: EventTemplate) => t.phase ?? (t.slot === 'media' ? 'media' :
  * Follow-ups whose premise is gone (e.g. the player left) are dropped; the
  * promise itself already records why it lapsed.
  */
-function dueFollowUp(state: GameState, abs: number, phase: 'club' | 'media'): FollowUp | null {
-  const due = state.followUps.filter((f) => f.dueRound <= abs).sort((a, b) => a.dueRound - b.dueRound || a.id.localeCompare(b.id));
+function dueFollowUp(state: GameState, abs: number, phase: 'club' | 'media', skip: string[] = []): FollowUp | null {
+  const due = state.followUps.filter((f) => f.dueRound <= abs && !skip.includes(f.id)).sort((a, b) => a.dueRound - b.dueRound || a.id.localeCompare(b.id));
   for (const fu of due) {
     const t = getTemplate(fu.templateId);
     if (phaseOf(t) !== phase) continue;
@@ -80,31 +81,50 @@ function dueBoardCheck(state: GameState, season: number, round: number): string 
   return null;
 }
 
+/** The club-slot pick with its priority: cash crisis, a due follow-up, a board checkpoint, then the weighted pool. */
+function clubSlot(state: GameState, season: number, round: number, taken: QueuedSlot[]): QueuedSlot | null {
+  const ids = taken.map((q) => q.templateId);
+  const urgent = urgentTemplate(state, season, round);
+  if (urgent && !ids.includes(urgent.id)) return { kind: 'management', templateId: urgent.id, gameId: null };
+  const fu = dueFollowUp(state, absoluteRound(season, round), 'club', taken.map((q) => q.followUpId).filter((x): x is string => !!x));
+  if (fu) return { kind: 'management', templateId: fu.templateId, gameId: null, followUpId: fu.id };
+  const board = dueBoardCheck(state, season, round);
+  if (board) return { kind: 'management', templateId: board, gameId: null, scheduled: true };
+  return null;
+}
+
 /**
- * The fixed calendar for a round: one club event, the league game, then
- * post-match media. Club slot priority: cash crisis, a due follow-up, a board
- * checkpoint, a weighted situational event, team training as the fallback.
- * The media event is chosen when it is built, after the game is played.
+ * The events of one day, planned when the day starts (built one at a time as
+ * they come up, so later events see earlier decisions).
+ * - Club day: 0–3 club events; something due (crisis, follow-up, board
+ *   checkpoint) always gets a slot.
+ * - Match day: a crisis first if one is due, then the league game and the
+ *   post-match media (chosen after the game).
+ * - Preseason: the season plan and a sponsor search or regular event.
+ * - Off-season: the draft, which leads on to contracts and the season review.
  */
-export function planRound(state: GameState, rng: Rng, season: number, round: number): QueuedSlot[] {
-  const game = state.schedule.find(
-    (g) => g.season === season && g.round === round && (g.homeId === state.userClubId || g.awayId === state.userClubId),
-  );
+export function planDay(state: GameState, rng: Rng, cal: Calendar): QueuedSlot[] {
+  const { season, round } = cal;
+  const kind = dayKind(cal);
+  if (kind === 'preseason') return planPreseason(state, rng, season);
+  if (kind === 'offseason') return [{ kind: 'seasonEnd', templateId: 'draft', gameId: null }];
+  if (kind === 'match') {
+    const game = state.schedule.find((g) => g.season === season && g.round === round && (g.homeId === state.userClubId || g.awayId === state.userClubId));
+    const queue: QueuedSlot[] = [];
+    const urgent = urgentTemplate(state, season, round);
+    if (urgent && state.templateLastUsed[urgent.id] !== absoluteRound(season, round)) queue.push({ kind: 'management', templateId: urgent.id, gameId: null });
+    queue.push({ kind: 'match', templateId: 'league_game', gameId: game?.id ?? null });
+    queue.push({ kind: 'media', templateId: 'media_postgame', gameId: game?.id ?? null });
+    return queue;
+  }
+  const weights = BALANCE.season.clubDayEvents;
+  const count = rng.weighted(weights.map((w, n) => ({ item: n, weight: w }))) ?? 1;
   const queue: QueuedSlot[] = [];
-  for (const kind of BALANCE.season.slotsPerRound) {
-    if (kind === 'match') {
-      queue.push({ kind: 'match', templateId: 'league_game', gameId: game?.id ?? null });
-    } else if (kind === 'media') {
-      queue.push({ kind: 'media', templateId: 'media_postgame', gameId: game?.id ?? null });
-    } else {
-      const urgent = urgentTemplate(state, season, round);
-      const fu = urgent ? null : dueFollowUp(state, absoluteRound(season, round), 'club');
-      const board = urgent || fu ? null : dueBoardCheck(state, season, round);
-      if (urgent) queue.push({ kind: 'management', templateId: urgent.id, gameId: null });
-      else if (fu) queue.push({ kind: 'management', templateId: fu.templateId, gameId: null, followUpId: fu.id });
-      else if (board) queue.push({ kind: 'management', templateId: board, gameId: null, scheduled: true });
-      else queue.push({ kind: 'management', templateId: pickManagementTemplate(state, rng, season, round, []).id, gameId: null });
-    }
+  for (let i = 0; i < 3; i++) {
+    const due = clubSlot(state, season, round, queue);
+    if (due) queue.push(due);
+    else if (queue.length < count) queue.push({ kind: 'management', templateId: pickManagementTemplate(state, rng, season, round, queue.map((q) => q.templateId)).id, gameId: null });
+    else break;
   }
   return queue;
 }
@@ -194,42 +214,29 @@ export function buildEvent(state: GameState, slot: QueuedSlot, rng: Rng, season:
 }
 
 /**
- * Produces the event that follows the current one: next slot in this cycle,
- * the next round's club slot, the season-end sequence (draft → contracts →
- * review) or the next season's preseason. A cash crisis that arises after the
- * club slot was used comes as one extra event (no Time) before the next slot.
+ * The event that follows the current one on the same day, or null when the
+ * day is done. The off-season runs draft → contracts → review in one day; the
+ * review moves the calendar to the next season, whose preseason is a new day.
  */
-export function prepareNextEvent(state: GameState, rng: Rng, after: EventInstance): EventInstance {
-  const rounds = BALANCE.season.rounds;
-  if (after.type === 'seasonReview') {
-    // The review already moved the calendar to the next season's preseason.
-    const season = state.calendar.season;
-    state.queue = planPreseason(state, rng, season);
-    return buildEvent(state, state.queue.shift()!, rng, season, 0, 0);
-  }
-  const season = after.season;
-  let round = after.round;
-  let slotIndex = after.slot + 1;
-
+export function prepareNextEvent(state: GameState, rng: Rng, after: EventInstance): EventInstance | null {
+  const { season, round } = state.calendar;
+  const slotIndex = after.slot + 1;
+  if (after.type === 'seasonReview') return null;
   if (state.queue.length === 0) {
-    if (round >= rounds) {
-      const seasonEnd = (templateId: string) => buildEvent(state, { kind: 'seasonEnd', templateId, gameId: null }, rng, season, round, slotIndex);
-      if (after.type === 'draft') return seasonEnd(getTemplate('contracts').weight(state) > 0 ? 'contracts' : 'season_review');
-      if (after.type === 'contracts') return seasonEnd('season_review');
-      return seasonEnd('draft');
-    }
-    round += 1;
-    slotIndex = 0;
-    state.queue = planRound(state, rng, season, round);
-  }
-  const upcoming = state.queue[0];
-  if (round > 0 && upcoming.kind !== 'management' && after.phase !== 'extra') {
-    const urgent = urgentTemplate(state, season, round);
-    if (urgent && state.templateLastUsed[urgent.id] !== absoluteRound(season, round)) {
-      return buildEvent(state, { kind: 'management', templateId: urgent.id, gameId: null }, rng, season, round, after.slot, 'extra');
-    }
+    const seasonEnd = (templateId: string) => buildEvent(state, { kind: 'seasonEnd', templateId, gameId: null }, rng, season, round, slotIndex);
+    if (after.type === 'draft') return seasonEnd(getTemplate('contracts').weight(state) > 0 ? 'contracts' : 'season_review');
+    if (after.type === 'contracts') return seasonEnd('season_review');
+    return null;
   }
   return buildEvent(state, state.queue.shift()!, rng, season, round, slotIndex);
+}
+
+/** Starts the day the calendar is on: plans its events and builds the first one. */
+export function startDay(state: GameState, rng: Rng): EventInstance | null {
+  const cal = state.calendar;
+  state.queue = planDay(state, rng, cal);
+  const first = state.queue.shift();
+  return first ? buildEvent(state, first, rng, cal.season, cal.round, 0) : null;
 }
 
 /** Labels for the "upcoming" list on Home. */

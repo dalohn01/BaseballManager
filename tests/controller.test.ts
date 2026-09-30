@@ -30,7 +30,9 @@ describe('controller + saving', () => {
     expect(await resolveFirst(c)).toBe(false);
     expect(await c.retrySave()).toBe(true);
     const after = c.getSnapshot().state!;
-    expect(after.time.current).toBe(before.time.current - 1);
+    // Events cost no Time (the day does); the decision is saved exactly once.
+    expect(after.time.current).toBe(before.time.current);
+    expect(after.history).toHaveLength(before.history.length + 1);
     expect(after.currentEvent!.status).toBe('resolved');
     expect((await repo.loadCurrent())!.state.rngState).toBe(after.rngState);
   });
@@ -42,7 +44,24 @@ describe('controller + saving', () => {
     const cmd = { type: 'resolveEvent' as const, eventId: ev.id, revision: s.revision, optionId: ev.options[0].id, boostId: null };
     const [a, b] = await Promise.all([c.dispatch(cmd), c.dispatch(cmd)]);
     expect([a, b].filter(Boolean)).toHaveLength(1);
-    expect(c.getSnapshot().state!.time.current).toBe(s.time.current - 1);
+    expect(c.getSnapshot().state!.history).toHaveLength(s.history.length + 1);
+  });
+
+  it('double click on the next day advances once and charges 1 Time once', async () => {
+    const { c } = await ready();
+    for (let i = 0; i < 10 && c.getSnapshot().state!.currentEvent; i++) {
+      const s = c.getSnapshot().state!;
+      const ev = s.currentEvent!;
+      if (ev.status === 'pending') await resolveFirst(c);
+      else await c.dispatch({ type: 'acknowledgeEvent', eventId: ev.id });
+    }
+    const s = c.getSnapshot().state!;
+    const cmd = { type: 'advanceDay' as const, revision: s.revision };
+    const [a, b] = await Promise.all([c.dispatch(cmd), c.dispatch(cmd)]);
+    expect([a, b].filter(Boolean)).toHaveLength(1);
+    const after = c.getSnapshot().state!;
+    expect(after.time.current).toBe(s.time.current - 1);
+    expect([after.calendar.round, after.calendar.day]).toEqual([1, 1]);
   });
 
   it('a resolved but unacknowledged result is shown again after reload', async () => {

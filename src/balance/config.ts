@@ -5,14 +5,21 @@
 export const BALANCE = {
   season: {
     rounds: 20,
-    /** The match cycle: one club event, the league game, then post-match media (3 Time). */
-    slotsPerRound: ['management', 'match', 'media'] as const,
+    /**
+     * Days per league round: club days first, then match day (the league game
+     * and post-match media). Advancing one day costs 1 Time.
+     */
+    daysPerRound: 3,
+    /** Chance of 0, 1, 2 or 3 club events on a club day. Something due (crisis, follow-up, board) guarantees at least one. */
+    clubDayEvents: [0.15, 0.45, 0.3, 0.1] as const,
   },
 
   time: {
     cap: 12,
     regenIntervalMs: 20 * 60 * 1000,
-    costPerEvent: 1,
+    /** Events no longer cost Time: the day does. */
+    costPerEvent: 0,
+    costPerDay: 1,
   },
 
   influence: {

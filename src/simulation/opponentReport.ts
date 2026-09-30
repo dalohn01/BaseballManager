@@ -34,17 +34,17 @@ export function opponentReport(state: GameState, gameId: GameId): { opponentId: 
   if (cSlot) {
     const c = state.players[cSlot.playerId];
     const arm = fieldingAt(c, 'C');
-    if (arm <= 45) obs.push({ kind: 'Trait', text: `Their catcher ${c.lastName} is weak at stopping steals (fielding ${arm}).`, hint: { area: 'baserunning', value: 'aggressive', text: 'Aggressive running may pay off.' }, weight: 60 - arm });
-    else if (arm >= 68) obs.push({ kind: 'Trait', text: `Their catcher ${c.lastName} controls the running game well (fielding ${arm}).`, hint: { area: 'baserunning', value: 'cautious', text: 'Steals are risky today.' }, weight: arm - 55 });
+    if (arm <= 45) obs.push({ kind: 'Trait', text: `Their catcher ${c.lastName} is weak at stopping steals (fielding ${Math.round(arm)}).`, hint: { area: 'baserunning', value: 'aggressive', text: 'Aggressive running may pay off.' }, weight: 60 - arm });
+    else if (arm >= 68) obs.push({ kind: 'Trait', text: `Their catcher ${c.lastName} controls the running game well (fielding ${Math.round(arm)}).`, hint: { area: 'baserunning', value: 'cautious', text: 'Steals are risky today.' }, weight: arm - 55 });
   }
 
   // Trait and status: the probable starter (how the AI picks today's pitcher).
   const sp = state.players[lineup.pitcherId];
   if (sp) {
     const pit = sp.ratings.pitching;
-    if (pit >= 64) obs.push({ kind: 'Trait', text: `Probable starter ${sp.lastName} gets a lot of strikeouts (pitching ${pit}).`, hint: { area: 'batting', value: 'contact', text: 'A contact approach cuts strikeouts.' }, weight: pit - 50 });
-    else if (pit <= 46) obs.push({ kind: 'Trait', text: `Probable starter ${sp.lastName} is hittable (pitching ${pit}).`, hint: { area: 'batting', value: 'power', text: 'Strong hitters could swing for power.' }, weight: 55 - pit });
-    if (sp.fitness < BALANCE.fitness.warnBelow) obs.push({ kind: 'Status', text: `${sp.lastName} is not fully rested (fitness ${sp.fitness}%), so he pitches below his rating (${effectiveRating(sp, 'pitching')} today).`, weight: 20 + (BALANCE.fitness.warnBelow - sp.fitness) * 2 });
+    if (pit >= 64) obs.push({ kind: 'Trait', text: `Probable starter ${sp.lastName} gets a lot of strikeouts (pitching ${Math.round(pit)}).`, hint: { area: 'batting', value: 'contact', text: 'A contact approach cuts strikeouts.' }, weight: pit - 50 });
+    else if (pit <= 46) obs.push({ kind: 'Trait', text: `Probable starter ${sp.lastName} is hittable (pitching ${Math.round(pit)}).`, hint: { area: 'batting', value: 'power', text: 'Strong hitters could swing for power.' }, weight: 55 - pit });
+    if (sp.fitness < BALANCE.fitness.warnBelow) obs.push({ kind: 'Status', text: `${sp.lastName} is not fully rested (fitness ${sp.fitness}%), so he pitches below his rating (${Math.round(effectiveRating(sp, 'pitching'))} today).`, weight: 20 + (BALANCE.fitness.warnBelow - sp.fitness) * 2 });
   }
 
   // Status: the bullpen (every other pitcher).

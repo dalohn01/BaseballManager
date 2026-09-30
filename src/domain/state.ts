@@ -10,7 +10,7 @@ import type {
 } from './types';
 import { BALANCE } from '../balance/config';
 
-export const SCHEMA_VERSION = 8;
+export const SCHEMA_VERSION = 9;
 
 export type EventType =
   | 'leagueGame'
@@ -233,6 +233,14 @@ export interface Calendar {
   round: number;
   slot: number;
   phase: 'preseason' | 'regular' | 'postseason';
+  /**
+   * Day within the round. Regular rounds run 1..daysPerRound (the last is match
+   * day); preseason is day 1 (0 = not started yet); the off-season is one day
+   * after the last match day. The day's events are planned when it starts.
+   */
+  day: number;
+  /** Events planned when today started (0 = a quiet day). */
+  planned?: number;
 }
 
 export interface GameState {

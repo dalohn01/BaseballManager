@@ -8,12 +8,12 @@ import { SCHEMA_VERSION } from '../src/domain/state';
 import { getTemplate } from '../src/events/registry';
 import { projectedAttendance } from '../src/simulation/economy';
 import { addModifier, MAX_FACILITY_LEVEL, trainingModifier, upgradeBlocker, upgradePrice } from '../src/simulation/facilities';
-import { newGame, run, step, T0 } from './helpers';
+import { newGame, run, step, T0, toNextEvent } from './helpers';
 
 const upgrade = (s: GameState, facility: 'training' | 'scouting' | 'stadium') => execute(s, { type: 'upgradeFacility', facility, revision: s.revision }, T0);
 
 function force(s: GameState, templateId: string): GameState {
-  const next = structuredClone(s);
+  const next = structuredClone(toNextEvent(s));
   const rng = createRng(next.rngState);
   const draft = getTemplate(templateId).build({ state: next, rng, season: next.calendar.season, round: next.calendar.round, gameId: null });
   const { candidates = [], rerollCost = null, ...rest } = draft;
@@ -27,7 +27,7 @@ const ack = (s: GameState) => run(s, { type: 'acknowledgeEvent', eventId: s.curr
 /** Plays events until one more league game has been played. */
 function playOneGame(s: GameState): GameState {
   const played = Object.keys(s.matches).length;
-  for (let i = 0; i < 20 && Object.keys(s.matches).length === played; i++) s = step(s, 900 + i);
+  for (let i = 0; i < 40 && Object.keys(s.matches).length === played; i++) s = step(s, 900 + i);
   return s;
 }
 

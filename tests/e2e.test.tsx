@@ -64,6 +64,14 @@ async function advance(): Promise<string> {
     await waitFor(() => expect(screen.queryByRole('button', { name: /^Continue/ })).toBeNull());
     return 'continue';
   }
+  const day = screen.queryByRole('button', { name: /^Next day/ });
+  if (day && !(day as HTMLButtonElement).disabled) {
+    // Every event of today is handled: the day card shows tomorrow and the next match's distance.
+    expect(screen.getByText(/^(Day complete|A quiet day)$/)).toBeTruthy();
+    expect(screen.getAllByText(/^(Today|Tomorrow|In \d+ days|Up now)$/).length).toBeGreaterThan(0);
+    await click(day);
+    return 'day';
+  }
   const confirm = await screen.findByRole('button', { name: /^Confirm/ });
   await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
   await click(confirm);
@@ -106,10 +114,11 @@ describe('end-to-end', () => {
     // Keep playing through the UI until the first league game has been played.
     const clicks: string[] = [];
     // Confirm lineup → intro → commentary; the match ends on FINAL with the existing match summary underneath.
-    for (let i = 0; i < 30 && screen.queryAllByText(/^Final/i).length === 0; i++) clicks.push(await advance());
+    for (let i = 0; i < 40 && screen.queryAllByText(/^Final/i).length === 0; i++) clicks.push(await advance());
     expect(screen.getAllByText(/^Final/i).length).toBeGreaterThan(0);
     expect(screen.getByRole('table', { name: 'Line score' })).toBeTruthy();
     expect(clicks).toContain('confirm');
+    expect(clicks).toContain('day');
     expect(clicks).toContain('intro');
     expect(clicks).toContain('skip');
 

@@ -18,8 +18,22 @@ export function run(state: GameState, cmd: Command, now = T0): GameState {
   return r.state;
 }
 
-/** Resolves and acknowledges the current event with a (seeded) choice among available options. */
+/** Moves to the next day (all of today's events must be handled). */
+export const advanceDay = (s: GameState, now = T0) => run(s, { type: 'advanceDay', revision: s.revision }, now);
+
+/** Advances days until an event is waiting (days can be empty). */
+export function toNextEvent(s: GameState, now = T0): GameState {
+  let i = 0;
+  while (!s.currentEvent && i++ < 20) s = advanceDay(s, now);
+  return s;
+}
+
+/**
+ * Resolves and acknowledges the current event with a (seeded) choice among
+ * available options; when the day is done it advances to the next event first.
+ */
 export function step(state: GameState, pickSeed: number, now = T0): GameState {
+  state = toNextEvent(state, now);
   const ev = state.currentEvent!;
   const rng = createRng(pickSeed);
   const available = ev.options.filter((o) => optionBlocker(state, ev, o, null, now) === null);

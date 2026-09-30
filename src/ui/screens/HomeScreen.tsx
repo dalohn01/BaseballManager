@@ -5,6 +5,7 @@ import { fitnessLabel, moodLabel } from '../../domain/mood';
 import type { GameState } from '../../domain/state';
 import { absoluteRound, clubName, clubPlayers, shortName, userClub } from '../../domain/state';
 import { SLOT_LABELS } from '../../events/planner';
+import { dayLabel, daysUntilRound, describeDay, eventsLeftToday, inDays, nextDay } from '../../domain/calendar';
 import { DIRECTION_LABEL, goalProgress } from '../../simulation/goals';
 import { money } from '../format';
 import { computeStandings } from '../../simulation/standings';
@@ -58,7 +59,7 @@ export function HomeScreen() {
       <div className="home-grid">
         <div className="home-main" ref={mainRef}>
           <CycleNotice />
-          <EventCard />
+          <EventStack />
         </div>
         <aside className="home-left">
           <SeasonGoal />
@@ -76,11 +77,7 @@ export function HomeScreen() {
 }
 
 function phaseLabel(s: GameState): string {
-  const ev = s.currentEvent;
-  const round = ev?.round ?? s.calendar.round;
-  if (round === 0) return 'Preseason';
-  if (ev && ['draft', 'contracts', 'seasonReview'].includes(ev.type)) return 'Off-season';
-  return `Round ${round}`;
+  return dayLabel(s.calendar);
 }
 
 export function SeasonGoal() {
@@ -174,12 +171,13 @@ function NextMatch() {
   const s = useGame();
   const ev = s.currentEvent;
   const season = s.calendar.season;
-  const fromRound = ev?.round ?? s.calendar.round;
+  const fromRound = s.calendar.phase === 'postseason' ? Infinity : s.calendar.round;
   const g = s.schedule.find((x) => x.season === season && x.round >= fromRound && !x.result && (x.homeId === s.userClubId || x.awayId === s.userClubId));
   if (!g) return <Panel title="Next match"><p className="muted">No games left this season.</p></Panel>;
   const home = s.clubs[g.homeId];
   const away = s.clubs[g.awayId];
-  const eventsBefore = ev && ev.round === g.round && ev.type !== 'leagueGame' ? s.queue.filter((q) => q.kind === 'management').length + (ev.status === 'pending' ? 1 : 0) : null;
+  const days = daysUntilRound(s.calendar, g.round);
+  const upNow = ev?.type === 'leagueGame' && ev.status === 'pending';
   return (
     <Panel title="Next match">
       <div className="nm-teams">
@@ -196,8 +194,9 @@ function NextMatch() {
       <p className="nm-meta">
         {g.homeId === s.userClubId ? 'Home' : 'Away'} · Round {g.round}
       </p>
-      {eventsBefore !== null && eventsBefore > 0 && <p className="nm-when">After {eventsBefore} event{eventsBefore > 1 ? 's' : ''}</p>}
-      {ev?.type === 'leagueGame' && ev.status === 'pending' && <p className="nm-when">Up now</p>}
+      <p className={`nm-days ${days === 0 ? 'today' : ''}`}>
+        <Icon name="time" size={16} /> {upNow ? 'Up now' : inDays(days)}
+      </p>
     </Panel>
   );
 }
@@ -205,12 +204,12 @@ function NextMatch() {
 function Upcoming() {
   const s = useGame();
   const ev = s.currentEvent;
-  if (!ev) return null;
   const items: { label: string; tag: string }[] = [];
-  items.push({ tag: 'Now', label: ev.type === 'leagueGame' ? 'League game' : ev.title });
+  if (ev) items.push({ tag: 'Now', label: ev.type === 'leagueGame' ? 'League game' : ev.title });
   const upcoming = s.nextEvent ? [{ templateId: s.nextEvent.templateId }, ...s.queue] : s.queue;
-  upcoming.forEach((q, i) => items.push({ tag: i === 0 ? 'Next' : 'Later', label: SLOT_LABELS[q.templateId] ?? q.templateId }));
-  if (items.length < 4) items.push({ tag: 'Later', label: `Round ${ev.round + 1} events` });
+  upcoming.forEach((q) => items.push({ tag: 'Later today', label: SLOT_LABELS[q.templateId] ?? q.templateId }));
+  if (!ev) items.push({ tag: 'Today', label: 'All done' });
+  if (s.calendar.phase !== 'postseason') items.push({ tag: 'Tomorrow', label: describeDay(s, nextDay(s.calendar)) });
   return (
     <Panel title="Upcoming events">
       <ol className="timeline">
@@ -254,5 +253,27 @@ function MiniTable() {
         </tbody>
       </table>
     </Panel>
+  );
+}
+
+/**
+ * Today's events as a stack: the one being handled on top, the rest of the
+ * day peeking out underneath so it is clear more are waiting.
+ */
+function EventStack() {
+  const s = useGame();
+  const left = s.currentEvent ? eventsLeftToday(s) : 0;
+  const depth = Math.min(left, 2);
+  return (
+    <div className="event-stack">
+      <div className={`stack-cards depth-${depth}`}>
+        <EventCard />
+      </div>
+      {left > 0 && (
+        <p className="stack-note small muted">
+          {left} more event{left > 1 ? 's' : ''} today
+        </p>
+      )}
+    </div>
   );
 }

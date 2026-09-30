@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../src/balance/config';
 import { execute } from '../src/application/engine';
 import { regenerate, spendTime, viewTime } from '../src/domain/time';
-import { newGame, T0 } from './helpers';
+import { newGame, T0, run } from './helpers';
 
 const I = BALANCE.time.regenIntervalMs;
 
@@ -34,15 +34,22 @@ describe('Time regeneration', () => {
     expect(regenerate(r, T0).current).toBe(3 + 5);
   });
 
-  it('blocks events at zero Time in economy mode but not in test mode', () => {
+  it("zero Time never blocks today's events, only the next day; test mode never waits", () => {
     let s = newGame(1, 'economy');
     s = { ...s, time: { ...s.time, current: 0, lastRegenAt: T0 } };
-    const ev = s.currentEvent!;
-    const cmd = { type: 'resolveEvent' as const, eventId: ev.id, revision: s.revision, optionId: ev.options[0].id, boostId: null };
+    // Handle the whole preseason day with no Time at all.
+    for (let i = 0; i < 6 && s.currentEvent; i++) {
+      const ev = s.currentEvent;
+      if (ev.status === 'pending') s = run(s, { type: 'resolveEvent', eventId: ev.id, revision: s.revision, optionId: ev.options[0].id, boostId: null });
+      else s = run(s, { type: 'acknowledgeEvent', eventId: ev.id });
+    }
+    expect(s.currentEvent).toBeNull();
+    const cmd = { type: 'advanceDay' as const, revision: s.revision };
     const r = execute(s, cmd, T0);
     expect(!r.ok && r.code).toBe('unaffordable');
     const later = execute(s, cmd, T0 + I);
     expect(later.ok).toBe(true);
+    if (later.ok) expect(later.state.time.current).toBe(0);
 
     const test = execute(s, { type: 'setTimeMode', mode: 'unlimited' }, T0);
     expect(test.ok).toBe(true);

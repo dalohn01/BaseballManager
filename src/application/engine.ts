@@ -13,7 +13,8 @@ import { absoluteRound, userClub } from '../domain/state';
 import { canAffordTime, regenerate, spendTime } from '../domain/time';
 import type { FacilityId, Instruction, Lineup, PitchingPlan, TacticArea, TeamStyle } from '../domain/types';
 import { clearMatchTactics, relevantAreas, STYLE_OPTIONS } from '../domain/tactics';
-import { prepareNextEvent } from '../events/planner';
+import { prepareNextEvent, startDay } from '../events/planner';
+import { dayComplete, nextDay } from '../domain/calendar';
 import { getTemplate } from '../events/registry';
 
 export type Command =
@@ -27,6 +28,8 @@ export type Command =
       selection?: { lineup: Lineup; pitchingPlan: PitchingPlan };
     }
   | { type: 'acknowledgeEvent'; eventId: string }
+  /** Moves the calendar one day forward (1 Time) once every event of today is handled. */
+  | { type: 'advanceDay'; revision: number }
   | { type: 'setLineup'; lineup: Lineup }
   | { type: 'autoLineup'; mode: 'strongest' | 'rest' }
   | { type: 'setTimeMode'; mode: 'economy' | 'unlimited' }
@@ -45,8 +48,6 @@ export type Command =
 
 export type CommandError = { ok: false; code: 'stale' | 'duplicate' | 'invalid' | 'unaffordable'; error: string };
 export type CommandResult = { ok: true; state: GameState } | CommandError;
-
-const POSTSEASON = new Set(['draft', 'contracts', 'seasonReview']);
 
 export type TacticScope = 'default' | 'match';
 const isStyleValue = (area: TacticArea, v: string) => !!STYLE_OPTIONS[area]?.some((o) => o.value === v);
@@ -89,15 +90,25 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       if (ev.status !== 'resolved') return fail('invalid', 'Resolve the event before continuing.');
       const next = structuredClone(state);
       next.currentEvent!.status = 'acknowledged';
+      // The next event of the same day, or none: the day is done and the manager advances it.
       next.currentEvent = next.nextEvent;
       next.nextEvent = null;
-      const cur = next.currentEvent;
-      if (cur) {
-        next.calendar.season = cur.season;
-        next.calendar.round = cur.round;
-        next.calendar.slot = cur.slot;
-        next.calendar.phase = cur.round === 0 ? 'preseason' : POSTSEASON.has(cur.type) ? 'postseason' : 'regular';
-      }
+      if (next.currentEvent) next.calendar.slot = next.currentEvent.slot;
+      next.revision += 1;
+      return { ok: true, state: next };
+    }
+    case 'advanceDay': {
+      const blocker = advanceBlocker(state, now);
+      if (blocker) return fail(blocker.startsWith('Not enough') ? 'unaffordable' : 'invalid', blocker);
+      // The revision makes a repeated click (or a second tab) fail instead of skipping two days.
+      if (cmd.revision !== state.revision) return fail('stale', 'The game changed since this screen was opened.');
+      const next = structuredClone(state);
+      next.time = spendTime(next.time, now, BALANCE.time.costPerDay);
+      next.calendar = nextDay(next.calendar);
+      const rng = createRng(next.rngState);
+      next.currentEvent = startDay(next, rng);
+      next.calendar.planned = next.currentEvent ? next.queue.length + 1 : 0;
+      next.rngState = rng.getState();
       next.revision += 1;
       return { ok: true, state: next };
     }
@@ -222,6 +233,14 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       return { ok: true, state: next };
     }
   }
+}
+
+/** Why the calendar cannot move to the next day right now, or null if it can. */
+export function advanceBlocker(state: GameState, now: number): string | null {
+  if (!dayComplete(state)) return "Handle today's events first.";
+  if (state.calendar.phase === 'postseason') return 'Finish the season review first.';
+  if (!canAffordTime(state.time, now, BALANCE.time.costPerDay)) return 'Not enough Time. Wait for it to recover.';
+  return null;
 }
 
 export const spendingFrozen = (state: GameState) => {

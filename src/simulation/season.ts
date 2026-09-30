@@ -154,7 +154,8 @@ export function startNextSeason(state: GameState, rng: Rng): TransitionReport {
   }
 
   // Next season.
-  state.calendar = { season: season + 1, round: 0, slot: 0, phase: 'preseason' };
+  // Preseason is its own day: it starts when the manager advances from the off-season.
+  state.calendar = { season: season + 1, round: 0, slot: 0, phase: 'preseason', day: 0 };
   state.schedule.push(...generateSchedule(state.clubOrder, season + 1, rng));
   // Keep only the finished season's full match results.
   for (const [id, m] of Object.entries(state.matches)) if (m.season < season) delete state.matches[id];

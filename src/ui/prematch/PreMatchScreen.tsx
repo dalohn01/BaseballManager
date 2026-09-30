@@ -218,9 +218,6 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
         <div className="pm-confirm-bar">
           <button className="btn btn-primary pm-confirm" onClick={confirm} disabled={!!blocker || snap.busy} title={blocker ?? undefined}>
             <Icon name="check" /> {snap.busy ? 'Saving…' : 'Confirm lineup'}
-            <span className="btn-cost">
-              <Icon name="time" size={16} /> {s.time.mode === 'unlimited' ? '∞' : option.cost.time}
-            </span>
           </button>
           {blocker && !errors.length && <p className="pm-blocker small">{blocker}</p>}
           {snap.commandError && <p className="pm-blocker small" role="alert">{snap.commandError}</p>}

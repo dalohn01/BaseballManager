@@ -5,7 +5,7 @@ import { validateLineup } from '../src/domain/lineup';
 import { clubPlayers } from '../src/domain/state';
 import { computeStandings } from '../src/simulation/standings';
 import { roundShare } from '../src/simulation/economy';
-import { newGame, playSeason, run, step, T0 } from './helpers';
+import { newGame, playSeason, run, step, T0, advanceDay, toNextEvent } from './helpers';
 
 describe('new game', () => {
   it('starts with valid rosters, lineups and a feasible first event', () => {
@@ -70,8 +70,9 @@ describe('event resolution', () => {
 
   it('every event offers a base choice without Influence or extra Cash', () => {
     let s = newGame(11);
-    for (let i = 0; i < 60 && s.currentEvent; i++) {
-      const ev = s.currentEvent;
+    for (let i = 0; i < 60; i++) {
+      s = toNextEvent(s);
+      const ev = s.currentEvent!;
       expect(ev.options.some((o) => o.cost.cash === 0 && o.cost.influence === 0)).toBe(true);
       s = step(s, i);
     }
@@ -79,7 +80,7 @@ describe('event resolution', () => {
 
   it('charges Influence for the training boost exactly once', () => {
     let s = newGame(2);
-    while (s.currentEvent!.templateId !== 'team_training') s = step(s, 1);
+    while ((s = toNextEvent(s)).currentEvent!.templateId !== 'team_training') s = step(s, 1);
     const ev = s.currentEvent!;
     const before = s.influence;
     const s1 = run(s, { type: 'resolveEvent', eventId: ev.id, revision: s.revision, optionId: 'batting', boostId: 'extra_coaching' });
@@ -98,8 +99,10 @@ describe('event resolution', () => {
 describe('full season', () => {
   it('plays a whole season and counts every league game once', () => {
     const s = playSeason(newGame(21));
-    expect(s.calendar).toMatchObject({ season: 2, round: 0, phase: 'preseason' });
-    expect(s.currentEvent?.templateId).toBe('season_plan');
+    expect(s.calendar).toMatchObject({ season: 2, round: 0, phase: 'preseason', day: 0 });
+    // Preseason is a new day: the season plan comes when the manager advances.
+    expect(s.currentEvent).toBeNull();
+    expect(advanceDay(s).currentEvent?.templateId).toBe('season_plan');
     const games = s.schedule.filter((g) => g.season === 1);
     expect(games.every((g) => g.result)).toBe(true);
     const table = computeStandings(s, 1);

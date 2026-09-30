@@ -10,10 +10,10 @@ import { getTemplate } from '../src/events/registry';
 import { describeLineupChange, leagueGameOptionNotes, lineupForChoice } from '../src/events/templates/leagueGame';
 import { lossExpectation } from '../src/simulation/round';
 import { expiringPlayers, renewalTerms, startNextSeason } from '../src/simulation/season';
-import { newGame, playSeason, run, T0 } from './helpers';
+import { newGame, playSeason, run, T0, toNextEvent } from './helpers';
 
 function force(s: GameState, templateId: string): GameState {
-  const next = structuredClone(s);
+  const next = structuredClone(toNextEvent(s));
   const rng = createRng(next.rngState);
   const draft = getTemplate(templateId).build({ state: next, rng, season: next.calendar.season, round: next.calendar.round, gameId: null });
   const { candidates = [], rerollCost = null, ...rest } = draft;
@@ -27,19 +27,21 @@ const ack = (s: GameState) => run(s, { type: 'acknowledgeEvent', eventId: s.curr
 
 /** Conservative play: the league game uses the saved lineup, other events take the last (usually "leave it") option. */
 function calmStep(s: GameState, beforeGame?: (s: GameState) => GameState): GameState {
+  s = toNextEvent(s);
   const ev = s.currentEvent!;
   if (ev.type === 'leagueGame' && beforeGame) s = beforeGame(s);
   const cur = s.currentEvent!;
   const options = cur.type === 'leagueGame' ? cur.options.filter((o) => o.id === 'current') : [...cur.options].reverse();
   const opt = options.find((o) => optionBlocker(s, cur, o, null, T0) === null)!;
-  return ack(resolve(s, opt.id));
+  // Stops at the next event waiting (days without events are advanced through).
+  return toNextEvent(ack(resolve(s, opt.id)));
 }
 
 /** Moves past preseason into round 1 with a balanced plan. */
 function toRound1(s: GameState): GameState {
   s = ack(resolve(s, 'balanced'));
   while (s.calendar.round === 0) s = calmStep(s);
-  return s;
+  return toNextEvent(s);
 }
 
 function checkInvariants(s: GameState) {
@@ -85,12 +87,12 @@ describe('chain 1: promise of starts', () => {
 
   it('is kept when he actually starts, and a follow-up event arrives next round', () => {
     let { s, pr } = withPromise(11);
-    for (let i = 0; i < 20 && s.promises.find((p) => p.id === pr.id)!.status === 'active'; i++) s = calmStep(s);
+    for (let i = 0; i < 60 && s.promises.find((p) => p.id === pr.id)!.status === 'active'; i++) s = calmStep(s);
     const closed = s.promises.find((p) => p.id === pr.id)!;
     expect(closed.status).toBe('kept');
     expect(closed.progress).toBeGreaterThanOrEqual(closed.threshold);
     const roundKept = closed.closedAt!.round;
-    for (let i = 0; i < 6 && s.currentEvent!.templateId !== 'promise_followup'; i++) s = calmStep(s);
+    for (let i = 0; i < 15 && s.currentEvent!.templateId !== 'promise_followup'; i++) s = calmStep(s);
     expect(s.currentEvent!.templateId).toBe('promise_followup');
     expect(s.currentEvent!.round).toBeLessThanOrEqual(roundKept + 1);
     expect(s.currentEvent!.context).toContain(`round ${pr.madeAt.round}`);
@@ -150,7 +152,7 @@ describe('chain 2: public message → fan reaction → evaluation', () => {
     expect(lossExpectation(s).multiplier).toBe(BALANCE.stance.patienceLossMultiplier);
     const fu = s.followUps.find((f) => f.templateId === 'media_stance_review')!;
     expect(fu.dueRound).toBe(absoluteRound(1, 1 + BALANCE.stance.reviewAfterRounds));
-    for (let i = 0; i < 25 && s.currentEvent!.templateId !== 'media_stance_review'; i++) s = calmStep(s);
+    for (let i = 0; i < 60 && s.currentEvent!.templateId !== 'media_stance_review'; i++) s = calmStep(s);
     expect(s.currentEvent!.templateId).toBe('media_stance_review');
     expect(s.currentEvent!.round).toBeLessThanOrEqual(1 + BALANCE.stance.reviewAfterRounds + 1);
     expect(s.currentEvent!.context).toContain('Round 1');
@@ -161,7 +163,7 @@ describe('chain 3: training investment → facility → training result', () => 
   it('the first session after completion shows the facility contribution', () => {
     let s = toRound1(newGame(14));
     s = run(s, { type: 'upgradeFacility', facility: 'training', revision: s.revision });
-    for (let i = 0; i < 30 && s.currentEvent!.title !== 'Training in the New Center'; i++) s = calmStep(s);
+    for (let i = 0; i < 80 && s.currentEvent!.title !== 'Training in the New Center'; i++) s = calmStep(s);
     expect(s.currentEvent!.title).toBe('Training in the New Center');
     s = resolve(s, 'batting');
     expect(s.currentEvent!.resolution!.narrative.join(' ')).toMatch(/Training Center level 2 contributed \d+/);
@@ -222,7 +224,7 @@ describe('contracts', () => {
   it('willing players re-sign with a raise, unhappy ones refuse, and holes are filled', () => {
     let s = newGame(18);
     let guard = 0;
-    while (s.currentEvent!.templateId !== 'contracts' && s.calendar.season === 1 && guard++ < 200) s = calmStep(s);
+    while (s.currentEvent!.templateId !== 'contracts' && s.calendar.season === 1 && guard++ < 400) s = calmStep(s);
     expect(s.currentEvent!.templateId).toBe('contracts');
     s = structuredClone(s);
     const exp = expiringPlayers(s, 'hfx');

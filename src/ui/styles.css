@@ -1244,3 +1244,22 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .post-side svg { width: 44px; height: 44px; }
   .post-score { gap: 8px; }
 }
+
+/* Days: today's events as a stack, the day-complete card and days to the next match */
+.stack-cards { position: relative; isolation: isolate; }
+.stack-cards > .event-card { position: relative; z-index: 2; }
+.stack-cards.depth-1 { padding-bottom: 14px; }
+.stack-cards.depth-2 { padding-bottom: 28px; }
+.stack-cards.depth-1::before, .stack-cards.depth-2::before, .stack-cards.depth-2::after {
+  content: ''; position: absolute; height: 60px; border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); pointer-events: none;
+}
+.stack-cards.depth-1::before, .stack-cards.depth-2::before { left: 12px; right: 12px; bottom: 0; z-index: 1; background: #f8fafc; }
+.stack-cards.depth-2::before { bottom: 14px; }
+.stack-cards.depth-2::after { left: 26px; right: 26px; bottom: 0; z-index: 0; background: #f0f4f9; }
+.stack-note { text-align: center; margin: 8px 0 0; font-weight: 600; }
+.day-done .day-next { display: grid; gap: 2px; margin: 14px 0 16px; padding: 12px 14px; border: 1px dashed var(--line); border-radius: 10px; }
+.day-done .day-next small { font-family: var(--display); font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: 0.04em; }
+.day-done .day-next strong { font-size: 1.15rem; }
+.day-done .btn-confirm { width: 100%; }
+.nm-days { display: flex; justify-content: center; align-items: center; gap: 6px; margin: 8px auto 0; padding: 4px 12px; width: fit-content; border-radius: 99px; background: var(--bg, #eef3f9); font-family: var(--display); font-weight: 800; text-transform: uppercase; font-size: 1.05rem; }
+.nm-days.today { background: var(--green, #22a447); color: #fff; }
