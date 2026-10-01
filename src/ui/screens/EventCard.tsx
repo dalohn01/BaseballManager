@@ -1,3 +1,4 @@
+import { dayCosts, dayLedgerId } from '../../simulation/economy';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { optionBlocker, totalCost } from '../../application/engine';
@@ -15,7 +16,7 @@ import { Avatar, Crest, EventArt } from '../components/art';
 import { EffectList, OvrBadge, Ribbon } from '../components/common';
 import { overallAt } from '../../domain/ratings';
 import { Icon } from '../components/icons';
-import { money } from '../format';
+import { money, moneyExact } from '../format';
 import { href, useController, useGame, useNow, useSnapshot } from '../hooks';
 import { MatchView } from './MatchView';
 
@@ -49,9 +50,15 @@ function DayDone() {
       <Ribbon>{dayLabel(s.calendar)}</Ribbon>
       <h1 className="event-title">{quiet ? 'A quiet day' : 'Day complete'}</h1>
       <p className="event-context">{quiet ? 'Nothing needed your attention today.' : "Every event of today has been handled."}</p>
+      <DayFinances />
       <div className="day-next">
         <small>Tomorrow</small>
         <strong>{describeDay(s, tomorrow)}</strong>
+        {tomorrow.phase === 'regular' && (
+          <span className="muted small">
+            Running costs {moneyExact(-sumCosts(dayCosts(s, s.userClubId, tomorrow.season, tomorrow.round, tomorrow.day)))}
+          </span>
+        )}
       </div>
       <button ref={ref} className="btn btn-primary btn-confirm" onClick={() => void c.dispatch({ type: 'advanceDay', revision: s.revision })} disabled={!!blocker || snap.busy}>
         <span>Next day</span>
@@ -72,6 +79,32 @@ function DayDone() {
         </p>
       )}
     </section>
+  );
+}
+
+const sumCosts = (c: { salaries: number; upkeep: number }) => c.salaries + c.upkeep;
+
+/** What today cost: the running costs paid when the day started, and the cash after them. */
+function DayFinances() {
+  const s = useGame();
+  const { season, round, day, phase } = s.calendar;
+  if (phase !== 'regular') return null;
+  const paid = s.ledger.filter((l) => l.eventId === dayLedgerId(season, round, day));
+  if (paid.length === 0) return null;
+  const by = (cat: string) => -paid.filter((l) => l.category === cat).reduce((a, l) => a + l.amount, 0);
+  return (
+    <div className="day-finances" aria-label="Today's running costs">
+      <small>Paid today</small>
+      <span>
+        Salaries <strong className="neg">{moneyExact(-by('salaries'))}</strong>
+      </span>
+      <span>
+        Facilities <strong className="neg">{moneyExact(-by('upkeep'))}</strong>
+      </span>
+      <span>
+        Club cash <strong>{moneyExact(userClub(s).cash)}</strong>
+      </span>
+    </div>
   );
 }
 

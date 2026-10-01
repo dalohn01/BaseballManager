@@ -14,6 +14,7 @@ import { canAffordTime, regenerate, spendTime } from '../domain/time';
 import type { FacilityId, Instruction, Lineup, PitchingPlan, TacticArea, TeamStyle } from '../domain/types';
 import { clearMatchTactics, relevantAreas, STYLE_OPTIONS } from '../domain/tactics';
 import { prepareNextEvent, startDay } from '../events/planner';
+import { chargeDay, dayLedgerId } from '../simulation/economy';
 import { dayComplete, nextDay } from '../domain/calendar';
 import { getTemplate } from '../events/registry';
 
@@ -105,6 +106,9 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       const next = structuredClone(state);
       next.time = spendTime(next.time, now, BALANCE.time.costPerDay);
       next.calendar = nextDay(next.calendar);
+      // Running costs are paid as the day starts, before its events are planned (a crisis can come the same day).
+      const cal = next.calendar;
+      chargeDay(next, new EffectSink(next, dayLedgerId(cal.season, cal.round, cal.day)));
       const rng = createRng(next.rngState);
       next.currentEvent = startDay(next, rng);
       next.calendar.planned = next.currentEvent ? next.queue.length + 1 : 0;

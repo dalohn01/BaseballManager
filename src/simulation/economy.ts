@@ -63,22 +63,56 @@ export function upkeepPerRound(club: Club): number {
   );
 }
 
+/** Exact split of a round amount over its days (earlier days take the remainder); sums to the round amount. */
+export function dayShare(perRound: number, day: number): number {
+  const D = BALANCE.season.daysPerRound;
+  return Math.floor((perRound * day) / D) - Math.floor((perRound * (day - 1)) / D);
+}
+
+/** Ledger id for one day's running costs. */
+export const dayLedgerId = (season: number, round: number, day: number) => `day:${season}:${round}:${day}`;
+
+export interface DayCosts {
+  salaries: number;
+  upkeep: number;
+}
+
+/** Running costs of one regular-season day: salaries and facility upkeep, split exactly from the round amounts. */
+export function dayCosts(state: GameState, clubId: ClubId, season: number, round: number, day: number): DayCosts {
+  const club = state.clubs[clubId];
+  return {
+    salaries: club.roster.reduce((sum, id) => sum + dayShare(salaryDue(state, id, season, round), day), 0),
+    upkeep: dayShare(upkeepPerRound(club), day),
+  };
+}
+
+/**
+ * Charges today's running costs once, when a regular-season day starts
+ * (preseason and the off-season have none). Income stays on match day.
+ */
+export function chargeDay(state: GameState, sink: EffectSink): DayCosts | null {
+  const { season, round, day, phase } = state.calendar;
+  if (phase !== 'regular' || round < 1) return null;
+  const c = dayCosts(state, state.userClubId, season, round, day);
+  if (c.salaries) sink.cash(state.userClubId, -c.salaries, 'salaries', 'Player salaries');
+  if (c.upkeep) sink.cash(state.userClubId, -c.upkeep, 'upkeep', 'Facility running costs');
+  return c;
+}
+
 export interface RoundSettlement {
   tickets: number;
   attendance: number;
   sponsor: number;
-  salaries: number;
-  upkeep: number;
   completed?: FacilityId;
   /** Happenings that ran out with this game. */
   expired: FacilityModifier[];
 }
 
-/** Charges/credits one round of club finances. Called exactly once per round, at the league game. */
+/** Match-day income (tickets at home, the sponsor's share) and project completion. Running costs are charged daily (chargeDay). */
 export function settleRound(state: GameState, clubId: ClubId, isHome: boolean, sink: EffectSink): RoundSettlement {
   const club = state.clubs[clubId];
   const round = state.calendar.round;
-  const out: RoundSettlement = { tickets: 0, attendance: 0, sponsor: 0, salaries: 0, upkeep: 0, expired: [] };
+  const out: RoundSettlement = { tickets: 0, attendance: 0, sponsor: 0, expired: [] };
 
   if (isHome) {
     out.attendance = projectedAttendance(club);
@@ -89,10 +123,6 @@ export function settleRound(state: GameState, clubId: ClubId, isHome: boolean, s
     out.sponsor = roundShare(club.sponsor.perSeason, round);
     sink.cash(clubId, out.sponsor, 'sponsor', `Sponsor: ${club.sponsor.name}`);
   }
-  out.salaries = club.roster.reduce((sum, id) => sum + salaryDue(state, id, state.calendar.season, round), 0);
-  sink.cash(clubId, -out.salaries, 'salaries', 'Player salaries');
-  out.upkeep = upkeepPerRound(club);
-  sink.cash(clubId, -out.upkeep, 'upkeep', 'Facility running costs');
 
   const p = club.project;
   // Happenings count down one per league game; expired ones are removed here, once.
@@ -151,10 +181,22 @@ export function seasonForecast(state: GameState, clubId: ClubId): SeasonForecast
   const homeGamesLeft = remaining.filter((g) => g.homeId === clubId).length;
   const roundsLeft = remaining.length;
   const rounds = remaining.map((g) => g.round);
-  const salaries = rounds.reduce((s, r) => s + club.roster.reduce((a, id) => a + salaryDue(state, id, season, r), 0), 0);
   const sponsorIncome = club.sponsor ? rounds.reduce((s, r) => s + roundShare(club.sponsor!.perSeason, r), 0) : 0;
   const ticketIncome = homeGamesLeft * projectedTicketRevenue(club);
-  const upkeep = roundsLeft * upkeepPerRound(club);
+  // Running costs for every day not yet charged (today's were charged when it started).
+  const cal = state.calendar;
+  let salaries = 0;
+  let upkeep = 0;
+  if (cal.phase !== 'postseason') {
+    for (let r = Math.max(1, round); r <= BALANCE.season.rounds; r++) {
+      for (let d = 1; d <= BALANCE.season.daysPerRound; d++) {
+        if (cal.phase === 'regular' && r === round && d <= cal.day) continue;
+        const c = dayCosts(state, clubId, season, r, d);
+        salaries += c.salaries;
+        upkeep += c.upkeep;
+      }
+    }
+  }
   const net = ticketIncome + sponsorIncome - salaries - upkeep;
   return { roundsLeft, homeGamesLeft, ticketIncome, sponsorIncome, salaries, upkeep, net, projectedCash: club.cash + net };
 }

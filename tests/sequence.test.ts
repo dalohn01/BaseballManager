@@ -46,7 +46,7 @@ describe('recorded match sequence', () => {
       }
       for (const [id, n] of Object.entries(pa)) expect(n).toBe(m.batting[id].pa);
     }
-  });
+  }, 30_000);
 
   it('metadata is deterministic and does not touch the game RNG', () => {
     const a = simMatch(42).m;

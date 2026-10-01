@@ -281,12 +281,24 @@ function ClubReport({ ev, match, topRef, onPage }: { ev: EventInstance; match: M
   const away = s.clubs[match.awayId];
   const entries: LedgerEntry[] = s.ledger.filter((l) => l.eventId === ev.id);
   const income = entries.filter((l) => l.amount > 0);
-  const costs = entries.filter((l) => l.amount < 0);
+  // Running costs are paid daily: the round's days so far, one line per kind.
+  const dayPrefix = `day:${match.season}:${match.round}:`;
+  const daily = s.ledger.filter((l) => l.eventId?.startsWith(dayPrefix));
+  const days = new Set(daily.map((l) => l.eventId)).size;
+  const roundCosts: LedgerEntry[] = (['salaries', 'upkeep'] as const)
+    .map((cat, i) => {
+      const list = daily.filter((l) => l.category === cat);
+      const amount = list.reduce((a, l) => a + l.amount, 0);
+      return { ...(list[0] ?? daily[0]), id: -1 - i, category: cat, amount, note: `${cat === 'salaries' ? 'Player salaries' : 'Facility running costs'} (paid daily · ${days} day${days === 1 ? '' : 's'})` };
+    })
+    .filter((l) => l.amount < 0);
+  const costs = [...entries.filter((l) => l.amount < 0), ...roundCosts];
   const totalIn = income.reduce((a, l) => a + l.amount, 0);
   const totalOut = -costs.reduce((a, l) => a + l.amount, 0);
   const net = totalIn - totalOut;
   const cashBefore = entries.length ? entries[0].balanceAfter - entries[0].amount : club.cash;
   const cashAfter = entries.length ? entries[entries.length - 1].balanceAfter : club.cash;
+  const matchNet = entries.reduce((a, l) => a + l.amount, 0);
   const gate = match.gate ?? gateFromLedger(entries);
   const reactions = r.effects.filter((e) => e.targetKind === 'club' && (e.stat === 'fanSupport' || e.stat === 'ownerConfidence'));
   const clubNotes = r.narrative.filter((n) => /^Construction finished|^Happening ended/.test(n));
@@ -332,9 +344,9 @@ function ClubReport({ ev, match, topRef, onPage }: { ev: EventInstance; match: M
             )}
           </div>
         </section>
-        <section className="panel club-net" aria-label="Net match income">
+        <section className="panel club-net" aria-label="Net this round">
           <header className="panel-head">
-            <h2>Net match income</h2>
+            <h2>Net this round</h2>
           </header>
           <div className="panel-body">
             <strong className={`club-net-value ${net >= 0 ? 'pos' : 'neg'}`}>
@@ -342,7 +354,7 @@ function ClubReport({ ev, match, topRef, onPage }: { ev: EventInstance; match: M
               {moneyExact(Math.abs(net)).replace('−', '')}
             </strong>
             <p className="muted">
-              Income {moneyExact(totalIn)} · Costs {moneyExact(totalOut)}
+              Match income {moneyExact(totalIn)} · Running costs {moneyExact(totalOut)}
             </p>
           </div>
         </section>
@@ -350,7 +362,7 @@ function ClubReport({ ev, match, topRef, onPage }: { ev: EventInstance; match: M
 
       <div className="club-money">
         <MoneyList title="Income" rows={income} total={totalIn} sign="+" />
-        <MoneyList title="Costs" rows={costs} total={totalOut} sign="−" />
+        <MoneyList title="Costs this round" rows={costs} total={totalOut} sign="−" />
       </div>
 
       <section className="panel club-cash" aria-label="Club cash">
@@ -359,18 +371,18 @@ function ClubReport({ ev, match, topRef, onPage }: { ev: EventInstance; match: M
           <Icon name="cash" size={26} />
         </span>
         <span>
-          <small>Before match</small>
+          <small>Before the game</small>
           <strong>{moneyExact(cashBefore)}</strong>
         </span>
         <span className="club-arrow" aria-hidden="true">
           →
         </span>
         <span>
-          <small>After match</small>
+          <small>After the game</small>
           <strong>{moneyExact(cashAfter)}</strong>
         </span>
-        <span className={`club-cash-delta ${net >= 0 ? 'pos' : 'neg'}`}>
-          {net >= 0 ? '+' : '−'}
+        <span className={`club-cash-delta ${matchNet >= 0 ? 'pos' : 'neg'}`}>
+          {matchNet >= 0 ? '+' : '−'}
           {moneyExact(Math.abs(cashAfter - cashBefore)).replace('−', '')}
         </span>
       </section>
@@ -460,7 +472,7 @@ function MoneyList({ title, rows, total, sign }: { title: string; rows: LedgerEn
           </ul>
         )}
         <p className="club-total">
-          <span>Total {title.toLowerCase()}</span>
+          <span>Total {title.toLowerCase().replace(' this round', '')}</span>
           <strong>{moneyExact(total)}</strong>
         </p>
       </div>
@@ -472,6 +484,8 @@ function MoneyList({ title, rows, total, sign }: { title: string; rows: LedgerEn
 function splitNote(l: LedgerEntry): [string, string | null] {
   const fans = l.note.match(/^(.*) \(([\d,]+) fans\)$/);
   if (fans) return [fans[1], `${fans[2]} spectators`];
+  const daily = l.note.match(/^(.*) \((paid daily.*)\)$/);
+  if (daily) return [daily[1], daily[2][0].toUpperCase() + daily[2].slice(1)];
   const sponsor = l.note.match(/^Sponsor: (.*)$/);
   if (sponsor) return ['Sponsorship', sponsor[1]];
   return [l.note, null];
