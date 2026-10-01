@@ -1,15 +1,17 @@
+import { useEffect, useRef, useState } from 'react';
 import { BALANCE } from '../../balance/config';
 import { pitcherRole, setHook, setPitcherRole } from '../../domain/lineupDraft';
-import { fmtIp, pitcherWorkload, playerNotes } from '../../domain/playerStats';
-import { normalizeStaff, pitcherReadiness, ROLE_LABEL, staffRole } from '../../domain/staff';
+import { overall } from '../../domain/ratings';
+import { BULLPEN_ROLES, normalizeStaff, pitcherReadiness, ROLE_LABEL, staffRole, type BullpenRole, type PitchingStaff } from '../../domain/staff';
 import { playerName, userClub } from '../../domain/state';
 import type { Player, PitchingHook } from '../../domain/types';
 import { forecastForLineup } from '../../events/templates/leagueGame';
 import { Icon } from '../components/icons';
-import { StaffEditor } from '../tactics/StaffEditor';
+import { useController, useSnapshot } from '../hooks';
 import { instructionSummary } from '../tactics/TacticsControls';
+import { Condition, lastOuting, PitcherRow } from './PitcherRow';
 import type { DraftApi } from './PreMatchScreen';
-import { FitnessMeter, HappinessMeter, Legend, Notes, pitcherValues, Portrait, Values } from './shared';
+import { Legend, pitcherValues, Portrait, Values } from './shared';
 
 const HOOK_TEXT: Record<PitchingHook, string> = {
   early: 'Early',
@@ -17,24 +19,24 @@ const HOOK_TEXT: Record<PitchingHook, string> = {
   long: 'Let him pitch',
 };
 
-function workloadText(state: DraftApi['state'], p: Player): string {
-  const w = pitcherWorkload(state, p);
-  if (!w.last) return 'No appearances yet this season';
-  const when = w.last.gamesAgo === 1 ? 'last game' : `${w.last.gamesAgo} games ago`;
-  return `Last outing: ${when} · ${w.last.battersFaced} batters, ${fmtIp(w.last.outs)} IP${w.last.started ? ' (start)' : ''}`;
-}
+const ROLE_WHEN: Record<BullpenRole, string> = {
+  closer: `Save situations from the 9th (lead of ${BALANCE.pitching.saveLead[0]}–${BALANCE.pitching.saveLead[1]}).`,
+  setup: `${BALANCE.pitching.setupFromInning}th–8th inning.`,
+  long: `Early relief (to the ${BALANCE.pitching.longReliefUntilInning}th) when the starter is knocked out.`,
+};
 
 /**
- * Pitching for today's game. The starter defaults to the next ready pitcher
- * in the rotation (changeable for this game only); the bullpen works from the
- * standing roles, which can be adjusted here too; a pitcher can be rested today.
+ * Pitching for today's game: a compact starter list (the rotation decides,
+ * the manager can start someone else today), the bullpen as three role cards
+ * (standing roles, saved for every game) and who rests today.
  */
 export function PitchersTab({ api, gameId }: { api: DraftApi; gameId: string }) {
   const { state: s, draft, update, mode, period } = api;
+  const c = useController();
+  const snap = useSnapshot();
   const club = userClub(s);
   const staff = normalizeStaff(s, club.id, club.staff);
   const all = club.roster.map((id) => s.players[id]).filter((p) => p.isPitcher);
-  // Rotation in order first, then the bullpen and depth.
   const order = (p: Player) => {
     const i = staff.rotation.indexOf(p.id);
     return i >= 0 ? i : 10 + ['closer', 'setup', 'long', 'depth'].indexOf(staffRole(staff, p.id));
@@ -47,72 +49,75 @@ export function PitchersTab({ api, gameId }: { api: DraftApi; gameId: string }) 
   const winAlt = alt ? forecastForLineup(s, gameId, { ...draft.lineup, pitcherId: alt.id }) : null;
   const hook = BALANCE.match.hooks[draft.plan.hook];
   const turn = staff.rotation[staff.next];
+  const [picking, setPicking] = useState<BullpenRole | null>(null);
 
-  const roleTag = (p: Player) => {
+  const roleText = (p: Player) => {
     const i = staff.rotation.indexOf(p.id);
-    if (i >= 0) return `Rotation #${i + 1}${p.id === turn ? ' · next in turn' : ''}`;
-    return ROLE_LABEL[staffRole(staff, p.id)];
+    return i >= 0 ? `Rotation #${i + 1}${p.id === turn ? ' · next in turn' : ''}` : ROLE_LABEL[staffRole(staff, p.id)];
+  };
+  const detail = (p: Player) => (mode === 'stats' ? <Values vals={pitcherValues(s, p, mode, period, true)} /> : undefined);
+  const instr = (p: Player) => (
+    <button className="pr-instr" onClick={() => api.openTactics(p.id)} title={`Instructions: ${instructionSummary(s, p)}`} aria-label={`Instructions for ${p.lastName}: ${instructionSummary(s, p)}`}>
+      <Icon name="clipboard" size={14} />
+    </button>
+  );
+
+  const saveStaff = (next: PitchingStaff) => void c.dispatch({ type: 'setStaff', staff: next });
+  const assign = (role: BullpenRole, id: string | null) => {
+    const base: PitchingStaff = { ...staff };
+    if (id) for (const r of BULLPEN_ROLES) if (base[r] === id) base[r] = null;
+    saveStaff({ ...base, [role]: id });
+    setPicking(null);
   };
 
   return (
-    <div className="pm-pitch-layout">
+    <div className="pm-pitch-layout pitch-v2">
       <section className="panel pm-starters">
         <header className="panel-head">
           <h2>Today's starter</h2>
-          <small className="muted">The rotation decides; you can start someone else today.</small>
+          <small className="muted">The rotation decides, but you can make changes.</small>
         </header>
-        <ul className="starter-list">
+        <div className="p-list-head" aria-hidden="true">
+          <span />
+          <span />
+          <span>PIT</span>
+          <span>OVR</span>
+          <span>Condition</span>
+          <span>Morale</span>
+          <span>{mode === 'stats' ? 'Season' : 'Last outing'}</span>
+          <span />
+        </div>
+        <ul className="p-list">
           {pitchers.map((p) => {
             const isStarter = p.id === starter.id;
             return (
-              <li key={p.id} className={`starter-card ${isStarter ? 'on' : ''}`}>
-                <Portrait state={s} player={p} size={64} />
-                <div className="sc-main">
-                  <strong className="sc-name">{playerName(p)}</strong>
-                  <small className="muted">
-                    Throws {p.throws} · {roleTag(p)}
-                  </small>
-                  <Values vals={pitcherValues(s, p, mode, period)} />
-                  <span className="pc-status">
-                    <FitnessMeter value={p.fitness} showLabel />
-                    <HappinessMeter value={p.satisfaction} />
-                  </span>
-                  <small className="readiness">{isStarter ? 'Starting today' : pitcherReadiness(s, p, staffRole(staff, p.id))}</small>
-                  <small className="muted">{workloadText(s, p)}</small>
-                  <small className="instr-line">
-                    <span className="muted">Instructions:</span> {instructionSummary(s, p)}{' '}
-                    <button className="link" onClick={() => api.openTactics(p.id)} aria-label={`Instructions for ${p.lastName}`}>
-                      Change
+              <PitcherRow
+                key={p.id}
+                state={s}
+                player={p}
+                role={roleText(p)}
+                selected={isStarter}
+                detail={detail(p)}
+                extra={instr(p)}
+                action={
+                  isStarter ? (
+                    <span className="starting-btn">
+                      <Icon name="check" size={16} /> Starting
+                    </span>
+                  ) : (
+                    <button className="btn btn-small btn-secondary" onClick={() => update(setPitcherRole(draft, p.id, 'starter'))} aria-label={`Start ${p.lastName} today`}>
+                      Start today
                     </button>
-                  </small>
-                  <Notes notes={playerNotes(s, p, { starting: isStarter })} max={2} />
-                </div>
-                {isStarter ? (
-                  <span className="starting-tag">
-                    <Icon name="check" size={16} /> Starting today
-                  </span>
-                ) : (
-                  <button className="btn btn-small btn-secondary" onClick={() => update(setPitcherRole(draft, p.id, 'starter'))}>
-                    Start today
-                  </button>
-                )}
-              </li>
+                  )
+                }
+              />
             );
           })}
         </ul>
         {alt && winAlt !== null && (
-          <div className="tradeoff">
-            <Icon name="influence" size={22} />
-            <div>
-              <strong>Today's trade-off</strong>
-              <p>
-                {starter.lastName}: pitching {starter.ratings.pitching}, fitness {starter.fitness}%. {alt.lastName}: pitching {alt.ratings.pitching}, fitness {alt.fitness}%.
-              </p>
-              <p className="small muted">
-                Forecast with {starter.lastName}: {Math.round(winNow * 100)}% · with {alt.lastName}: {Math.round(winAlt * 100)}%. Fitness below 100% lowers today's pitching by {BALANCE.match.fitnessPenaltyPerPoint} per point.
-              </p>
-            </div>
-          </div>
+          <p className="tradeoff-line small">
+            <Icon name="influence" size={16} /> Forecast with {starter.lastName}: <strong>{Math.round(winNow * 100)}%</strong> · with {alt.lastName}: <strong>{Math.round(winAlt * 100)}%</strong>. Fitness below 100% lowers today's pitching by {BALANCE.match.fitnessPenaltyPerPoint} per point.
+          </p>
         )}
       </section>
 
@@ -121,21 +126,76 @@ export function PitchersTab({ api, gameId }: { api: DraftApi; gameId: string }) 
           <h2>Bullpen</h2>
           <small className="muted">Standing roles (saved for every game). Up to {BALANCE.pitching.maxPitchersPerGame} pitchers per game.</small>
         </header>
-        <StaffEditor todayStarterId={starter.id} compact bullpenOnly />
+        <div className="role-cards">
+          {BULLPEN_ROLES.map((role) => {
+            const id = staff[role];
+            const p = id ? s.players[id] : null;
+            const out = p ? lastOuting(s, p) : null;
+            return (
+              <div key={role} className={`role-card role-${role} ${p ? '' : 'empty'}`}>
+                <h3>{ROLE_LABEL[role]}</h3>
+                <p className="rc-when">{ROLE_WHEN[role]}</p>
+                {p ? (
+                  <>
+                    <div className="rc-player">
+                      <Portrait state={s} player={p} size={56} nested />
+                      <div>
+                        <strong className="rc-name">{playerName(p)}</strong>
+                        <span className="rc-ratings">
+                          <span>
+                            PIT <b>{p.ratings.pitching}</b>
+                          </span>
+                          <span>
+                            OVR <b>{overall(p)}</b>
+                          </span>
+                        </span>
+                        <Condition value={p.fitness} />
+                      </div>
+                    </div>
+                    <p className="rc-last small">
+                      {p.id === starter.id ? (
+                        <strong>Starting today: not in the bullpen</strong>
+                      ) : (
+                        <>
+                          {pitcherReadiness(s, p, role)}
+                          {out ? ` · Last outing: ${out.when}, ${out.detail}` : ''}
+                        </>
+                      )}
+                    </p>
+                    <button className="btn btn-small btn-secondary rc-change" onClick={() => setPicking(role)} disabled={snap.busy}>
+                      Change
+                    </button>
+                  </>
+                ) : (
+                  <button className="rc-assign" onClick={() => setPicking(role)} disabled={snap.busy}>
+                    + Assign pitcher
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
 
-        <h3 className="subhead">Rest today</h3>
-        <ul className="rest-list">
+        <h3 className="subhead rest-head">
+          Rest today <small className="muted">This game only. Rest is counted in days.</small>
+        </h3>
+        <ul className="p-list compact">
           {others.map((p) => {
             const resting = pitcherRole(draft, p.id) === 'rest';
             return (
-              <li key={p.id} className={resting ? 'resting' : ''}>
-                <span>
-                  <strong>{playerName(p)}</strong> <small className="muted">{roleTag(p)} · {p.fitness}%</small>
-                </span>
-                <button className="btn btn-small btn-secondary" aria-pressed={resting} onClick={() => update(setPitcherRole(draft, p.id, resting ? 'available' : 'rest'))}>
-                  {resting ? 'Resting today' : 'Available'}
-                </button>
-              </li>
+              <PitcherRow
+                key={p.id}
+                state={s}
+                player={p}
+                role={roleText(p)}
+                resting={resting}
+                detail={detail(p)}
+                action={
+                  <button className={`btn btn-small ${resting ? 'btn-rest-on' : 'btn-secondary'}`} aria-pressed={resting} onClick={() => update(setPitcherRole(draft, p.id, resting ? 'available' : 'rest'))}>
+                    {resting ? 'Resting' : 'Rest'}
+                  </button>
+                }
+              />
             );
           })}
         </ul>
@@ -148,13 +208,100 @@ export function PitchersTab({ api, gameId }: { api: DraftApi; gameId: string }) 
             </button>
           ))}
         </div>
-        <p className="small">
-          The starter comes out after {hook.maxBatters} batters, or once he has allowed {hook.pullRuns} runs after at least {hook.minBatters} batters. Then long relief takes over to the{' '}
-          {BALANCE.pitching.longReliefUntilInning}th, setup in the {BALANCE.pitching.setupFromInning}th–8th, and the closer in a save situation (a lead of {BALANCE.pitching.saveLead[0]}–
-          {BALANCE.pitching.saveLead[1]} runs from the 9th). The hook setting stays for future games; resting applies to this game only.
+        <p className="small muted">
+          The starter comes out after {hook.maxBatters} batters, or once he has allowed {hook.pullRuns} runs after at least {hook.minBatters} batters. The hook setting stays for future games.
         </p>
         {mode === 'stats' && <Legend keys={['ERA', 'WHIP', 'K', 'IP']} />}
       </section>
+
+      {picking && (
+        <RolePicker
+          role={picking}
+          current={staff[picking]}
+          candidates={pitchers.filter((p) => !staff.rotation.includes(p.id))}
+          starterId={starter.id}
+          staff={staff}
+          api={api}
+          onPick={(id) => assign(picking, id)}
+          onClose={() => setPicking(null)}
+        />
+      )}
+    </div>
+  );
+}
+
+/** Choose who fills a bullpen role, using the same pitcher rows. A pitcher keeps one role: picking him here frees his old one. */
+function RolePicker({
+  role,
+  current,
+  candidates,
+  starterId,
+  staff,
+  api,
+  onPick,
+  onClose,
+}: {
+  role: BullpenRole;
+  current: string | null;
+  candidates: Player[];
+  starterId: string;
+  staff: PitchingStaff;
+  api: DraftApi;
+  onPick: (id: string | null) => void;
+  onClose: () => void;
+}) {
+  const s = api.state;
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    ref.current?.querySelector<HTMLButtonElement>('button')?.focus();
+    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal role-picker" role="dialog" aria-modal="true" aria-label={`Choose the ${ROLE_LABEL[role].toLowerCase()}`} onClick={(e) => e.stopPropagation()} ref={ref}>
+        <header className="rp-head">
+          <h2>{ROLE_LABEL[role]}</h2>
+          <button className="icon-btn small" onClick={onClose} aria-label="Close">
+            ✕
+          </button>
+        </header>
+        <p className="small muted">{ROLE_WHEN[role]} Rotation starters are not listed; picking someone from another role moves him here.</p>
+        <ul className="p-list compact">
+          {candidates.map((p) => {
+            const own = staffRole(staff, p.id);
+            const isCurrent = p.id === current;
+            return (
+              <PitcherRow
+                key={p.id}
+                state={s}
+                player={p}
+                role={own === 'depth' ? 'Depth' : ROLE_LABEL[own]}
+                readiness={p.id === starterId ? 'Starting today' : pitcherReadiness(s, p, role)}
+                selected={isCurrent}
+                showMorale={false}
+                action={
+                  isCurrent ? (
+                    <span className="starting-btn">
+                      <Icon name="check" size={16} /> {ROLE_LABEL[role]}
+                    </span>
+                  ) : (
+                    <button className="btn btn-small btn-secondary" onClick={() => onPick(p.id)}>
+                      Select
+                    </button>
+                  )
+                }
+              />
+            );
+          })}
+        </ul>
+        {current && (
+          <button className="link" onClick={() => onPick(null)}>
+            Leave the role empty
+          </button>
+        )}
+      </div>
     </div>
   );
 }
