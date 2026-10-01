@@ -1,7 +1,8 @@
 import { userClub } from '../../domain/state';
 import { BALANCE } from '../../balance/config';
 import { viewTime } from '../../domain/time';
-import { duration, money } from '../format';
+import { duration } from '../format';
+import { CashPill } from './CashPill';
 import { href, useGame, useNow, type Route } from '../hooks';
 import { Crest } from './art';
 import { Icon } from './icons';
@@ -38,11 +39,7 @@ export function TopBar({ route }: { route: Route }) {
           ))}
         </nav>
         <div className="resources">
-          <span className={`pill ${club.cash < 0 ? 'pill-bad' : ''}`} title="Club Cash">
-            <Icon name="cash" className="ico-cash" />
-            <span className="sr-only">Club Cash</span>
-            {money(club.cash)}
-          </span>
+          <CashPill state={s} />
           <span className="pill" title="Time">
             <Icon name="time" />
             <span className="sr-only">Time</span>

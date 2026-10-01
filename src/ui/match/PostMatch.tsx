@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
+import { revealMatchCash } from '../components/CashPill';
 import type { EffectRecord, EventInstance, GameState, LedgerEntry } from '../../domain/state';
-import { clubName, playerName, shortName, userClub } from '../../domain/state';
+import { clubName, playerName, shortName } from '../../domain/state';
 import type { MatchResult, PlayerId } from '../../domain/types';
 import { ballparkName } from '../../content/ballparks';
 import { presentedBox, standouts } from '../../presentation/boxscore';
@@ -275,30 +276,18 @@ const INCOME_ICON = { tickets: 'fans', sponsor: 'chart', event: 'clipboard', fac
 function ClubReport({ ev, match, topRef, onPage }: { ev: EventInstance; match: MatchResult; topRef: React.RefObject<HTMLElement | null>; onPage: (p: Page) => void }) {
   const s = useGame();
   const r = ev.resolution!;
-  const club = userClub(s);
   const isHome = match.homeId === s.userClubId;
   const home = s.clubs[match.homeId];
   const away = s.clubs[match.awayId];
   const entries: LedgerEntry[] = s.ledger.filter((l) => l.eventId === ev.id);
+  // Only money tied to this game: running costs are paid daily and shown on the day card.
   const income = entries.filter((l) => l.amount > 0);
-  // Running costs are paid daily: the round's days so far, one line per kind.
-  const dayPrefix = `day:${match.season}:${match.round}:`;
-  const daily = s.ledger.filter((l) => l.eventId?.startsWith(dayPrefix));
-  const days = new Set(daily.map((l) => l.eventId)).size;
-  const roundCosts: LedgerEntry[] = (['salaries', 'upkeep'] as const)
-    .map((cat, i) => {
-      const list = daily.filter((l) => l.category === cat);
-      const amount = list.reduce((a, l) => a + l.amount, 0);
-      return { ...(list[0] ?? daily[0]), id: -1 - i, category: cat, amount, note: `${cat === 'salaries' ? 'Player salaries' : 'Facility running costs'} (paid daily · ${days} day${days === 1 ? '' : 's'})` };
-    })
-    .filter((l) => l.amount < 0);
-  const costs = [...entries.filter((l) => l.amount < 0), ...roundCosts];
+  const costs = entries.filter((l) => l.amount < 0);
   const totalIn = income.reduce((a, l) => a + l.amount, 0);
   const totalOut = -costs.reduce((a, l) => a + l.amount, 0);
   const net = totalIn - totalOut;
-  const cashBefore = entries.length ? entries[0].balanceAfter - entries[0].amount : club.cash;
-  const cashAfter = entries.length ? entries[entries.length - 1].balanceAfter : club.cash;
-  const matchNet = entries.reduce((a, l) => a + l.amount, 0);
+  // The game's money reaches the top bar's Club Cash now (counted up there, not repeated here).
+  useEffect(() => revealMatchCash(ev.id), [ev.id]);
   const gate = match.gate ?? gateFromLedger(entries);
   const reactions = r.effects.filter((e) => e.targetKind === 'club' && (e.stat === 'fanSupport' || e.stat === 'ownerConfidence'));
   const clubNotes = r.narrative.filter((n) => /^Construction finished|^Happening ended/.test(n));
@@ -344,48 +333,24 @@ function ClubReport({ ev, match, topRef, onPage }: { ev: EventInstance; match: M
             )}
           </div>
         </section>
-        <section className="panel club-net" aria-label="Net this round">
+        <section className="panel club-net" aria-label="Net match income">
           <header className="panel-head">
-            <h2>Net this round</h2>
+            <h2>Net match income</h2>
           </header>
           <div className="panel-body">
             <strong className={`club-net-value ${net >= 0 ? 'pos' : 'neg'}`}>
               {net >= 0 ? '+' : '−'}
               {moneyExact(Math.abs(net)).replace('−', '')}
             </strong>
-            <p className="muted">
-              Match income {moneyExact(totalIn)} · Running costs {moneyExact(totalOut)}
-            </p>
+            <p className="muted">{costs.length ? `Income ${moneyExact(totalIn)} · Costs ${moneyExact(totalOut)}` : isHome ? 'Ticket sales and the sponsor’s share' : 'The sponsor’s share (no gate on the road)'}</p>
           </div>
         </section>
       </div>
 
-      <div className="club-money">
+      <div className={`club-money ${costs.length ? '' : 'single'}`}>
         <MoneyList title="Income" rows={income} total={totalIn} sign="+" />
-        <MoneyList title="Costs this round" rows={costs} total={totalOut} sign="−" />
+        {costs.length > 0 && <MoneyList title="Match costs" rows={costs} total={totalOut} sign="−" />}
       </div>
-
-      <section className="panel club-cash" aria-label="Club cash">
-        <h2>Club cash</h2>
-        <span className="club-cash-icon" aria-hidden="true">
-          <Icon name="cash" size={26} />
-        </span>
-        <span>
-          <small>Before the game</small>
-          <strong>{moneyExact(cashBefore)}</strong>
-        </span>
-        <span className="club-arrow" aria-hidden="true">
-          →
-        </span>
-        <span>
-          <small>After the game</small>
-          <strong>{moneyExact(cashAfter)}</strong>
-        </span>
-        <span className={`club-cash-delta ${matchNet >= 0 ? 'pos' : 'neg'}`}>
-          {matchNet >= 0 ? '+' : '−'}
-          {moneyExact(Math.abs(cashAfter - cashBefore)).replace('−', '')}
-        </span>
-      </section>
 
       <section className="panel" aria-label="Club reactions">
         <header className="panel-head">
@@ -484,8 +449,6 @@ function MoneyList({ title, rows, total, sign }: { title: string; rows: LedgerEn
 function splitNote(l: LedgerEntry): [string, string | null] {
   const fans = l.note.match(/^(.*) \(([\d,]+) fans\)$/);
   if (fans) return [fans[1], `${fans[2]} spectators`];
-  const daily = l.note.match(/^(.*) \((paid daily.*)\)$/);
-  if (daily) return [daily[1], daily[2][0].toUpperCase() + daily[2].slice(1)];
   const sponsor = l.note.match(/^Sponsor: (.*)$/);
   if (sponsor) return ['Sponsorship', sponsor[1]];
   return [l.note, null];
