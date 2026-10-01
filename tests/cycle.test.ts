@@ -218,7 +218,12 @@ describe('direct actions', () => {
     expect(n.currentEvent).toEqual(s.currentEvent);
     expect(n.actions.log.at(-1)!.kind).toBe('pepTalk');
     expect(act(n, 'pepTalk', pid).ok).toBe(false);
-    const team = buildSimTeam(n, 'hfx', n.clubs.hfx.lineup);
+    // The talk also lifts his happiness (a private-praise reaction); compare the motivation boost alone.
+    expect(n.players[pid].satisfaction).toBeGreaterThan(s.players[pid].satisfaction);
+    expect(n.players[pid].reactions[0].cause).toBe('private_praise');
+    const same = structuredClone(n);
+    same.players[pid].satisfaction = s.players[pid].satisfaction;
+    const team = buildSimTeam(same, 'hfx', same.clubs.hfx.lineup);
     const plainTeam = buildSimTeam(s, 'hfx', s.clubs.hfx.lineup);
     expect(team.batters[0].contact - plainTeam.batters[0].contact).toBe(BALANCE.actions.pepTalk.ratingBoost);
     // A repeated click with the old revision is rejected.

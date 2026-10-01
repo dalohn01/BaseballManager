@@ -1,3 +1,4 @@
+import { applyReaction } from '../../simulation/reactions';
 import { effectiveRating, offenseScore } from '../../domain/lineup';
 import { repairLineup, squadProblem, transferPlayer } from '../../domain/roster';
 import type { EventInstance, GameState } from '../../domain/state';
@@ -135,9 +136,11 @@ function resolveTrade({ state, rng, sink, event, option }: ResolveContext) {
   if (fanHit > 0) sink.clubMood(club.id, 'fanSupport', -fanHit, `Traded fan favourite ${out.lastName}`);
   const salaryDiff = Number(event.data.salaryDiff);
   if (salaryDiff > 20_000) sink.clubMood(club.id, 'ownerConfidence', 2, 'Trimmed payroll in a trade');
-  // Teammates who value loyalty notice a veteran being moved.
-  for (const p of clubPlayers(state, club.id)) {
-    if (p.priority === 'loyalty' && p.id !== inc.id && out.age >= 30) sink.playerMood(p.id, 'satisfaction', -2, `Teammate ${out.lastName} was traded`);
+  // Long-time teammates notice a veteran being moved; team-first and considerate players feel it more.
+  if (out.age >= 30) {
+    for (const p of clubPlayers(state, club.id)) {
+      if (p.id !== inc.id && p.joinedSeason < state.calendar.season) applyReaction(state, sink, p.id, 'teammate_traded', -1, `Teammate ${out.lastName} was traded`, `${event.id}:traded:${p.id}`);
+    }
   }
   repairLineup(state, club.id);
   repairLineup(state, partner.id);

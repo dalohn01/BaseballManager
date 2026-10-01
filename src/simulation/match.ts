@@ -70,7 +70,7 @@ export interface SimTeam {
 export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): SimTeam {
   const club = state.clubs[clubId];
   // A pep talk lifts the player's ratings in his next game only (user club).
-  const motivation = (id: PlayerId) => (club.isUser && state.actions?.motivated.includes(id) ? BALANCE.actions.pepTalk.ratingBoost : 0);
+  const motivation = (id: PlayerId) => (club.isUser && state.actions?.motivated.includes(id) ? state.actions.boosts?.[id] ?? BALANCE.actions.pepTalk.ratingBoost : 0);
   const batters = lineup.battingOrder.map((slot) => {
     const p = state.players[slot.playerId];
     const running = resolveTactic(club.tactics, p.id, 'baserunning');

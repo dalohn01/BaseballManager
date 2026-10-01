@@ -1,4 +1,5 @@
 import type { SeasonPlan } from './state';
+import type { Personality } from './personality';
 
 export type PlayerId = string;
 export type ClubId = string;
@@ -13,6 +14,7 @@ export const LINEUP_POSITIONS: LineupPosition[] = [...DEFENSIVE_POSITIONS, 'DH']
 export type RatingKey = 'contact' | 'power' | 'speed' | 'fielding' | 'pitching';
 export type Ratings = Record<RatingKey, number>;
 
+/** Legacy single-trait field (replaced by `personality`; only read by the v10 migration). */
 export type PersonalPriority = 'playingTime' | 'titles' | 'money' | 'loyalty';
 export type SquadRole = 'starter' | 'reserve' | 'prospect';
 
@@ -77,7 +79,8 @@ export interface Player {
   fitness: number;
   satisfaction: number;
   popularity: number;
-  priority: PersonalPriority;
+  /** Seven stable tendencies; mechanics read these, the profile name is derived for display. */
+  personality: Personality;
   role: SquadRole;
   contract: Contract;
   joinedSeason: number;
@@ -87,6 +90,24 @@ export interface Player {
   pastSeasons: { season: number; clubId: ClubId; stats: SeasonStats }[];
   moodLog: ReasonEntry[];
   lastReaction: { text: string; context: string; season: number; round: number } | null;
+  /** Personality reactions with their cause and the personality's share (newest first, capped). */
+  reactions: ReactionEntry[];
+}
+
+/**
+ * One reaction to a coded situation: what happened (cause), the base outcome,
+ * what the personality added, and the result. `id` is the stable situation id,
+ * so the same situation is never applied twice.
+ */
+export interface ReactionEntry {
+  id: string;
+  cause: string;
+  base: number;
+  personal: number;
+  delta: number;
+  text: string;
+  season: number;
+  round: number;
 }
 
 export interface LineupSlot {
@@ -354,4 +375,6 @@ export interface MatchResult {
   hooks?: { home: MatchHook; away: MatchHook };
   /** Complete ordered sequence for the visual match view (absent in older saves). */
   sequence?: MatchSequence[];
+  /** Crowd at the user's home games (absent for road games and older saves). */
+  gate?: { attendance: number; capacity: number };
 }

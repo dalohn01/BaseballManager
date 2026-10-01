@@ -67,7 +67,7 @@ export function ReasonList({ reasons }: { reasons: ReasonEntry[] }) {
     <ul className="reasons">
       {reasons.slice(0, 6).map((r, i) => (
         <li key={i}>
-          <span className={`delta ${r.delta > 0 ? 'pos' : 'neg'}`}>{signed(r.delta)}</span>
+          <span className={`delta ${r.delta > 0 ? 'pos' : 'neg'}`}>{signed(Math.round(r.delta * 10) / 10)}</span>
           <span>{r.text}</span>
           <span className="muted small">R{r.round}</span>
         </li>

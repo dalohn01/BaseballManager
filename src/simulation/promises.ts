@@ -1,3 +1,4 @@
+import { applyReaction } from './reactions';
 import { BALANCE } from '../balance/config';
 import type { EffectSink } from '../domain/effects';
 import type { EventInstance, GameState, PromiseRecord } from '../domain/state';
@@ -81,11 +82,11 @@ export function evaluatePromises(state: GameState, sink: EffectSink): string[] {
     const remaining = Math.max(0, pr.toRound - now);
     if (pr.progress >= pr.threshold) {
       close('kept', `${pr.progress} starts in the window.`);
-      sink.playerMood(p.id, 'satisfaction', cfg.kept, `Promise kept: ${pr.progress} starts as promised in round ${pr.madeAt.round}`);
+      applyReaction(state, sink, p.id, 'promise_kept', cfg.kept, `Promise kept: ${pr.progress} starts as promised in round ${pr.madeAt.round}`, `${pr.id}:kept`);
       notes.push(`Promise kept: ${playerName(p)} has started ${pr.progress} of the promised ${pr.threshold} games.`);
     } else if (pr.progress + remaining < pr.threshold) {
       close('broken', `Only ${pr.progress} of ${pr.threshold} promised starts.`);
-      sink.playerMood(p.id, 'satisfaction', cfg.broken, `Promise broken: ${pr.progress} of ${pr.threshold} promised starts (round ${pr.madeAt.round})`);
+      applyReaction(state, sink, p.id, 'broken_promise', cfg.broken, `Promise broken: ${pr.progress} of ${pr.threshold} promised starts (round ${pr.madeAt.round})`, `${pr.id}:broken`);
       if (p.popularity >= 60) sink.clubMood(state.userClubId, 'fanSupport', cfg.brokenPopularPlayerFans, `Broke a promise to ${p.lastName}`);
       notes.push(`Promise broken: ${playerName(p)} started only ${pr.progress} of the promised ${pr.threshold} games.`);
     }

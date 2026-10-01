@@ -5,7 +5,7 @@ import type { EffectPreview, GameState } from '../../domain/state';
 import { absoluteRound, clubName, userClub } from '../../domain/state';
 import { gamesWithoutStart } from '../../domain/playerStats';
 import type { Lineup, MatchResult, PitchingPlan } from '../../domain/types';
-import { FACILITY_LABELS, projectedTicketRevenue } from '../../simulation/economy';
+import { FACILITY_LABELS, projectedTicketRevenue, capacityModifier } from '../../simulation/economy';
 import { teamStrength, winProbability } from '../../simulation/match';
 import { lineupFor, playRound } from '../../simulation/round';
 import type { EventTemplate } from '../types';
@@ -205,6 +205,10 @@ export const leagueGame: EventTemplate = {
     const extra = m.decidedBy === 'suddenDeath' ? ' (sudden-death)' : m.decidedBy === 'extraInnings' ? ` in ${m.innings}` : '';
     const headline = won ? `${userClub(state).name} beat the ${opp.name} ${us}–${them}${extra}` : `${userClub(state).name} fall to the ${opp.name} ${us}–${them}${extra}`;
     narrative.push(`Pre-game forecast gave you a ${Math.round(out.expectedWin * 100)}% win chance.`);
+    if (out.settlement.attendance && isHome) {
+      const club = userClub(state);
+      state.matches[m.id].gate = { attendance: out.settlement.attendance, capacity: Math.round(BALANCE.economy.stadiumCapacity[club.facilities.stadium - 1] * capacityModifier(club)) };
+    }
     if (out.settlement.attendance) narrative.push(`${out.settlement.attendance.toLocaleString('en-US')} fans at ${ballparkName(userClub(state))}.`);
     if (out.settlement.completed) narrative.push(`Construction finished: the ${FACILITY_LABELS[out.settlement.completed]} is now level ${userClub(state).facilities[out.settlement.completed]}.`);
     for (const x of out.settlement.expired) narrative.push(`Happening ended: ${x.label}.`);

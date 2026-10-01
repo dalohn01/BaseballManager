@@ -22,18 +22,6 @@ export function duration(ms: number): string {
   return `${m}:${String(s % 60).padStart(2, '0')}`;
 }
 
-export const PRIORITY_LABEL: Record<string, string> = {
-  playingTime: 'Playing time',
-  titles: 'Winning titles',
-  money: 'Money',
-  loyalty: 'Loyalty',
-};
-export const PRIORITY_TEXT: Record<string, string> = {
-  playingTime: 'Wants regular starts',
-  titles: 'Wants to win now',
-  money: 'Values a good contract',
-  loyalty: 'Values the club and community',
-};
 export const ROLE_LABEL: Record<string, string> = { starter: 'Starter', reserve: 'Reserve', prospect: 'Prospect' };
 
 export function potentialLabel(low: number, high: number): string {

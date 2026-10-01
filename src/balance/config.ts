@@ -219,9 +219,16 @@ export const BALANCE = {
   },
 
   mood: {
-    startedPlayingTimePriority: 1,
-    benchedPlayingTimePriority: -2,
-    benchedStarterRole: -1,
+    /** A starter benched once in the last three games: a reasonable rotation. */
+    rotation: -1,
+    /** Each further missed start in the last three games (starters). */
+    playingTimePerMiss: -0.5,
+    /** Reserves and prospects: from this many games in a row without a start, each bench costs `reserveBenched`. */
+    reserveIdleFrom: 3,
+    reserveBenched: -1,
+    /** A start after waiting: +0.5 per game waited, at most 2 (no bonus for a regular). */
+    startAfterWaitPerGame: 0.5,
+    startAfterWaitMax: 2,
     /** Fan change = round((won − forecast win chance) × scale): results relative to expectation. */
     fanExpectationScale: 5,
     ownerWin: 1,
@@ -268,6 +275,49 @@ export const BALANCE = {
     fanDriftToward: 70,
     fanDriftShare: 0.25,
     pastSeasonsKept: 3,
+  },
+
+  /**
+   * Personality (seven 0–100 dimensions). Reactions: factor = clamp(1 + Σ w × (v − 50)/50, factorRange);
+   * each cause weighs only the two to four dimensions that matter for it.
+   */
+  personality: {
+    factorRange: [0.5, 1.75] as const,
+    /** The reason line names the personality only when it moved the outcome at least this much. */
+    explainFrom: 0.5,
+    /** Voice score from which a reaction is said out loud (outspokenness, temper, size). */
+    voiceFrom: 0.35,
+    /** A named profile is used only when every part of its pattern holds at least this much (−1 … 1). */
+    profileMinFit: 0.2,
+    generation: { spread: 14, patternChance: 0.65, patternShift: 30, hintShift: 22 },
+    weights: {
+      rotation: { teamOrientation: -0.4, recognitionNeed: 0.35 },
+      playing_time: { teamOrientation: -0.3, recognitionNeed: 0.35, drive: 0.3 },
+      got_start: { recognitionNeed: 0.4, drive: 0.3 },
+      role_reduction: { teamOrientation: -0.3, recognitionNeed: 0.4, temper: 0.3 },
+      told_to_wait: { teamOrientation: -0.3, recognitionNeed: 0.3, drive: 0.3, temper: 0.3 },
+      development_opportunity: { drive: 0.6, recognitionNeed: 0.15 },
+      planned_rest: { teamOrientation: -0.5, recognitionNeed: 0.35, drive: 0.25 },
+      public_praise: { recognitionNeed: 0.6, teamOrientation: -0.15 },
+      team_praise: { teamOrientation: 0.4, recognitionNeed: -0.2 },
+      private_praise: { recognitionNeed: 0.6 },
+      private_criticism: { temper: 0.5, recognitionNeed: 0.2 },
+      public_criticism: { recognitionNeed: 0.45, temper: 0.5, teamOrientation: -0.15 },
+      promise_made: { recognitionNeed: 0.3, drive: 0.3 },
+      promise_kept: { recognitionNeed: 0.3 },
+      // Team orientation is deliberately absent: a broken promise is its own cause.
+      broken_promise: { temper: 0.4, recognitionNeed: 0.2 },
+      new_competitor: { teamOrientation: -0.4, recognitionNeed: 0.4, drive: -0.2 },
+      teammate_traded: { teamOrientation: 0.4, consideration: 0.4 },
+      community_attention: { recognitionNeed: 0.5, consideration: 0.3 },
+      community_off_day: { drive: 0.3, temper: 0.3, consideration: -0.3 },
+    },
+    /** Own training development: drive and discipline, each ±0.15, together within 0.7–1.3. */
+    training: { drive: 0.15, discipline: 0.15, range: [0.7, 1.3] as const, disciplineMoodShield: 0.6 },
+    /** One demanding player per session influences up to `maxRecipients` low-drive teammates. */
+    group: { leaderFrom: 0.8, progressBoost: 0.1, harshSatisfaction: -1.5, maxRecipients: 4 },
+    /** Private demands ("set expectations"): the next-game boost scales with discipline. */
+    demandBoostRange: [0.5, 1.5] as const,
   },
 
   lowMood: {

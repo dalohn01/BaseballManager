@@ -1,3 +1,4 @@
+import { roleAmbition } from '../../domain/personality';
 import { dayKind } from '../../domain/calendar';
 import { useState } from 'react';
 import { BALANCE } from '../../balance/config';
@@ -110,7 +111,7 @@ function Causes() {
   const s = useGame();
   const club = userClub(s);
   const starting = new Set([...club.lineup.battingOrder.map((x) => x.playerId), club.lineup.pitcherId]);
-  const roleIssues = clubPlayers(s, club.id).filter((p) => !p.isPitcher && !starting.has(p.id) && (p.priority === 'playingTime' || p.role === 'starter'));
+  const roleIssues = clubPlayers(s, club.id).filter((p) => !p.isPitcher && !starting.has(p.id) && (roleAmbition(p.personality) > 0.1 || p.role === 'starter'));
   const promises = s.promises.filter((p) => p.status === 'active');
   const recent = (list: { delta: number; text: string }[]) =>
     list.slice(0, 2).map((r) => `${r.text} (${r.delta > 0 ? '+' : '−'}${Math.abs(Math.round(r.delta))})`).join(' · ') || 'nothing recent';

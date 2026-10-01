@@ -10,7 +10,7 @@ import type {
 } from './types';
 import { BALANCE } from '../balance/config';
 
-export const SCHEMA_VERSION = 9;
+export const SCHEMA_VERSION = 10;
 
 export type EventType =
   | 'leagueGame'
@@ -74,6 +74,8 @@ export interface EffectRecord {
   /** Optional denominator for progress-style values ("62/100"). */
   outOf?: number;
   format?: 'number' | 'cash';
+  /** Why it changed, when the source gave a reason (satisfaction, fans, owners). */
+  reason?: string;
 }
 
 export interface Resolution {
@@ -333,6 +335,8 @@ export interface ActionState {
   programs: Record<PlayerId, { kind: 'training' | 'recovery'; until: number; source: string }>;
   /** Players motivated for their next league game (pep talk). */
   motivated: PlayerId[];
+  /** Rating boost per motivated player (a private demand scales with discipline); absent = the standard pep talk boost. */
+  boosts?: Record<PlayerId, number>;
   /** Active fundraiser: pays out once when it ends. */
   fundraiser: { purpose: string; startedAt: number; endsAt: number; amount: number } | null;
   /** Money raised for facility upgrades only (a credit, not free cash). */

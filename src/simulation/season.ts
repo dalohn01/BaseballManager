@@ -1,3 +1,8 @@
+import { clamp } from '../domain/rng';
+import { nd, type Personality } from '../domain/personality';
+
+/** 0 … 1: how much personal terms weigh in a renewal (self-interest, need for recognition). */
+export const contractWeight = (p: Personality) => clamp(0.6 * -nd(p.teamOrientation) + 0.4 * nd(p.recognitionNeed), 0, 1);
 import { BALANCE } from '../balance/config';
 import { createPlayer, emptyStats, marketSalary } from '../content/playerFactory';
 import { autoLineup } from '../domain/lineup';
@@ -18,13 +23,14 @@ export function expiringPlayers(state: GameState, clubId: ClubId): Player[] {
 
 /**
  * A renewing player asks for his market value (level and age), within a band
- * around his current salary; players who prioritise money ask a bit more.
+ * around his current salary. Self-focused players who want recognition ask a
+ * bit more (up to the money premium); everyone still asks a fair salary.
  */
 export function renewalTerms(p: Player): { salary: number; willing: boolean } {
   const level = p.isPitcher ? p.ratings.pitching : Math.max(p.ratings.contact, p.ratings.fielding);
   const market = Math.max(8, level - 30) * O.renewalPerRatingPoint * (p.age >= 33 ? 0.85 : 1);
   const [lo, hi] = O.renewalBand;
-  const ask = Math.min(p.contract.salary * hi, Math.max(p.contract.salary * lo, market)) * (p.priority === 'money' ? 1 + O.renewalMoneyPremium : 1);
+  const ask = Math.min(p.contract.salary * hi, Math.max(p.contract.salary * lo, market)) * (1 + O.renewalMoneyPremium * contractWeight(p.personality));
   return {
     salary: Math.round(ask / 1000) * 1000,
     willing: p.satisfaction >= O.renewalMinSatisfaction,

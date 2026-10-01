@@ -70,6 +70,8 @@ async function advance(): Promise<string> {
     expect(screen.getByText(/^(Day complete|A quiet day)$/)).toBeTruthy();
     expect(screen.getAllByText(/^(Today|Tomorrow|In \d+ days|Up now)$/).length).toBeGreaterThan(0);
     await click(day);
+    // The day is saved before the next one shows; the button is disabled meanwhile.
+    await waitFor(() => expect((screen.queryByRole('button', { name: /^Next day/ }) as HTMLButtonElement | null)?.disabled ?? false).toBe(false));
     return 'day';
   }
   const confirm = await screen.findByRole('button', { name: /^Confirm/ });

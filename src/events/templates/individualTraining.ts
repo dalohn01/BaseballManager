@@ -1,9 +1,12 @@
+import { applyReaction, happinessText } from '../../simulation/reactions';
+import { growthKeys, individualProgram } from '../../simulation/programs';
+import { expression, roleAmbition } from '../../domain/personality';
 import { BALANCE } from '../../balance/config';
 import { programBlocker, startProgram } from '../../simulation/locks';
 import { trainingModifier } from '../../simulation/economy';
 import type { GameState } from '../../domain/state';
 import { clubPlayers, playerName, userClub } from '../../domain/state';
-import type { Player, RatingKey } from '../../domain/types';
+import type { Player } from '../../domain/types';
 import { canPromiseStarts, makeStartsPromise } from '../../simulation/promises';
 import { applyProgress, recordProgress, runTeamTraining } from '../../simulation/training';
 import type { EventTemplate } from '../types';
@@ -17,15 +20,18 @@ const boost = {
   appliesTo: ['program', 'extra'],
 };
 
-/** A prospect who wants playing time and is currently not starting. */
+/**
+ * A young player who wants a bigger role and is currently not starting: the
+ * wish comes from his personality (need for recognition, drive, self-interest)
+ * or from real unhappiness, not from a fixed trait.
+ */
 function benchedProspect(s: GameState): Player | undefined {
   return clubPlayers(s, s.userClubId)
-    .filter((p) => !p.isPitcher && (p.role === 'prospect' || p.age <= 23) && p.priority === 'playingTime' && !isInLineup(s, s.userClubId, p.id) && weakestStarterFor(s, p))
+    .filter((p) => !p.isPitcher && (p.role === 'prospect' || p.age <= 23) && (roleAmbition(p.personality) > 0.1 || p.satisfaction < 55) && !isInLineup(s, s.userClubId, p.id) && weakestStarterFor(s, p))
     .sort((a, b) => a.satisfaction - b.satisfaction || a.id.localeCompare(b.id))[0];
 }
 
-export const growthKeys = (p: Player): RatingKey[] =>
-  p.isPitcher ? ['pitching'] : (['contact', 'power', 'fielding'] as RatingKey[]).sort((a, b) => p.ratings[a] - p.ratings[b]).slice(0, 2);
+export { growthKeys };
 
 /** The brief's concrete example: a prospect wants a bigger role; a starter competes for the same spot. */
 export const individualProspect: EventTemplate = {
@@ -34,7 +40,10 @@ export const individualProspect: EventTemplate = {
   type: 'individualTraining',
   slot: 'management',
   cooldownRounds: 5,
-  weight: (s) => (benchedProspect(s) ? 3 : 0),
+  weight: (s) => {
+    const p = benchedProspect(s);
+    return p ? 3 * (0.4 + 0.6 * (p.personality.outspokenness / 100)) : 0;
+  },
   build: ({ state }) => {
     const p = benchedProspect(state)!;
     const rival = state.players[weakestStarterFor(state, p)!];
@@ -51,7 +60,7 @@ export const individualProspect: EventTemplate = {
           id: 'promise',
           label: `Promise ${BALANCE.promises.startsThreshold} starts in ${BALANCE.promises.windowGames} games`,
           summary: `${p.lastName} replaces ${rival.lastName} in the saved lineup now.`,
-          certain: [pos(`${p.lastName} satisfaction +${BALANCE.promises.madeProspect}`), neg(`${rival.lastName} satisfaction ${BALANCE.promises.madeRival}`)],
+          certain: [pos(happinessText(p, 'promise_made', BALANCE.promises.madeProspect)), neg(happinessText(rival, 'role_reduction', BALANCE.promises.madeRival))],
           uncertain: [neutral(`Kept: +${BALANCE.promises.kept}. Broken: ${BALANCE.promises.broken} (checked against actual lineups)`)],
           cost: cost(),
         },
@@ -59,12 +68,12 @@ export const individualProspect: EventTemplate = {
           id: 'program',
           label: 'Individual program',
           summary: `Extra sessions on ${keys.join(' & ')}. No playing-time guarantee.`,
-          certain: [pos(`${p.lastName} satisfaction +2`), neg(`${p.lastName} fitness −2%`)],
+          certain: [pos(happinessText(p, 'development_opportunity', 2)), neg(`${p.lastName} fitness −2%`)],
           uncertain: [pos(`${keys.join(' & ')} progress`)],
           cost: cost(5_000),
           primary: true,
         },
-        { id: 'keep', label: 'Keep his current role', summary: 'The lineup stays as it is.', certain: [neg(`${p.lastName} satisfaction −5`)], uncertain: [], cost: cost() },
+        { id: 'keep', label: 'Keep his current role', summary: 'The lineup stays as it is.', certain: [neg(happinessText(p, 'told_to_wait', -5))], uncertain: [], cost: cost() },
       ],
       boosts: [boost],
     };
@@ -85,8 +94,8 @@ export const individualProspect: EventTemplate = {
     if (option.id === 'promise') {
       if (!isInLineup(state, state.userClubId, p.id)) substitute(state, state.userClubId, rival.id, p.id);
       const pr = makeStartsPromise(state, event, p.id, rival.id);
-      sink.playerMood(p.id, 'satisfaction', BALANCE.promises.madeProspect, 'Promised regular starts');
-      sink.playerMood(rival.id, 'satisfaction', BALANCE.promises.madeRival, `Lost his spot to ${p.lastName}`);
+      applyReaction(state, sink, p.id, 'promise_made', BALANCE.promises.madeProspect, 'Promised regular starts', `${event.id}:promise`);
+      applyReaction(state, sink, rival.id, 'role_reduction', BALANCE.promises.madeRival, `Lost his spot to ${p.lastName}`, `${event.id}:rival`);
       return {
         headline: `${p.lastName} gets his promise.`,
         narrative: [
@@ -101,14 +110,18 @@ export const individualProspect: EventTemplate = {
     }
     if (option.id === 'program') {
       const mult = b ? BALANCE.influence.trainingBoostMultiplier : 1;
-      for (const k of growthKeys(p)) recordProgress(sink, p, k, applyProgress(p, k, 45, userClub(state).facilities.training, rng, mult * trainingModifier(userClub(state))));
-      sink.playerMood(p.id, 'satisfaction', 2, 'Given an individual program');
-      sink.playerMood(p.id, 'fitness', -2, 'Extra sessions');
-      startProgram(state, p.id, 'training', 'individual program');
+      individualProgram(state, sink, rng, p, { base: 45, fitness: -2, satisfaction: 2, multiplier: mult, source: 'an individual program', situationId: `${event.id}:program` });
       return { headline: `${p.lastName} hits the extra sessions.`, narrative: ['Development, not a promise of minutes.'] };
     }
-    sink.playerMood(p.id, 'satisfaction', -5, 'Asked for a bigger role and was told no');
-    return { headline: `${p.lastName} is told to be patient.`, narrative: ['He is not happy about it.'], reactions: [{ playerId: p.id, text: 'I thought I’d earned more than this.' }] };
+    const r = applyReaction(state, sink, p.id, 'told_to_wait', -5, 'Asked for a bigger role and was told no', `${event.id}:keep`);
+    // How much it hurts and whether he says so are separate: a quiet player can be just as unhappy.
+    const tone = expression(p.personality, r?.delta ?? -5);
+    const quote = tone === 'harsh' ? 'Patient? I have been patient. This is not right.' : tone === 'calm' ? 'I thought I’d earned more than this.' : null;
+    return {
+      headline: `${p.lastName} is told to be patient.`,
+      narrative: [tone === 'silent' ? 'He says nothing, but he is not happy about it.' : 'He is not happy about it, and he lets you know.'],
+      reactions: quote ? [{ playerId: p.id, text: quote }] : [],
+    };
   },
 };
 
@@ -153,12 +166,12 @@ export const individualVeteran: EventTemplate = {
           id: 'rest',
           label: 'Sit him next game',
           summary: sub ? `${sub.lastName} starts instead.` : 'No natural replacement on the bench.',
-          certain: [pos('He recovers on the bench'), neutral(p.priority === 'loyalty' ? 'He accepts it (+2)' : 'He is annoyed (−3)')],
+          certain: [pos('He recovers on the bench'), neg(happinessText(p, 'planned_rest', -2))],
           uncertain: [],
           cost: cost(),
           primary: true,
         },
-        { id: 'trust', label: 'Back him publicly', summary: '"He’ll come good."', certain: [pos(`${p.lastName} satisfaction +3`)], uncertain: [], cost: cost() },
+        { id: 'trust', label: 'Back him publicly', summary: '"He’ll come good."', certain: [pos(happinessText(p, 'public_praise', 3))], uncertain: [], cost: cost() },
       ],
       boosts: [boost],
     };
@@ -176,11 +189,10 @@ export const individualVeteran: EventTemplate = {
     if (option.id === 'rest') {
       const subId = String(event.data.subId);
       if (isInLineup(state, state.userClubId, p.id)) substitute(state, state.userClubId, p.id, subId);
-      const ok = p.priority === 'loyalty';
-      sink.playerMood(p.id, 'satisfaction', ok ? 2 : -3, ok ? 'Accepted a rest day' : 'Benched to rest');
+      applyReaction(state, sink, p.id, 'planned_rest', -2, 'Benched to rest', `${event.id}:rest`);
       return { headline: `${p.lastName} gets a breather.`, narrative: [`${state.players[subId].lastName} takes his spot in the saved lineup.`] };
     }
-    sink.playerMood(p.id, 'satisfaction', 3, 'Manager backed him publicly');
+    applyReaction(state, sink, p.id, 'public_praise', 3, 'Manager backed him publicly', `${event.id}:trust`);
     return { headline: '"He’ll come good."', narrative: ['Nothing changes on the field — yet.'], reactions: [{ playerId: p.id, text: 'Appreciate the trust, skip.' }] };
   },
 };

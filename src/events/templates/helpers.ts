@@ -1,3 +1,4 @@
+import { applyReaction } from '../../simulation/reactions';
 import { BALANCE } from '../../balance/config';
 import type { EffectSink } from '../../domain/effects';
 import { offenseScore } from '../../domain/lineup';
@@ -57,9 +58,8 @@ export function competitionReaction(state: GameState, sink: EffectSink, newcomer
   const slot = club.lineup.battingOrder.find((s) => s.position === primary);
   if (!slot) return;
   const incumbent = state.players[slot.playerId];
-  if (incumbent.priority === 'playingTime' || incumbent.role === 'starter') {
-    sink.playerMood(incumbent.id, 'satisfaction', -3, `New competition at ${primary}: ${newcomer.lastName}`);
-  }
+  // Self-interest and need for recognition make it a worry; team-first players accept a real reinforcement.
+  applyReaction(state, sink, incumbent.id, 'new_competitor', -2, `New competition at ${primary}: ${newcomer.lastName}`, `${newcomer.id}:competition:${incumbent.id}`);
 }
 
 export const youngest = (state: GameState, filter: (p: Player) => boolean) =>

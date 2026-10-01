@@ -1,3 +1,4 @@
+import { roleAmbition } from './personality';
 import { BALANCE } from '../balance/config';
 import type { GameState } from './state';
 import { absoluteRound } from './state';
@@ -142,7 +143,7 @@ export const fmtIp = (outs: number) => `${Math.floor(outs / 3)}.${outs % 3}`;
 
 // ---------- Playing time and workload ----------
 
-const startedIn = (m: MatchResult, id: PlayerId) =>
+export const startedIn = (m: MatchResult, id: PlayerId) =>
   (['home', 'away'] as const).some((side) => m.lineups[side].pitcherId === id || m.lineups[side].battingOrder.some((s) => s.playerId === id));
 
 /** Consecutive recent club games (since he could play for the club) without a start. */
@@ -199,7 +200,7 @@ export function playerNotes(state: GameState, player: Player, opts: { starting: 
   if (!player.isPitcher) {
     const idle = gamesWithoutStart(state, player);
     if (!opts.starting && idle >= 3) notes.push({ text: `No starts in ${idle} games`, tone: 'info' });
-    if (!opts.starting && player.priority === 'playingTime' && player.satisfaction < 65) notes.push({ text: 'Wants playing time', tone: 'warn' });
+    if (!opts.starting && roleAmbition(player.personality) > 0.1 && player.satisfaction < 65) notes.push({ text: 'Wants playing time', tone: 'warn' });
   } else {
     const w = pitcherWorkload(state, player);
     if (w.straight >= 2) notes.push({ text: `Pitched in ${w.straight} straight games`, tone: 'warn' });

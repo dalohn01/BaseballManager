@@ -1,3 +1,4 @@
+import { generatePersonality, personalitySeed, PRIORITY_HINT } from '../domain/personality';
 import { BALANCE } from '../balance/config';
 import { clamp, type Rng } from '../domain/rng';
 import type { LineupPosition, PersonalPriority, Player, SeasonStats, SquadRole } from '../domain/types';
@@ -90,7 +91,8 @@ export function createPlayer(spec: PlayerSpec, rng: Rng): Player {
     fitness: rng.int(92, 98),
     satisfaction: rng.int(58, 72),
     popularity: clamp(Math.round(15 + (spec.age - 18) * 1.5 + rng.int(-5, 10)), 5, 80),
-    priority: rng.pick(PRIORITIES),
+    // The old priority draw is kept (same random sequence) as the personality's starting direction.
+    personality: generatePersonality(personalitySeed(spec.id, `${first} ${last}`), PRIORITY_HINT[rng.pick(PRIORITIES)]),
     role: spec.role,
     contract: { salary: spec.salary, seasonsLeft: spec.seasonsLeft, startRound: spec.startRound },
     joinedSeason: spec.joinedSeason,
@@ -99,6 +101,7 @@ export function createPlayer(spec: PlayerSpec, rng: Rng): Player {
     pastSeasons: [],
     moodLog: [],
     lastReaction: null,
+    reactions: [],
   };
 }
 

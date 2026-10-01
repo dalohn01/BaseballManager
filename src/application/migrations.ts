@@ -1,4 +1,6 @@
 import { BALANCE } from '../balance/config';
+import { generatePersonality, personalitySeed, PRIORITY_HINT } from '../domain/personality';
+import type { Player } from '../domain/types';
 import { defaultPitchingPlan } from '../domain/lineup';
 import { cycleId, defaultActions, defaultCycle } from '../simulation/cycle';
 import { defaultTactics } from '../domain/tactics';
@@ -15,6 +17,8 @@ type AnyState = Record<string, unknown> & { schemaVersion: number };
  */
 export function migrate(input: AnyState): GameState {
   const s = structuredClone(input) as unknown as GameState & { schemaVersion: number };
+  // Older steps build events that read personalities, so every save gets them first (idempotent).
+  if (s.schemaVersion < 10) ensurePersonalities(s);
   if (s.schemaVersion === 1) {
     for (const p of Object.values(s.players)) {
       p.contract.startRound ??= 0;
@@ -145,8 +149,28 @@ export function migrate(input: AnyState): GameState {
     }
     s.schemaVersion = 9;
   }
+  if (s.schemaVersion === 9) {
+    // The single priority becomes a seven-dimension personality: the old priority
+    // sets the main tendency, the rest is generated from the player's own seed.
+    // Happiness, skills, contracts, promises, programs and queued events are not
+    // touched; already settled effects are not re-run. A player that already has a
+    // personality keeps it, so running this again changes nothing.
+    ensurePersonalities(s);
+    s.schemaVersion = 10;
+  }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;
 }
 
 export const canMigrate = (version: number) => version >= 1 && version <= SCHEMA_VERSION;
+
+/** v10: the old single priority becomes the main tendency of a generated personality (once per player). */
+function ensurePersonalities(s: GameState) {
+  const migratePlayer = (p: Player & { priority?: string }) => {
+    if (!p.personality) p.personality = generatePersonality(personalitySeed(p.id, `${p.firstName} ${p.lastName}`), PRIORITY_HINT[p.priority ?? ''] ?? {});
+    delete p.priority;
+    p.reactions ??= [];
+  };
+  for (const p of Object.values(s.players)) migratePlayer(p);
+  for (const ev of [s.currentEvent, s.nextEvent]) for (const c of ev?.candidates ?? []) migratePlayer(c);
+}

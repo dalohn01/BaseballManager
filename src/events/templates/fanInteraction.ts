@@ -1,3 +1,11 @@
+import { applyReaction, fmtDelta, reactionPreview } from '../../simulation/reactions';
+import type { Player } from '../../domain/types';
+
+/** The star's net reaction to a community day (attention minus the lost off-day), as shown before choosing. */
+function communityMood(p: Player) {
+  const net = reactionPreview(p, 'community_attention', 2) + reactionPreview(p, 'community_off_day', -2);
+  return { text: `${p.lastName} happiness ${fmtDelta(Math.round(net * 10) / 10)}`, tone: net >= 0 ? ('positive' as const) : ('negative' as const) };
+}
 import { BALANCE } from '../../balance/config';
 import { communityBlocker, markCommunity } from '../../simulation/locks';
 import type { GameState } from '../../domain/state';
@@ -133,8 +141,9 @@ export const fansCommunityDay: EventTemplate = {
             { text: 'Fan support +4', tone: 'positive' },
             { text: 'Local roots +3', tone: 'positive' },
             { text: `${star.lastName} fitness −2%`, tone: 'negative' },
+            communityMood(star),
           ],
-          uncertain: [{ text: `${star.lastName}'s mood depends on his priorities`, tone: 'neutral' }],
+          uncertain: [],
           cost: { time: T, cash: 6_000, influence: 0 },
         },
         {
@@ -143,7 +152,7 @@ export const fansCommunityDay: EventTemplate = {
           summary: 'A chance for a young player to be seen.',
           certain: [
             { text: 'Fan support +2', tone: 'positive' },
-            { text: `${prospect.lastName} popularity +6, satisfaction +3`, tone: 'positive' },
+            { text: `${prospect.lastName} popularity +6, happiness ${fmtDelta(reactionPreview(prospect, 'community_attention', 3))}`, tone: 'positive' },
           ],
           uncertain: [],
           cost: { time: T, cash: 3_000, influence: 0 },
@@ -169,8 +178,10 @@ export const fansCommunityDay: EventTemplate = {
       sink.clubMood(c.id, 'fanSupport', 4, `${star.lastName} visited local schools`);
       sink.brand(c.id, 'local', 3);
       sink.playerMood(star.id, 'fitness', -2, 'Community day');
-      const likes = star.priority === 'loyalty';
-      sink.playerMood(star.id, 'satisfaction', likes ? 4 : -2, likes ? 'Proud to represent the community' : 'Asked to give up an off-day');
+      // Two parts, each sized by his personality: the attention, and the lost off-day.
+      const a = applyReaction(state, sink, star.id, 'community_attention', 2, 'Proud to represent the community', `${event.id}:attention`);
+      const b = applyReaction(state, sink, star.id, 'community_off_day', -2, 'Asked to give up an off-day', `${event.id}:offday`);
+      const likes = (a?.delta ?? 0) + (b?.delta ?? 0) > 0;
       return {
         headline: `${star.lastName} draws a crowd.`,
         narrative: [likes ? `${star.lastName} loved it — this town means a lot to him.` : `${star.lastName} did it, but would have preferred the rest.`],
@@ -180,7 +191,7 @@ export const fansCommunityDay: EventTemplate = {
     if (option.id === 'prospect' && prospect) {
       sink.clubMood(c.id, 'fanSupport', 2, `${prospect.lastName} visited local schools`);
       sink.playerMood(prospect.id, 'popularity', 6, 'Community day');
-      sink.playerMood(prospect.id, 'satisfaction', 3, 'Trusted to represent the club');
+      applyReaction(state, sink, prospect.id, 'community_attention', 3, 'Trusted to represent the club', `${event.id}:attention`);
       return {
         headline: `${shortName(prospect)} wins new fans.`,
         narrative: ['Smaller crowd than a star would draw, but the kids have a new favourite.'],

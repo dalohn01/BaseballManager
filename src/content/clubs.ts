@@ -50,6 +50,7 @@ export interface PlayerSeed {
   popularity: number;
   /** Match readiness in percent. */
   fitness: number;
+  /** Starting direction for the generated personality (the old single priority). */
   priority: PersonalPriority;
   role: SquadRole;
   salary: number;

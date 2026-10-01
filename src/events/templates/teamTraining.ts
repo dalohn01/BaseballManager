@@ -82,6 +82,7 @@ export const teamTraining: EventTemplate = {
       narrative.push(`Squad fitness up from ${Math.round(summary.fitnessBefore)}% to ${Math.round(summary.fitnessAfter)}%.`);
     } else {
       narrative.push(`${summary.totalProgress} development points across the squad${boost ? ' (extra coaching +50%)' : ''}.`);
+      if (summary.group) narrative.push(summary.group.text);
       if (summary.facilityLevel > 1) {
         narrative.push(`Training Center level ${summary.facilityLevel} contributed ${summary.facilityContribution} of those points compared with the old facility.`);
       }

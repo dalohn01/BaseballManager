@@ -11,6 +11,16 @@ import { settleRound, type RoundSettlement } from './economy';
 import { evaluatePromises } from './promises';
 import { buildSimTeam, simulateMatch, winProbability } from './match';
 import { avg } from './training';
+import { applyReaction } from './reactions';
+import { expression, type Reaction } from '../domain/personality';
+import { recentClubMatches, startedIn } from '../domain/playerStats';
+import { absoluteRound } from '../domain/state';
+
+/** Items before the first one that matches. */
+const countUntil = <T>(list: T[], stop: (x: T) => boolean) => {
+  const i = list.findIndex(stop);
+  return i < 0 ? list.length : i;
+};
 
 export interface RoundOutcome {
   userMatch: MatchResult;
@@ -72,6 +82,7 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
   // One more completed league game for durations and cooldowns; a pep talk lasts one game.
   state.cycle.matchesPlayed += 1;
   state.actions.motivated = [];
+  state.actions.boosts = {};
   const raised = settleFundraiser(state);
   // Match-only tactics end with the match; the saved style and instructions stay.
   clearMatchTactics(userClubState);
@@ -191,22 +202,45 @@ function applyUserMoods(
   if (fanDelta !== 0) sink.clubMood(clubId, 'fanSupport', fanDelta, `${won ? 'Beat' : 'Lost to'} ${opp.name} ${us}–${them}${won && expectedWin < 0.4 ? ' as underdogs' : !won && expectedWin > 0.6 ? ' as favourites' : ''}${exp.reason ? ` (${exp.reason})` : ''}`);
   sink.clubMood(clubId, 'ownerConfidence', won ? mood.ownerWin : mood.ownerLoss, `${won ? 'Win' : 'Loss'} vs ${opp.name}`);
 
+  // Playing time: context first (role, starts in the last three games, rest,
+  // how long a reserve has waited), then the personality sizes the reaction.
+  const recent = recentClubMatches(state).filter((x) => x.id === m.id || x.round < m.round || x.season < m.season);
+  const window = recent.slice(0, 3);
+  let loudest: { playerId: PlayerId; delta: number; tone: 'calm' | 'harsh' } | null = null;
   for (const p of clubPlayers(state, clubId)) {
-    const didStart = started.has(p.id);
-    let delta = 0;
-    let reason = '';
     if (p.isPitcher) continue; // Rotation turns are expected; no mood swing per start.
-    if (p.priority === 'playingTime') {
-      delta = didStart ? mood.startedPlayingTimePriority : mood.benchedPlayingTimePriority;
-      reason = didStart ? 'Got the start' : 'Left out of the lineup';
-    } else if (p.role === 'starter' && !didStart) {
-      delta = mood.benchedStarterRole;
-      reason = 'Benched despite a starting role';
+    const didStart = started.has(p.id);
+    const eligible = (x: MatchResult) => absoluteRound(x.season, x.round) >= p.contract.startRound;
+    const idleBefore = countUntil(recent.slice(1).filter(eligible), (x) => startedIn(x, p.id));
+    const sid = `${m.id}:pt:${p.id}`;
+    let r: Reaction | null = null;
+    if (didStart) {
+      // A start after waiting is welcome; a regular's start is simply normal.
+      if (p.role !== 'starter' && idleBefore > 0) {
+        const base = Math.min(mood.startAfterWaitMax, idleBefore * mood.startAfterWaitPerGame);
+        r = applyReaction(state, sink, p.id, 'got_start', base, `Got the start after ${idleBefore} game${idleBefore === 1 ? '' : 's'} out`, sid);
+      }
+    } else if (p.role === 'starter') {
+      const missed = window.filter(eligible).filter((x) => !startedIn(x, p.id)).length;
+      const resting = p.fitness < BALANCE.fitness.needsRestBelow + BALANCE.fitness.benchRecoveryPerGame;
+      if (resting) r = applyReaction(state, sink, p.id, 'planned_rest', mood.rotation, 'Rested on the bench', sid);
+      else if (missed <= 1) r = applyReaction(state, sink, p.id, 'rotation', mood.rotation, 'Benched for one game despite a starting role', sid);
+      else r = applyReaction(state, sink, p.id, 'playing_time', mood.rotation + mood.playingTimePerMiss * (missed - 1), `Benched in ${missed} of the last ${window.length} games`, sid);
+    } else {
+      const idle = idleBefore + 1;
+      if (idle >= mood.reserveIdleFrom) r = applyReaction(state, sink, p.id, 'playing_time', mood.reserveBenched, `${idle} games in a row without a start`, sid);
     }
-    if (delta !== 0) sink.playerMood(p.id, 'satisfaction', delta, reason);
+    // Whether it is said out loud is a separate matter from how much it hurts.
+    if (r && r.delta < 0) {
+      const tone = expression(p.personality, r.delta);
+      if (tone !== 'silent' && (!loudest || r.delta < loudest.delta)) loudest = { playerId: p.id, delta: r.delta, tone };
+    }
     if (didStart && p.stats.starts === 1 && (p.role === 'prospect' || p.role === 'reserve')) {
       reactions.push({ playerId: p.id, text: 'Thanks for giving me a chance.' });
     }
+  }
+  if (loudest && loudest.delta <= -1.5) {
+    reactions.push({ playerId: loudest.playerId, text: loudest.tone === 'harsh' ? 'Sitting again? I deserve better than this.' : "I want to be out there. I'll keep working for it." });
   }
 
   // Standout performer reaction, based only on what happened.

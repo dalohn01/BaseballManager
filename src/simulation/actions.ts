@@ -1,14 +1,22 @@
+import { applyReaction, fmtDelta, reactionPreview } from './reactions';
+import { individualProgram } from './programs';
+import { clamp } from '../domain/rng';
+import { nd } from '../domain/personality';
+
+/** Next-game boost after a private demand: disciplined players follow through (range in BALANCE.personality). */
+export function demandBoost(p: Player): number {
+  const [lo, hi] = BALANCE.personality.demandBoostRange;
+  return Math.round(BALANCE.actions.pepTalk.ratingBoost * clamp(1 + 0.5 * nd(p.personality.discipline), lo, hi));
+}
 import { BALANCE } from '../balance/config';
 import type { EffectSink } from '../domain/effects';
 import type { Rng } from '../domain/rng';
 import type { ActionKind, GameState } from '../domain/state';
 import { absoluteRound, playerName, userClub } from '../domain/state';
 import type { Player } from '../domain/types';
-import { growthKeys } from '../events/templates/individualTraining';
-import { trainingModifier } from './economy';
+import { growthKeys } from './programs';
 import { goalProgress } from './goals';
 import { boardFundingLeft, communityBlocker, grantBoardFunding, markCommunity, programBlocker, startProgram } from './locks';
-import { applyProgress, recordProgress } from './training';
 
 /*
  * Direct manager actions: initiatives paid with Influence (and sometimes
@@ -102,13 +110,18 @@ export function actionPreview(s: GameState, kind: ActionKind, target: string | n
   let r: ActionPreview;
   switch (kind) {
     case 'pepTalk': {
-      r = { ...base, title: 'Pep talk', cost: { influence: A.pepTalk.influence, cash: 0 }, effect: `${p ? p.lastName : 'He'} is motivated: +${A.pepTalk.ratingBoost} to his ratings in the next league game. Does not solve a role problem.`, duration: 'Next league game', cooldown: 'Once per player per game' };
+      // Praise (a private positive talk) or set expectations (private criticism): one talk per player per game.
+      const demand = option === 'demand';
+      const mood = p && mine ? ` Happiness ${fmtDelta(reactionPreview(p, demand ? 'private_criticism' : 'private_praise', demand ? -2 : 2))}.` : '';
+      r = demand
+        ? { ...base, title: 'Set expectations', cost: { influence: A.pepTalk.influence, cash: 0 }, effect: `A clear, private demand: +${p ? demandBoost(p) : A.pepTalk.ratingBoost} to his ratings in the next league game (his discipline decides how well he follows through).${mood} Does not make an undisciplined player disciplined.`, duration: 'Next league game', cooldown: 'One talk per player per game' }
+        : { ...base, title: 'Pep talk', cost: { influence: A.pepTalk.influence, cash: 0 }, effect: `${p ? p.lastName : 'He'} is motivated: +${A.pepTalk.ratingBoost} to his ratings in the next league game.${mood} Does not solve a role problem or a broken promise.`, duration: 'Next league game', cooldown: 'One talk per player per game' };
       if (!mine) r.blocker = 'Choose a player from your squad.';
       else if (s.actions.motivated.includes(p!.id)) r.blocker = `${p!.lastName} is already motivated for the next game.`;
       break;
     }
     case 'extraTraining': {
-      r = { ...base, title: 'Extra training', cost: { influence: A.extraTraining.influence, cash: 0 }, effect: p ? `Development progress in ${growthKeys(p).join(' and ')} (same session as an individual program), fitness ${A.extraTraining.fitness}, happiness +${A.extraTraining.satisfaction}.` : 'Individual development session.', duration: 'Now; program slot until after the next game', cooldown: 'One program per player' };
+      r = { ...base, title: 'Extra training', cost: { influence: A.extraTraining.influence, cash: 0 }, effect: p ? `Development progress in ${growthKeys(p).join(' and ')} (same session as an individual program), fitness ${A.extraTraining.fitness}, happiness ${fmtDelta(reactionPreview(p, 'development_opportunity', A.extraTraining.satisfaction))}.` : 'Individual development session.', duration: 'Now; program slot until after the next game', cooldown: 'One program per player' };
       if (!mine) r.blocker = 'Choose a player from your squad.';
       else r.blocker = programBlocker(s, p!.id);
       break;
@@ -162,16 +175,20 @@ export function applyAction(s: GameState, kind: ActionKind, target: string | nul
   const p = target ? s.players[target] : null;
   let summary = pv.title;
   switch (kind) {
-    case 'pepTalk':
+    case 'pepTalk': {
+      const demand = option === 'demand';
+      const id = `act-${s.actions.log.length}-${played(s)}:${p!.id}`;
       s.actions.motivated.push(p!.id);
+      s.actions.boosts ??= {};
+      s.actions.boosts[p!.id] = demand ? demandBoost(p!) : A.pepTalk.ratingBoost;
       s.actions.lastUse[`pepTalk:${p!.id}`] = played(s);
-      summary = `Pep talk with ${playerName(p!)}: motivated for the next game.`;
+      if (demand) applyReaction(s, sink, p!.id, 'private_criticism', -2, 'Told privately to raise his level', id);
+      else applyReaction(s, sink, p!.id, 'private_praise', 2, 'Encouraged in a private talk', id);
+      summary = demand ? `Set expectations with ${playerName(p!)}: +${s.actions.boosts[p!.id]} next game.` : `Pep talk with ${playerName(p!)}: motivated for the next game.`;
       break;
+    }
     case 'extraTraining': {
-      for (const k of growthKeys(p!)) recordProgress(sink, p!, k, applyProgress(p!, k, A.extraTraining.base, c.facilities.training, rng, trainingModifier(c)));
-      sink.playerMood(p!.id, 'fitness', A.extraTraining.fitness, 'Extra training session');
-      sink.playerMood(p!.id, 'satisfaction', A.extraTraining.satisfaction, 'Given extra individual training');
-      startProgram(s, p!.id, 'training', 'extra training');
+      individualProgram(s, sink, rng, p!, { base: A.extraTraining.base, fitness: A.extraTraining.fitness, satisfaction: A.extraTraining.satisfaction, multiplier: 1, source: 'extra training', situationId: `act-${s.actions.log.length}-${played(s)}:${p!.id}` });
       summary = `Extra training for ${playerName(p!)}.`;
       break;
     }

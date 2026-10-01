@@ -1,3 +1,5 @@
+import { DIMENSION_LABEL, DIMENSIONS, describePersonality, levelWord } from '../../domain/personality';
+import { currentConcern } from '../../simulation/reactions';
 import { useState } from 'react';
 import { ActionConfirm } from '../components/ActionConfirm';
 import { releaseBlocker, releaseCost } from '../../application/engine';
@@ -10,7 +12,7 @@ import { Avatar } from '../components/art';
 import { Meter, OvrBadge, Panel, RatingBar, ReasonList, Ribbon } from '../components/common';
 import { overall, overallTier, potentialOverall, TIER_LABEL } from '../../domain/ratings';
 import { Icon } from '../components/icons';
-import { avg3, era, ip, moneyExact, potentialLabel, PRIORITY_LABEL, PRIORITY_TEXT, ROLE_LABEL } from '../format';
+import { avg3, era, ip, moneyExact, potentialLabel, ROLE_LABEL } from '../format';
 import { href, useController, useGame, useSnapshot } from '../hooks';
 import { instructionSummary, InstructionsEditor } from '../tactics/TacticsControls';
 
@@ -233,14 +235,7 @@ export function PlayerScreen({ id }: { id: string }) {
           <Meter label="Happiness" value={p.satisfaction} caption={`${moodLabel('player', p.satisfaction)}${th.below !== null ? ` · drops a level below ${th.below}` : ''}`} />
           <Meter label="Fitness" value={p.fitness} display={`${p.fitness}%`} caption={`${fitnessLabel(p.fitness)} · 100% = fully ready; each point below costs ${BALANCE.match.fitnessPenaltyPerPoint} rating`} tone={p.fitness < BALANCE.fitness.warnBelow ? 'warn' : 'slate'} />
           <Meter label="Popularity" value={p.popularity} caption="How much the fans love him" />
-          <div className="status-item">
-            <Icon name="trophy" size={30} />
-            <div>
-              <small>Motivation</small>
-              <strong>{PRIORITY_LABEL[p.priority]}</strong>
-              <span className="muted">{PRIORITY_TEXT[p.priority]}</span>
-            </div>
-          </div>
+          <PersonalityItem id={p.id} />
           {p.moodLog.length > 0 && (
             <div className="status-item block">
               <small>Why his mood changed</small>
@@ -287,6 +282,7 @@ export function PlayerScreen({ id }: { id: string }) {
               <h3 className="subhead">Manager initiatives</h3>
               <p className="small muted">Paid with Influence, no Time.{s.actions.motivated.includes(p.id) ? ' Motivated for the next game.' : ''}{s.actions.programs[p.id] ? ` Program: ${s.actions.programs[p.id].source}.` : ''}</p>
               <ActionConfirm kind="pepTalk" target={p.id} compact />
+              <ActionConfirm kind="pepTalk" target={p.id} option="demand" compact />
               <ActionConfirm kind="extraTraining" target={p.id} compact />
               <ActionConfirm kind="recovery" target={p.id} compact />
             </div>
@@ -361,6 +357,44 @@ function Stat({ v, l }: { v: string | number; l: string }) {
     <div className="stat">
       <strong>{v}</strong>
       <span>{l}</span>
+    </div>
+  );
+}
+
+/**
+ * The stable personality in a few words, a separate "Right now" line when a
+ * real cause is active, and an optional detail view in words (never seven
+ * mandatory bars).
+ */
+function PersonalityItem({ id }: { id: string }) {
+  const s = useGame();
+  const p = s.players[id];
+  const d = describePersonality(p.personality);
+  const now = currentConcern(s, p);
+  return (
+    <div className="status-item personality-item">
+      <Icon name="person" size={30} />
+      <div>
+        <small>Personality</small>
+        <strong>{d.name}</strong>
+        <span className="muted">{d.text}</span>
+        {now && (
+          <span className="now-line">
+            <b>Right now:</b> {now}
+          </span>
+        )}
+        <details className="more">
+          <summary>Personality details</summary>
+          <dl className="pers-grid">
+            {DIMENSIONS.map((k) => (
+              <div key={k}>
+                <dt>{DIMENSION_LABEL[k]}</dt>
+                <dd className={`lvl-${levelWord(p.personality[k]).toLowerCase()}`}>{levelWord(p.personality[k])}</dd>
+              </div>
+            ))}
+          </dl>
+        </details>
+      </div>
     </div>
   );
 }

@@ -1,3 +1,4 @@
+import { generatePersonality, personalitySeed, PRIORITY_HINT } from '../domain/personality';
 import { BALANCE } from '../balance/config';
 import { defaultActions, defaultCycle } from '../simulation/cycle';
 import { defaultTactics } from '../domain/tactics';
@@ -43,7 +44,7 @@ function playerFromSeed(seed: PlayerSeed, id: string, clubId: string, rng: Rng):
     fitness: seed.fitness,
     satisfaction: seed.satisfaction,
     popularity: seed.popularity,
-    priority: seed.priority,
+    personality: generatePersonality(personalitySeed(id, `${seed.firstName} ${seed.lastName}`), PRIORITY_HINT[seed.priority]),
     role: seed.role,
     contract: { salary: seed.salary, seasonsLeft: seed.seasonsLeft, startRound: 0 },
     joinedSeason: 1,
@@ -52,6 +53,7 @@ function playerFromSeed(seed: PlayerSeed, id: string, clubId: string, rng: Rng):
     pastSeasons: [],
     moodLog: [],
     lastReaction: null,
+    reactions: [],
   };
 }
 

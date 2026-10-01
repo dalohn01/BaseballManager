@@ -82,7 +82,7 @@ export function MatchSummaryPanel({ match, steps, index }: { match: MatchResult;
  * (final values after the last step). Opening or closing it never touches the
  * playback: autoplay and tempo keep running, as with the match log.
  */
-function BoxScoreDialog({ match, steps, index, onClose }: { match: MatchResult; steps: CommentaryStep[]; index: number; onClose: () => void }) {
+export function BoxScoreDialog({ match, steps, index, onClose }: { match: MatchResult; steps: CommentaryStep[]; index: number; onClose: () => void }) {
   const s = useGame();
   const closeRef = useRef<HTMLButtonElement>(null);
   useEffect(() => {

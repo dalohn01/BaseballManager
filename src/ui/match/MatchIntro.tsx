@@ -105,7 +105,7 @@ function PitcherCard({ player, club }: { player: Player | undefined; club: Club 
  * Neutral ballpark illustration drawn in code with the home club's colours and
  * crest. A text-free painted arena background can replace it later.
  */
-function ArenaArt({ club, name }: { club: Club; name: string }) {
+export function ArenaArt({ club, name }: { club: Club; name: string }) {
   const { primary, secondary } = club.colors;
   const brick = '#a4533a';
   return (

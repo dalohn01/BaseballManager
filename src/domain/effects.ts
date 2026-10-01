@@ -21,7 +21,7 @@ export class EffectSink {
   }
 
   private pushReason(list: ReasonEntry[], delta: number, text: string) {
-    list.unshift({ ...this.when, delta, text });
+    list.unshift({ ...this.when, delta: Math.round(delta * 10) / 10, text });
     if (list.length > MAX_REASONS) list.length = MAX_REASONS;
   }
 
@@ -38,7 +38,9 @@ export class EffectSink {
   ): number {
     const p = this.state.players[playerId];
     const before = p[stat];
-    const after = clamp(before + Math.round(delta), 0, 100);
+    // Happiness keeps one decimal so personality-sized reactions stay smooth; the rest are whole points.
+    const step = stat === 'satisfaction' ? Math.round(delta * 10) / 10 : Math.round(delta);
+    const after = clamp(Math.round((before + step) * 1000) / 1000, 0, 100);
     p[stat] = after;
     if (stat === 'satisfaction' && after !== before) this.pushReason(p.moodLog, after - before, reason);
     if (opts.record !== false) {
@@ -50,6 +52,7 @@ export class EffectSink {
         statLabel: STAT_LABELS[stat],
         before,
         after,
+        reason,
       });
     }
     return after - before;
@@ -70,6 +73,7 @@ export class EffectSink {
         statLabel: STAT_LABELS[stat],
         before,
         after,
+        reason,
       });
     }
   }
