@@ -91,6 +91,8 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       if (ev.status !== 'resolved') return fail('invalid', 'Resolve the event before continuing.');
       const next = structuredClone(state);
       next.currentEvent!.status = 'acknowledged';
+      // Handled today: archived out of the active stack, kept in the day log.
+      next.dayLog = [...(next.dayLog ?? []), { eventId: ev.id, title: folderTitle(ev), headline: ev.resolution?.headline ?? '' }];
       // The next event of the same day, or none: the day is done and the manager advances it.
       next.currentEvent = next.nextEvent;
       next.nextEvent = null;
@@ -106,6 +108,7 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       const next = structuredClone(state);
       next.time = spendTime(next.time, now, BALANCE.time.costPerDay);
       next.calendar = nextDay(next.calendar);
+      next.dayLog = [];
       // Running costs are paid as the day starts, before its events are planned (a crisis can come the same day).
       const cal = next.calendar;
       chargeDay(next, new EffectSink(next, dayLedgerId(cal.season, cal.round, cal.day)));
@@ -246,6 +249,9 @@ export function advanceBlocker(state: GameState, now: number): string | null {
   if (!canAffordTime(state.time, now, BALANCE.time.costPerDay)) return 'Not enough Time. Wait for it to recover.';
   return null;
 }
+
+/** The name an event goes by in today's stack. */
+export const folderTitle = (ev: EventInstance) => (ev.type === 'leagueGame' ? `League game ${ev.title}` : ev.title);
 
 export const spendingFrozen = (state: GameState) => {
   const until = userClub(state).spendingFreezeUntil;

@@ -1,5 +1,5 @@
 import { dayCosts, dayLedgerId } from '../../simulation/economy';
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { PlayerAvatar } from '../components/PlayerAvatar';
 import { optionBlocker, totalCost } from '../../application/engine';
 import { BALANCE } from '../../balance/config';
@@ -11,6 +11,7 @@ import { leagueGameForecast, leagueGameOptionNotes, type LeagueGameChoice, lineu
 import { SLOT_LABELS } from '../../events/planner';
 import { advanceBlocker } from '../../application/engine';
 import { dayLabel, describeDay, nextDay } from '../../domain/calendar';
+import { dateOf, seasonDayOf, shortDate } from '../../domain/seasonDates';
 import { viewTime } from '../../domain/time';
 import { Avatar, Crest, EventArt } from '../components/art';
 import { EffectList, OvrBadge, Ribbon } from '../components/common';
@@ -20,36 +21,58 @@ import { money, moneyExact } from '../format';
 import { href, useController, useGame, useNow, useSnapshot } from '../hooks';
 import { MatchView } from './MatchView';
 
+/** Inside a day folder the folder's tab carries the event's name: the card skips its own ribbon and title. */
+export const FolderContext = createContext(false);
+
 export function EventCard() {
   const s = useGame();
   const ev = s.currentEvent;
-  if (!ev) return <DayDone />;
+  if (!ev) return <DayCompleteCard />;
   if (ev.status === 'pending') return <EventDecision ev={ev} key={ev.id} />;
   if (ev.type === 'leagueGame' && ev.resolution?.matchId) return <MatchView ev={ev} key={ev.id} />;
   return <EventResult ev={ev} key={ev.id} />;
 }
 
 /**
- * Every event of today is handled: the manager moves the calendar on. One day
- * costs 1 Time; tomorrow is previewed so the choice to advance is informed.
+ * Day complete: always the last folder of the day (and the only one on a
+ * quiet day). A short look back, tomorrow, and the Next day button with its
+ * Time cost. It can be previewed while events remain, but not finished.
  */
-function DayDone() {
+export function DayCompleteCard({ preview = false }: { preview?: boolean }) {
   const s = useGame();
   const c = useController();
   const snap = useSnapshot();
   const now = useNow();
+  const inFolder = useContext(FolderContext);
   const ref = useRef<HTMLButtonElement>(null);
-  useEffect(() => ref.current?.focus({ preventScroll: true }), []);
+  useEffect(() => {
+    if (!preview) ref.current?.focus({ preventScroll: true });
+  }, [preview]);
   const tomorrow = nextDay(s.calendar);
-  const blocker = advanceBlocker(s, now);
+  const blocker = preview ? "Handle today's events first." : advanceBlocker(s, now);
   const t = viewTime(s.time, now);
-  const quiet = s.calendar.planned === 0;
-  const wait = t.msToNext !== null && t.current < BALANCE.time.costPerDay ? ` Next Time in ${Math.ceil(t.msToNext / 60000)} min.` : '';
+  const log = s.dayLog ?? [];
+  const quiet = !preview && log.length === 0;
+  const wait = !preview && t.msToNext !== null && t.current < BALANCE.time.costPerDay ? ` Next Time in ${Math.ceil(t.msToNext / 60000)} min.` : '';
+  const tomorrowDate = shortDate(dateOf(seasonDayOf(tomorrow)));
   return (
-    <section className="event-card day-done" aria-live="polite">
-      <Ribbon>{dayLabel(s.calendar)}</Ribbon>
-      <h1 className="event-title">{quiet ? 'A quiet day' : 'Day complete'}</h1>
-      <p className="event-context">{quiet ? 'Nothing needed your attention today.' : "Every event of today has been handled."}</p>
+    <section className="event-card day-done" aria-live="polite" aria-label="Day complete">
+      {!inFolder && (
+        <>
+          <Ribbon>{dayLabel(s.calendar)}</Ribbon>
+          <h1 className="event-title">Day complete</h1>
+        </>
+      )}
+      <p className="event-context">{preview ? 'The day ends here once every event before it is handled.' : quiet ? 'A quiet day at the club.' : 'Every event of today has been handled.'}</p>
+      {log.length > 0 && (
+        <ul className="day-recap">
+          {log.slice(-3).map((l) => (
+            <li key={l.eventId}>
+              <strong>{l.title}:</strong> {l.headline}
+            </li>
+          ))}
+        </ul>
+      )}
       <DayFinances />
       <div className="day-next">
         <small>Tomorrow</small>
@@ -61,7 +84,7 @@ function DayDone() {
         )}
       </div>
       <button ref={ref} className="btn btn-primary btn-confirm" onClick={() => void c.dispatch({ type: 'advanceDay', revision: s.revision })} disabled={!!blocker || snap.busy}>
-        <span>Next day</span>
+        <span>Next day → {tomorrowDate}</span>
         <span className="btn-cost">
           <Icon name="time" size={18} /> {t.unlimited ? '∞' : BALANCE.time.costPerDay}
           <Icon name="chevron" />
@@ -73,7 +96,7 @@ function DayDone() {
           {wait}
         </p>
       )}
-      {snap.commandError && (
+      {snap.commandError && !preview && (
         <p className="pm-blocker small" role="alert">
           {snap.commandError}
         </p>
@@ -100,9 +123,6 @@ function DayFinances() {
       </span>
       <span>
         Facilities <strong className="neg">{moneyExact(-by('upkeep'))}</strong>
-      </span>
-      <span>
-        Club cash <strong>{moneyExact(userClub(s).cash)}</strong>
       </span>
     </div>
   );
@@ -215,6 +235,7 @@ function EventDecision({ ev }: { ev: EventInstance }) {
   const blocker = optionBlocker(s, ev, selected, activeBoost, now);
   const cost = totalCost(selected, activeBoost);
   const unlimited = s.time.mode === 'unlimited';
+  const inFolder = useContext(FolderContext);
 
   const titleRef = useRef<HTMLHeadingElement>(null);
   // A new event replaced the Continue button: move focus to its title (screen readers announce it; Tab reaches the options).
@@ -228,8 +249,8 @@ function EventDecision({ ev }: { ev: EventInstance }) {
 
   return (
     <section className="event-card" aria-labelledby="event-title">
-      <Ribbon>Next event</Ribbon>
-      <h1 className="event-title" id="event-title" tabIndex={-1} ref={titleRef}>
+      {!inFolder && <Ribbon>Next event</Ribbon>}
+      <h1 className={`event-title ${inFolder ? 'sr-only' : ''}`} id="event-title" tabIndex={-1} ref={titleRef}>
         {ev.type === 'leagueGame' ? 'League Game' : ev.title}
       </h1>
       {ev.type === 'leagueGame' ? <PreMatch ev={ev} choice={selected.id as LeagueGameChoice} /> : <EventArt type={ev.type} club={club} />}
@@ -444,9 +465,10 @@ export function ContinueButton({ ev }: { ev: EventInstance }) {
 function EventResult({ ev }: { ev: EventInstance }) {
   const s = useGame();
   const r = ev.resolution!;
+  const inFolder = useContext(FolderContext);
   return (
     <section className="event-card" aria-live="polite">
-      <Ribbon>{ev.kicker} · Result</Ribbon>
+      {inFolder ? <p className="folder-kicker">Result</p> : <Ribbon>{ev.kicker} · Result</Ribbon>}
       <h1 className="event-title result-title">{r.headline}</h1>
       <p className="muted">
         You chose <strong>{r.optionLabel}</strong>

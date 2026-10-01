@@ -276,6 +276,14 @@ export interface GameState {
   cycle: CycleState;
   /** Manager initiatives paid with Influence (direct actions). */
   actions: ActionState;
+  /** Today's handled events, in order (cleared when the next day starts). */
+  dayLog?: DayLogEntry[];
+}
+
+export interface DayLogEntry {
+  eventId: EventInstanceId;
+  title: string;
+  headline: string;
 }
 
 export interface GroupChange {

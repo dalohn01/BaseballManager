@@ -1,22 +1,23 @@
 import { useEffect, useRef } from 'react';
 import { CycleNotice } from './InfluenceView';
 import { BALANCE } from '../../balance/config';
-import { fitnessLabel, moodLabel } from '../../domain/mood';
+import { moodLabel } from '../../domain/mood';
 import type { GameState } from '../../domain/state';
-import { absoluteRound, clubName, clubPlayers, shortName, userClub } from '../../domain/state';
-import { SLOT_LABELS } from '../../events/planner';
-import { dayLabel, daysUntilRound, describeDay, eventsLeftToday, inDays, nextDay } from '../../domain/calendar';
+import { absoluteRound, clubName, clubPlayers, shortName } from '../../domain/state';
+import { dayLabel, daysUntilRound, describeDay, inDays, nextDay } from '../../domain/calendar';
 import { DIRECTION_LABEL, goalProgress } from '../../simulation/goals';
 import { money } from '../format';
 import { computeStandings } from '../../simulation/standings';
-import { avg } from '../../simulation/training';
 import { Crest } from '../components/art';
 import { Meter, Panel } from '../components/common';
 import { Icon } from '../components/icons';
 import { href, useGame } from '../hooks';
 import { MatchScene } from '../match/MatchScene';
 import { PreMatchScreen } from '../prematch/PreMatchScreen';
-import { EventCard } from './EventCard';
+import { BallIcon, SeasonCalendar, DailyEventStack } from '../home/Today';
+import { ClubStatus } from '../home/ClubStatus';
+import { boardCheckpoints } from '../../events/planner';
+import { dateOf, matchSeasonDay, seasonDayOf, seasonLength, shortDate } from '../../domain/seasonDates';
 
 export function HomeScreen() {
   const s = useGame();
@@ -53,13 +54,11 @@ export function HomeScreen() {
   }
   return (
     <div className="home">
-      <p className="crumb">
-        Season {s.calendar.season} · {phaseLabel(s)}
-      </p>
       <div className="home-grid">
         <div className="home-main" ref={mainRef}>
+          <SeasonCalendar />
           <CycleNotice />
-          <EventStack />
+          <DailyEventStack />
         </div>
         <aside className="home-left">
           <SeasonGoal />
@@ -68,7 +67,7 @@ export function HomeScreen() {
         </aside>
         <aside className="home-right">
           <NextMatch />
-          <Upcoming />
+          <LookingAhead />
           <MiniTable />
         </aside>
       </div>
@@ -117,21 +116,6 @@ export function SeasonGoal() {
   );
 }
 
-function ClubStatus() {
-  const s = useGame();
-  const club = userClub(s);
-  const players = clubPlayers(s, club.id);
-  const happy = Math.round(avg(players.map((p) => p.satisfaction)));
-  const fitness = Math.round(avg(players.map((p) => p.fitness)));
-  return (
-    <Panel title="Club status">
-      <Meter label="Owners" value={club.ownerConfidence} caption={`${moodLabel('owners', club.ownerConfidence)} · tap for reasons`} reasons={club.reasons.ownerConfidence} />
-      <Meter label="Fans" value={club.fanSupport} caption={`${moodLabel('fans', club.fanSupport)} · tap for reasons`} reasons={club.reasons.fanSupport} />
-      <Meter label="Player happiness" value={happy} caption="Team average — see Team for each player" />
-      <Meter label="Fitness" value={fitness} display={`${fitness}%`} caption={`${fitnessLabel(fitness)} · squad average, 100% = fully ready`} tone={fitness < BALANCE.fitness.warnBelow ? 'warn' : 'slate'} />
-    </Panel>
-  );
-}
 
 function PlayerNotes() {
   const s = useGame();
@@ -201,31 +185,6 @@ function NextMatch() {
   );
 }
 
-function Upcoming() {
-  const s = useGame();
-  const ev = s.currentEvent;
-  const items: { label: string; tag: string }[] = [];
-  if (ev) items.push({ tag: 'Now', label: ev.type === 'leagueGame' ? 'League game' : ev.title });
-  const upcoming = s.nextEvent ? [{ templateId: s.nextEvent.templateId }, ...s.queue] : s.queue;
-  upcoming.forEach((q) => items.push({ tag: 'Later today', label: SLOT_LABELS[q.templateId] ?? q.templateId }));
-  if (!ev) items.push({ tag: 'Today', label: 'All done' });
-  if (s.calendar.phase !== 'postseason') items.push({ tag: 'Tomorrow', label: describeDay(s, nextDay(s.calendar)) });
-  return (
-    <Panel title="Upcoming events">
-      <ol className="timeline">
-        {items.slice(0, 4).map((it, i) => (
-          <li key={i} className={i === 0 ? 'now' : ''}>
-            <span className="tl-dot">{i + 1}</span>
-            <span>
-              <small>{it.tag}</small>
-              <strong>{it.label}</strong>
-            </span>
-          </li>
-        ))}
-      </ol>
-    </Panel>
-  );
-}
 
 function MiniTable() {
   const s = useGame();
@@ -256,24 +215,49 @@ function MiniTable() {
   );
 }
 
+
 /**
- * Today's events as a stack: the one being handled on top, the rest of the
- * day peeking out underneath so it is clear more are waiting.
+ * Coming days and known fixtures only (never a copy of today's stack, never
+ * invented random events): tomorrow, the next game and the next board check-in.
  */
-function EventStack() {
+function LookingAhead() {
   const s = useGame();
-  const left = s.currentEvent ? eventsLeftToday(s) : 0;
-  const depth = Math.min(left, 2);
+  const cal = s.calendar;
+  const items: { tag: string; label: string; ball?: boolean }[] = [];
+  if (cal.phase !== 'postseason') {
+    const t = nextDay(cal);
+    items.push({ tag: `Tomorrow · ${shortDate(dateOf(seasonDayOf(t)))}`, label: describeDay(s, t) });
+  }
+  const fromRound = cal.phase === 'postseason' ? Infinity : cal.round;
+  const g = s.schedule.find((x) => x.season === cal.season && x.round >= fromRound && !x.result && (x.homeId === s.userClubId || x.awayId === s.userClubId));
+  if (g) {
+    const days = daysUntilRound(cal, g.round);
+    const home = g.homeId === s.userClubId;
+    const opp = s.clubs[home ? g.awayId : g.homeId];
+    const when = days === 0 ? 'Today' : shortDate(dateOf({ season: cal.season, day: matchSeasonDay(g.round) }));
+    items.push({ tag: when, label: `${home ? 'Home vs' : 'Away at'} ${opp.name}`, ball: true });
+  }
+  const board = boardCheckpoints().find((c) => c.round > cal.round && !s.cycle.boardChecks.includes(`${cal.season}:${c.key}`));
+  if (board && cal.phase !== 'postseason') {
+    items.push({ tag: `From ${shortDate(dateOf({ season: cal.season, day: 2 + (board.round - 1) * BALANCE.season.daysPerRound }))}`, label: `Board check-in · Round ${board.round}` });
+  } else if (cal.phase === 'regular') {
+    items.push({ tag: shortDate(dateOf({ season: cal.season, day: seasonLength() })), label: 'Season review' });
+  }
   return (
-    <div className="event-stack">
-      <div className={`stack-cards depth-${depth}`}>
-        <EventCard />
-      </div>
-      {left > 0 && (
-        <p className="stack-note small muted">
-          {left} more event{left > 1 ? 's' : ''} today
-        </p>
-      )}
-    </div>
+    <Panel title="Looking ahead">
+      <ol className="timeline">
+        {items.slice(0, 3).map((it, i) => (
+          <li key={i}>
+            <span className="tl-dot">{i + 1}</span>
+            <span>
+              <small>
+                {it.tag} {it.ball && <BallIcon />}
+              </small>
+              <strong>{it.label}</strong>
+            </span>
+          </li>
+        ))}
+      </ol>
+    </Panel>
   );
 }
