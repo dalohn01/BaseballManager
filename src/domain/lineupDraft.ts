@@ -1,5 +1,6 @@
+import { nextStarter } from './staff';
 import { BALANCE } from '../balance/config';
-import { autoLineup, bestRestedPitcher, effectiveRating, orderBatters, validateLineup, validatePitchingPlan, type LineupIssue } from './lineup';
+import { autoLineup, orderBatters, validateLineup, validatePitchingPlan, type LineupIssue } from './lineup';
 import type { GameState } from './state';
 import { userClub } from './state';
 import type { Lineup, LineupPosition, PitchingPlan, PlayerId } from './types';
@@ -14,7 +15,7 @@ export interface LineupDraft {
   plan: PitchingPlan;
 }
 
-export type PitcherRole = 'starter' | 'reliever' | 'available' | 'rest';
+export type PitcherRole = 'starter' | 'available' | 'rest';
 
 const clone = (d: LineupDraft): LineupDraft => structuredClone(d);
 
@@ -67,22 +68,18 @@ export function moveBatter(d: LineupDraft, from: number, to: number): LineupDraf
 
 export function pitcherRole(d: LineupDraft, id: PlayerId): PitcherRole {
   if (d.lineup.pitcherId === id) return 'starter';
-  if (d.plan.relieverId === id) return 'reliever';
   if (d.plan.rest.includes(id)) return 'rest';
   return 'available';
 }
 
-/** Gives a pitcher one role for today; roles stay exclusive (one starter, at most one planned reliever). */
+/** Today's role for a pitcher: the starter, available to the bullpen, or resting (never used today). */
 export function setPitcherRole(d: LineupDraft, id: PlayerId, role: PitcherRole): LineupDraft {
   const next = clone(d);
   next.plan.rest = next.plan.rest.filter((x) => x !== id);
-  if (next.plan.relieverId === id) next.plan.relieverId = null;
+  next.plan.relieverId = null;
   if (role === 'starter') {
     // The previous starter simply becomes available.
     next.lineup.pitcherId = id;
-  } else if (role === 'reliever') {
-    if (next.lineup.pitcherId === id) return d;
-    next.plan.relieverId = id;
   } else if (role === 'rest') {
     if (next.lineup.pitcherId === id) return d;
     next.plan.rest.push(id);
@@ -112,20 +109,11 @@ export function suggestOrder(state: GameState, d: LineupDraft): LineupDraft {
   return next;
 }
 
-/** Best-rested starter, next best as reliever, anyone below the warning line rests. */
+/** The next ready starter in the rotation; nobody is held back (the bullpen roles decide who relieves). */
 export function suggestPitching(state: GameState, d: LineupDraft): LineupDraft {
   const next = clone(d);
-  const starter = bestRestedPitcher(state, state.userClubId);
-  next.lineup.pitcherId = starter;
-  const others = userClub(state)
-    .roster.map((id) => state.players[id])
-    .filter((p) => p.isPitcher && p.id !== starter);
-  const tired = others.filter((p) => p.fitness < BALANCE.fitness.warnBelow).map((p) => p.id);
-  const fresh = others
-    .filter((p) => !tired.includes(p.id))
-    .sort((a, b) => effectiveRating(b, 'pitching') - (100 - b.fitness) * 1.5 - (effectiveRating(a, 'pitching') - (100 - a.fitness) * 1.5));
-  // If nobody is fresh, keep the tired arms available so the starter is never left alone.
-  next.plan = { ...next.plan, relieverId: fresh[0]?.id ?? null, rest: fresh.length ? tired : [] };
+  next.lineup.pitcherId = nextStarter(state, state.userClubId);
+  next.plan = { ...next.plan, relieverId: null, rest: [] };
   return next;
 }
 

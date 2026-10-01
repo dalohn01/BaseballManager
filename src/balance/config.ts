@@ -59,7 +59,7 @@ export const BALANCE = {
   },
 
   roster: {
-    max: 18,
+    max: 20,
     minPitchers: 3,
     minHitters: 10,
     /** Releasing a player pays this share of his remaining salary this season. */
@@ -146,7 +146,7 @@ export const BALANCE = {
      * (see tests/calibration.test.ts). Ratings shift these per matchup.
      */
     odds: {
-      walk: 0.103,
+      walk: 0.098,
       strikeout: 0.215,
       /** Chance a ball in play (not a strikeout or walk) falls for a hit. */
       hit: 0.362,
@@ -189,13 +189,14 @@ export const BALANCE = {
    * a penalty. Positive numbers below restore fitness, negative ones cost it.
    */
   fitness: {
-    /** Everyone recovers this much per round before match load is applied. */
-    naturalRecoveryPerRound: 3,
+    /** Everyone recovers this much each new day (3 per round, as before per round). */
+    naturalRecoveryPerDay: 1,
     lineupPerGame: -3,
     benchRecoveryPerGame: 4,
     startingPitcherPerGame: -24,
     reliefPitcherPerGame: -3,
-    restingPitcherRecoveryPerGame: 8,
+    /** Extra daily recovery for a pitcher who did not pitch the day before. */
+    pitcherRecoveryPerDay: 3,
     /** "Rest tired players" sits anyone below this if a replacement exists. */
     restBelow: 90,
     aiRestBelow: 82,
@@ -321,6 +322,28 @@ export const BALANCE = {
   },
 
   /**
+   * Pitching staff: a standing rotation (the next starter comes up in turn)
+   * and bullpen roles with simple entry rules. At most `maxPitchersPerGame`
+   * per side: the starter goes by the hook; then long relief early (to the
+   * 5th), setup in the 6th–8th, and the closer in a save situation from the
+   * 9th (lead of 1–3 runs when the inning starts).
+   */
+  pitching: {
+    maxPitchersPerGame: 3,
+    rotationSize: 3,
+    maxRotation: 5,
+    /** A rotation pitcher below this fitness is skipped (the next ready one starts). */
+    starterReadyFitness: 80,
+    /** A bullpen arm below this fitness is not used. */
+    relieverMinFitness: 60,
+    longReliefUntilInning: 5,
+    setupFromInning: 6,
+    saveLead: [1, 3] as const,
+    /** A reliever is replaced (if another arm is left) after this many batters. */
+    relieverMaxBatters: 12,
+  },
+
+  /**
    * Team OVR (presentation only, never used by the simulator). Starting
    * weights, not empirically calibrated. Offense mix = the simulator's
    * offenseScore. Pitching: a starter faces up to 27 batters (balanced hook)
@@ -329,7 +352,7 @@ export const BALANCE = {
   teamOvr: {
     weights: { batting: 0.4, pitching: 0.4, defense: 0.2 },
     offense: { contact: 0.5, power: 0.35, speed: 0.15 },
-    pitching: { rotationSize: 3, reliefSize: 1, rotationShare: 0.7 },
+    pitching: { rotationSize: 3, reliefSize: 3, rotationShare: 0.7 },
     /** Under this spread between the best and worst area the profile reads "Balanced team". */
     balancedSpread: 5,
   },

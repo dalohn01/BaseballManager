@@ -1,5 +1,6 @@
 import type { SeasonPlan } from './state';
 import type { Personality } from './personality';
+import type { PitchingStaff } from './staff';
 
 export type PlayerId = string;
 export type ClubId = string;
@@ -92,6 +93,8 @@ export interface Player {
   lastReaction: { text: string; context: string; season: number; round: number } | null;
   /** Personality reactions with their cause and the personality's share (newest first, capped). */
   reactions: ReactionEntry[];
+  /** Day number (absDay) of his last appearance as a pitcher, for rest days. */
+  pitchedOn?: number;
 }
 
 /**
@@ -204,6 +207,8 @@ export interface Club {
   roster: PlayerId[];
   lineup: Lineup;
   pitchingPlan: PitchingPlan;
+  /** Standing pitching staff: rotation order and bullpen roles (absent until first normalised). */
+  staff?: PitchingStaff;
   cash: number;
   ownerConfidence: number;
   fanSupport: number;

@@ -52,18 +52,16 @@ describe('lineup draft', () => {
     expect(pos(next)).toEqual(pos(d));
   });
 
-  it('pitcher roles stay exclusive', () => {
+  it("today's pitcher roles stay exclusive: one starter, the rest available or resting", () => {
     const pitchers = s.clubs.hfx.roster.filter((id) => s.players[id].isPitcher && id !== d.lineup.pitcherId);
-    let x = setPitcherRole(d, pitchers[0], 'reliever');
-    x = setPitcherRole(x, pitchers[1], 'rest');
-    expect(pitcherRole(x, pitchers[0])).toBe('reliever');
-    x = setPitcherRole(x, pitchers[1], 'reliever');
-    expect(pitcherRole(x, pitchers[0])).toBe('available');
-    expect(x.plan.rest).not.toContain(pitchers[1]);
+    let x = setPitcherRole(d, pitchers[1], 'rest');
+    expect(pitcherRole(x, pitchers[1])).toBe('rest');
     x = setPitcherRole(x, pitchers[1], 'starter');
     expect(x.lineup.pitcherId).toBe(pitchers[1]);
-    expect(x.plan.relieverId).toBeNull();
+    expect(x.plan.rest).not.toContain(pitchers[1]);
     expect(pitcherRole(x, d.lineup.pitcherId)).toBe('available');
+    // A starter cannot be rested at the same time.
+    expect(setPitcherRole(x, pitchers[1], 'rest')).toBe(x);
   });
 });
 
@@ -74,7 +72,10 @@ describe('confirmed selection reaches the simulator', () => {
     const bench = s.clubs.hfx.roster.filter((id) => !s.players[id].isPitcher && !d.lineup.battingOrder.some((x) => x.playerId === id));
     d = moveBatter(swapFromBench(d, 2, bench[0]), 0, 8);
     const others = s.clubs.hfx.roster.filter((id) => s.players[id].isPitcher && id !== d.lineup.pitcherId);
-    d = setPitcherRole(setPitcherRole(d, others[0], 'rest'), others[1], 'reliever');
+    const staff = s.clubs.hfx.staff!;
+    // Rest today's closer: the bullpen must work around him.
+    const rested = staff.closer && staff.closer !== d.lineup.pitcherId ? staff.closer : others[0];
+    d = setPitcherRole(d, rested, 'rest');
     const r = confirm(s, d);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -83,9 +84,9 @@ describe('confirmed selection reaches the simulator', () => {
     const side = m.homeId === 'hfx' ? 'home' : 'away';
     expect(m.lineups[side].battingOrder).toEqual(d.lineup.battingOrder);
     expect(m.lineups[side].pitcherId).toBe(d.lineup.pitcherId);
-    expect(m.pitchersUsed[side]).not.toContain(others[0]);
-    if (m.pitchersUsed[side].length > 1) expect(m.pitchersUsed[side][1]).toBe(others[1]);
-    // Today's reliever/rest are cleared after the game; the hook preference stays.
+    expect(m.pitchersUsed[side]).not.toContain(rested);
+    expect(m.pitchersUsed[side].length).toBeLessThanOrEqual(3);
+    // Today's rest list is cleared after the game; the hook preference stays.
     expect(s.clubs.hfx.pitchingPlan).toEqual({ ...defaultPitchingPlan(), hook: d.plan.hook });
     // Confirming twice is a no-op.
     expect(confirm(s, d).ok).toBe(false);

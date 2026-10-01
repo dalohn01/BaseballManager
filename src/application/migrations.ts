@@ -1,3 +1,7 @@
+import { createPlayer, marketSalary } from '../content/playerFactory';
+import { defaultStaff, nextStarter } from '../domain/staff';
+import { hashSeed } from '../domain/rng';
+import { absoluteRound } from '../domain/state';
 import { BALANCE } from '../balance/config';
 import { generatePersonality, personalitySeed, PRIORITY_HINT } from '../domain/personality';
 import type { Player } from '../domain/types';
@@ -157,6 +161,36 @@ export function migrate(input: AnyState): GameState {
     // personality keeps it, so running this again changes nothing.
     ensurePersonalities(s);
     s.schemaVersion = 10;
+  }
+  if (s.schemaVersion === 10) {
+    // Pitching staffs: every club gets two more pitchers (a fuller bullpen, within the
+    // roster limit), generated from a fixed per-club seed, and a standing staff built
+    // from roles and ratings. Nothing else on existing players changes.
+    let n = Math.max(0, ...Object.keys(s.players).map((id) => Number(id.replace(/\D/g, '')) || 0)) + 1;
+    const usedNames = new Set(Object.values(s.players).map((p) => `${p.firstName} ${p.lastName}`));
+    for (const clubId of s.clubOrder) {
+      const club = s.clubs[clubId];
+      if (club.staff) continue;
+      const pitchers = club.roster.map((id) => s.players[id]).filter((p) => p?.isPitcher);
+      const level = pitchers.length ? Math.round(pitchers.reduce((a, p) => a + p.ratings.pitching, 0) / pitchers.length) - 3 : 58;
+      const rng = createRng(hashSeed(`v11:${s.seed}:${clubId}`));
+      const add = Math.max(0, Math.min(2, BALANCE.roster.max - club.roster.length));
+      for (let i = 0; i < add; i++) {
+        const id = `p${n++}`;
+        const age = 24 + rng.int(0, 8);
+        const p = createPlayer(
+          { id, clubId, primary: 'P', age, level, upside: rng.int(1, 6), role: 'reserve', salary: marketSalary(level, age), seasonsLeft: 2, startRound: absoluteRound(s.calendar.season, s.calendar.round), joinedSeason: s.calendar.season, scoutingLevel: club.facilities?.scouting ?? 1, usedNames },
+          rng,
+        );
+        s.players[id] = p;
+        club.roster.push(id);
+      }
+      club.staff = defaultStaff(s, clubId);
+      club.pitchingPlan = { ...club.pitchingPlan, relieverId: null };
+      // Today's starter now comes from the rotation (a pre-match screen still lets the manager change it).
+      club.lineup = { ...club.lineup, pitcherId: nextStarter(s, clubId) };
+    }
+    s.schemaVersion = 11;
   }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;

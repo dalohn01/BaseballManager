@@ -90,7 +90,6 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   };
   const quick = (label: string, next: LineupDraft) => {
     const changes = describeLineupChange(s, draft.lineup, next.lineup);
-    if (draft.plan.relieverId !== next.plan.relieverId && next.plan.relieverId) changes.push(`Reliever: ${s.players[next.plan.relieverId].lastName}`);
     const rested = next.plan.rest.filter((id) => !draft.plan.rest.includes(id));
     if (rested.length) changes.push(`Rest today: ${rested.map((id) => s.players[id].lastName).join(', ')}`);
     setNotice({ label, changes, undo: draft });

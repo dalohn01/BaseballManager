@@ -1,3 +1,4 @@
+import { BULLPEN_ROLES, bullpenFor, type BullpenRole } from '../domain/staff';
 import { BALANCE } from '../balance/config';
 import { effectiveRating, fieldingAt, offenseScore } from '../domain/lineup';
 import { clamp, hashSeed, type Rng } from '../domain/rng';
@@ -16,7 +17,6 @@ import type {
   MatchSequence,
   PaOutcome,
   PitchingLine,
-  PitchingPlan,
   PitchingStyle,
   PlayKind,
   PlayRecord,
@@ -29,7 +29,8 @@ import type {
 /**
  * Lightweight at-bat simulation. Documented simplifications (see README):
  * - no errors, hit-by-pitch, bunts, wild pitches or pinch hitters
- * - one pitching change at most (starter → planned or best-rested reliever)
+ * - up to three pitchers per side: the starter by the hook, then bullpen roles
+ *   (long relief early, setup in the 6th–8th, the closer in a 9th-inning save situation)
  * - from inning 10 a runner starts on second (prototype extra-innings rule)
  * - after inning 15 a clearly labelled sudden-death decides a tie
  * - on a walk-off, all runs of the deciding play count
@@ -59,7 +60,8 @@ export interface SimTeam {
   lineup: Lineup;
   batters: SimBatter[];
   starter: SimPitcher;
-  reliever: SimPitcher | null;
+  /** Today's bullpen by role (null = no one available for it). */
+  bullpen: Record<BullpenRole, SimPitcher | null>;
   /** When this team's starter is replaced (from its pitching plan). */
   hook: { maxBatters: number; pullRuns: number; minBatters: number };
   fielding: number;
@@ -95,8 +97,9 @@ export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): 
   const pitchStyle = (id: PlayerId) => resolveTactic(club.tactics, id, 'pitching').value as PitchingStyle;
   const starter = { id: sp.id, name: sp.lastName, pitching: effectiveRating(sp, 'pitching') + motivation(sp.id), style: pitchStyle(sp.id) };
   const plan = club.pitchingPlan;
-  const rp = chooseReliever(state, clubId, sp.id, plan);
-  const reliever = rp ? { id: rp.id, name: rp.lastName, pitching: effectiveRating(rp, 'pitching') + motivation(rp.id), style: pitchStyle(rp.id) } : null;
+  const pen = bullpenFor(state, clubId, sp.id, plan.rest);
+  const asSim = (p: Player | null): SimPitcher | null => (p ? { id: p.id, name: p.lastName, pitching: effectiveRating(p, 'pitching') + motivation(p.id), style: pitchStyle(p.id) } : null);
+  const bullpen = { closer: asSim(pen.closer), setup: asSim(pen.setup), long: asSim(pen.long) };
 
   return {
     clubId,
@@ -104,27 +107,12 @@ export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): 
     lineup,
     batters,
     starter,
-    reliever,
+    bullpen,
     hook: BALANCE.match.hooks[plan.hook],
     fielding,
     catcherFielding,
     strength: teamStrength(state, lineup),
   };
-}
-
-/**
- * The pitcher who comes in when the starter is replaced: the planned reliever if
- * he is available, otherwise the best-rested pitcher who is not resting today.
- * Pitchers marked "rest" are never used. Null = the starter pitches the whole game.
- */
-export function chooseReliever(state: GameState, clubId: ClubId, starterId: PlayerId, plan: PitchingPlan): Player | null {
-  const available = state.clubs[clubId].roster
-    .map((id) => state.players[id])
-    .filter((p) => p.isPitcher && p.id !== starterId && !plan.rest.includes(p.id));
-  const planned = available.find((p) => p.id === plan.relieverId);
-  if (planned) return planned;
-  const value = (p: Player) => effectiveRating(p, 'pitching') - (100 - p.fitness) * 1.5;
-  return [...available].sort((a, b) => value(b) - value(a) || a.id.localeCompare(b.id))[0] ?? null;
 }
 
 /** Single comprehensible number (0–100-ish) used for forecasts and sudden-death. */
@@ -248,8 +236,21 @@ export function simulateMatch(input: MatchInput): MatchResult {
       names[b.id] = b.name;
     }
     names[t.starter.id] = t.starter.name;
-    if (t.reliever) names[t.reliever.id] = t.reliever.name;
+    for (const r of BULLPEN_ROLES) if (t.bullpen[r]) names[t.bullpen[r]!.id] = t.bullpen[r]!.name;
   }
+  const P = BALANCE.pitching;
+  const isSave = (lead: number) => lead >= P.saveLead[0] && lead <= P.saveLead[1];
+  /** Who comes in, by inning and score: long relief early, setup in the middle innings, the closer to save it. */
+  const reliefFor = (team: SimTeam, used: PlayerId[], lead: number): { p: SimPitcher; role: BullpenRole } | null => {
+    const order: BullpenRole[] =
+      inning <= P.longReliefUntilInning ? ['long', 'setup', 'closer'] : inning < cfg.innings ? ['setup', 'long', 'closer'] : isSave(lead) ? ['closer', 'setup', 'long'] : ['setup', 'long', 'closer'];
+    for (const role of order) {
+      const p = team.bullpen[role];
+      if (p && !used.includes(p.id)) return { p, role };
+    }
+    return null;
+  };
+  const ROLE_WORD: Record<BullpenRole, string> = { closer: 'closer', setup: 'setup man', long: 'long relief' };
 
   const side = {
     home: { team: home, idx: 0, pitcher: home.starter, pulled: false, used: [home.starter.id] as PlayerId[] },
@@ -314,22 +315,30 @@ export function simulateMatch(input: MatchInput): MatchResult {
       push({ kind: 'ghostRunner', batterId: null, pitcherId: def.pitcher.id, outcome: null, before, after: snap(), runners: [], outOrder: [], fielder: null, ball: null, text: `${ghost.name} starts on second (extra-innings rule).` });
     }
 
+    let halfStart = true;
     while (outs < 3) {
-      // Pitching change
+      // Pitching changes: the starter by the hook, a tired reliever, or the closer for a save.
       const pl = pitching[def.pitcher.id];
-      if (
-        !def.pulled &&
-        def.team.reliever &&
-        (pl.battersFaced >= def.team.hook.maxBatters || (pl.r >= def.team.hook.pullRuns && pl.battersFaced >= def.team.hook.minBatters))
-      ) {
+      const lead = score[fieldingKey] - score[battingKey];
+      let change: { p: SimPitcher; role: BullpenRole } | null = null;
+      if (def.used.length < P.maxPitchersPerGame) {
+        const isStarter = def.pitcher.id === def.team.starter.id;
+        const closer = def.team.bullpen.closer;
+        if (halfStart && inning >= cfg.innings && isSave(lead) && closer && !def.used.includes(closer.id)) change = { p: closer, role: 'closer' };
+        else if (isStarter && (pl.battersFaced >= def.team.hook.maxBatters || (pl.r >= def.team.hook.pullRuns && pl.battersFaced >= def.team.hook.minBatters))) change = reliefFor(def.team, def.used, lead);
+        else if (!isStarter && pl.battersFaced >= P.relieverMaxBatters) change = reliefFor(def.team, def.used, lead);
+      }
+      halfStart = false;
+      if (change) {
         def.pulled = true;
         const prev = def.pitcher;
-        def.pitcher = def.team.reliever;
+        def.pitcher = change.p;
         def.used.push(def.pitcher.id);
         pitching[def.pitcher.id] = emptyPitching();
-        record('pitchingChange', `Pitching change: ${def.pitcher.name} replaces ${prev.name}.`, 0);
+        const text = `Pitching change: ${def.pitcher.name} (${ROLE_WORD[change.role]}) replaces ${prev.name}.`;
+        record('pitchingChange', text, 0);
         const s = snap();
-        push({ kind: 'pitchingChange', batterId: null, pitcherId: def.pitcher.id, previousPitcherId: prev.id, outcome: null, before: s, after: s, runners: [], outOrder: [], fielder: null, ball: null, text: `Pitching change: ${def.pitcher.name} replaces ${prev.name}.` });
+        push({ kind: 'pitchingChange', batterId: null, pitcherId: def.pitcher.id, previousPitcherId: prev.id, outcome: null, before: s, after: s, runners: [], outOrder: [], fielder: null, ball: null, text });
       }
 
       // Stolen base attempt: runner on first, second open.
@@ -673,7 +682,7 @@ export function simulateMatch(input: MatchInput): MatchResult {
   const pitchStyles: Record<PlayerId, PitchingStyle> = {};
   for (const team of [home, away]) {
     pitchStyles[team.starter.id] = team.starter.style;
-    if (team.reliever) pitchStyles[team.reliever.id] = team.reliever.style;
+    for (const r of BULLPEN_ROLES) if (team.bullpen[r]) pitchStyles[team.bullpen[r]!.id] = team.bullpen[r]!.style;
   }
   return {
     id: input.id,
@@ -682,7 +691,7 @@ export function simulateMatch(input: MatchInput): MatchResult {
     homeId: home.clubId,
     awayId: away.clubId,
     pitchStyles,
-    hooks: { home: { ...home.hook, reliever: !!home.reliever }, away: { ...away.hook, reliever: !!away.reliever } },
+    hooks: { home: { ...home.hook, reliever: BULLPEN_ROLES.some((r) => home.bullpen[r]) }, away: { ...away.hook, reliever: BULLPEN_ROLES.some((r) => away.bullpen[r]) } },
     // Copies: a stored result must not share objects with the clubs' live lineups.
     lineups: structuredClone({ home: home.lineup, away: away.lineup }),
     linescore,

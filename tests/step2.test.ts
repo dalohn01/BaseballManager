@@ -178,7 +178,10 @@ describe('economy safety net', () => {
 
 describe('migration', () => {
   it('upgrades a v1 save without losing progress', () => {
-    const s = step(newGame(8), 1);
+    // v1 had no frozen candidates: start from an event that does not need any.
+    let seed = 8;
+    let s = step(newGame(seed), 1);
+    while (s.currentEvent!.candidates.length > 0) s = step(newGame(++seed), 1);
     const v1 = JSON.parse(JSON.stringify(s));
     v1.schemaVersion = 1;
     for (const p of Object.values(v1.players) as { contract: Record<string, unknown> }[]) delete p.contract.startRound;

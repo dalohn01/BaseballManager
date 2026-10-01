@@ -1,3 +1,4 @@
+import { ROLE_LABEL, staffRole } from '../../domain/staff';
 import { BALANCE } from '../../balance/config';
 import { ballparkName } from '../../content/ballparks';
 import { autoLineup, isLineupValid } from '../../domain/lineup';
@@ -120,12 +121,11 @@ function planFollowUp(state: GameState, m: MatchResult, plan: PitchingPlan, idle
     if (p && !m.pitchersUsed[side].includes(id)) notes.push(`${p.lastName} rested as planned (fitness ${before}% → ${p.fitness}%).`);
   }
   const used = m.pitchersUsed[side].slice(1);
-  if (plan.relieverId) {
-    const r = state.players[plan.relieverId];
-    if (used.includes(plan.relieverId)) notes.push(`${r.lastName} came on in relief as planned.`);
-    else if (used.length === 0) notes.push(`${r.lastName} was not needed: the starter went the distance.`);
-  } else if (used.length) {
-    notes.push(`${state.players[used[0]].lastName} was picked automatically as the reliever.`);
+  const staff = state.clubs[state.userClubId].staff;
+  if (used.length === 0) notes.push(`${state.players[m.lineups[side].pitcherId]?.lastName ?? 'The starter'} went the distance.`);
+  for (const id of used) {
+    const role = staff ? staffRole(staff, id) : 'depth';
+    notes.push(`${state.players[id]?.lastName ?? 'A reliever'} came on in relief (${ROLE_LABEL[role].toLowerCase()}).`);
   }
   const starterLine = m.pitching[m.lineups[side].pitcherId];
   if (starterLine && used.length) notes.push(`${state.players[m.lineups[side].pitcherId].lastName} left after facing ${starterLine.battersFaced} batters (${plan.hook === 'long' ? 'let him pitch' : plan.hook} hook).`);

@@ -1,7 +1,8 @@
+import { absDay, advanceRotation, nextStarter } from '../domain/staff';
 import { BALANCE } from '../balance/config';
 import { settleFundraiser } from './actions';
 import type { EffectSink } from '../domain/effects';
-import { autoLineup, bestRestedPitcher, isLineupValid } from '../domain/lineup';
+import { autoLineup, isLineupValid } from '../domain/lineup';
 import { clearMatchTactics, pruneInstructions } from '../domain/tactics';
 import type { Rng } from '../domain/rng';
 import type { GameState } from '../domain/state';
@@ -62,6 +63,9 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
     applyStats(state, result);
     applyFitness(state, g.homeId, result, 'home');
     applyFitness(state, g.awayId, result, 'away');
+    // The rotation moves on past whoever started.
+    advanceRotation(state, g.homeId, result.lineups.home.pitcherId);
+    advanceRotation(state, g.awayId, result.lineups.away.pitcherId);
     if (g === userGame) {
       userMatch = result;
       const pHome = winProbability(home.strength, away.strength);
@@ -74,9 +78,9 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
   }
 
   const match = userMatch!;
-  // Rotation: the next start goes to the best-rested arm unless the manager changes it.
+  // The next start goes to the next ready pitcher in the rotation unless the manager changes it.
   const userClubState = state.clubs[state.userClubId];
-  userClubState.lineup = { ...userClubState.lineup, pitcherId: bestRestedPitcher(state, state.userClubId) };
+  userClubState.lineup = { ...userClubState.lineup, pitcherId: nextStarter(state, state.userClubId) };
   // Reliever and rest applied to this game only; the hook setting is a standing preference.
   userClubState.pitchingPlan = { relieverId: null, rest: [], hook: userClubState.pitchingPlan.hook };
   // One more completed league game for durations and cooldowns; a pep talk lasts one game.
@@ -159,12 +163,14 @@ function applyFitness(state: GameState, clubId: ClubId, m: MatchResult, side: 'h
   const lineup = m.lineups[side];
   const batters = new Set(lineup.battingOrder.map((s) => s.playerId));
   const used = m.pitchersUsed[side];
+  // Daily recovery happens as each day starts (recoverDay); here only the game's own load and bench rest.
+  const today = absDay(state.calendar);
   for (const p of clubPlayers(state, clubId)) {
-    let delta = f.naturalRecoveryPerRound;
+    let delta = 0;
     if (p.isPitcher) {
       if (p.id === lineup.pitcherId) delta += f.startingPitcherPerGame;
       else if (used.includes(p.id)) delta += f.reliefPitcherPerGame;
-      else delta += f.restingPitcherRecoveryPerGame;
+      if (used.includes(p.id)) p.pitchedOn = today;
     } else {
       delta += batters.has(p.id) ? f.lineupPerGame : f.benchRecoveryPerGame;
     }

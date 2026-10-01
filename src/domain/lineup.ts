@@ -1,3 +1,4 @@
+import { nextStarter } from './staff';
 import { BALANCE } from '../balance/config';
 import type { GameState } from './state';
 import type {
@@ -133,7 +134,7 @@ export function autoLineup(state: GameState, clubId: ClubId, opts: AutoLineupOpt
 
   const battingOrder = orderBatters(state, slots);
 
-  return { battingOrder, pitcherId: bestRestedPitcher(state, clubId) };
+  return { battingOrder, pitcherId: nextStarter(state, clubId) };
 }
 
 /** Rotation helper: strongest pitcher once fitness is taken into account. */

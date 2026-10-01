@@ -1,5 +1,6 @@
 import { BALANCE } from '../balance/config';
 import type { GameState } from './state';
+import { normalizeStaff, type PitchingStaff } from './staff';
 import type { ClubId, DefensivePosition, LineupPosition, Player, PlayerId, RatingKey } from './types';
 
 /*
@@ -75,14 +76,21 @@ export function referenceLineup(players: Player[]): TeamOvr['lineup'] | null {
   return out.length === 9 ? out : null;
 }
 
-/** Pitchers by expected share of innings (stable roles, base pitching). Null without any pitcher. */
-export function pitchingStaff(players: Player[]): TeamOvr['staff'] | null {
+/**
+ * Pitchers by expected share of innings: the club's standing staff when given
+ * (rotation, then closer/setup/long relief), otherwise squad roles and base
+ * pitching. Null without any pitcher.
+ */
+export function pitchingStaff(players: Player[], staff?: PitchingStaff): TeamOvr['staff'] | null {
   const cfg = T().pitching;
   const pitchers = players.filter((p) => p.isPitcher).sort((a, b) => rating(b, 'pitching') - rating(a, 'pitching') || a.id.localeCompare(b.id));
   if (pitchers.length === 0) return null;
+  const byId = new Map(pitchers.map((p) => [p.id, p]));
+  const fromStaff = staff ? staff.rotation.map((id) => byId.get(id)).filter((p): p is Player => !!p) : [];
   const starters = pitchers.filter((p) => p.role === 'starter');
-  const rotation = [...starters, ...pitchers.filter((p) => p.role !== 'starter')].slice(0, cfg.rotationSize);
-  const relief = pitchers.filter((p) => !rotation.includes(p)).slice(0, cfg.reliefSize);
+  const rotation = fromStaff.length ? fromStaff : [...starters, ...pitchers.filter((p) => p.role !== 'starter')].slice(0, cfg.rotationSize);
+  const pen = staff ? [staff.closer, staff.setup, staff.long].map((id) => (id ? byId.get(id) : undefined)).filter((p): p is Player => !!p && !rotation.includes(p)) : [];
+  const relief = pen.length ? pen : pitchers.filter((p) => !rotation.includes(p)).slice(0, cfg.reliefSize);
   // Without a relief arm the rotation pitches every inning.
   const rotationShare = relief.length ? cfg.rotationShare : 1;
   return [
@@ -92,9 +100,9 @@ export function pitchingStaff(players: Player[]): TeamOvr['staff'] | null {
 }
 
 /** Team OVR from players' base ratings; null for an incomplete roster (shown as "— OVR"). */
-export function computeTeamOvr(players: Player[]): TeamOvr | null {
+export function computeTeamOvr(players: Player[], pitchingPlan?: PitchingStaff): TeamOvr | null {
   const lineup = referenceLineup(players);
-  const staff = pitchingStaff(players);
+  const staff = pitchingStaff(players, pitchingPlan);
   if (!lineup || !staff) return null;
   const byId = new Map(players.map((p) => [p.id, p]));
   const batting = lineup.reduce((a, s) => a + baseOffense(byId.get(s.playerId)!), 0) / lineup.length;
@@ -124,7 +132,7 @@ export function teamOvr(state: GameState, clubId: ClubId): TeamOvr | null {
     m = new Map();
     cache.set(state, m);
   }
-  if (!m.has(clubId)) m.set(clubId, computeTeamOvr(state.clubs[clubId].roster.map((id) => state.players[id]).filter(Boolean)));
+  if (!m.has(clubId)) m.set(clubId, computeTeamOvr(state.clubs[clubId].roster.map((id) => state.players[id]).filter(Boolean), normalizeStaff(state, clubId, state.clubs[clubId].staff)));
   return m.get(clubId)!;
 }
 

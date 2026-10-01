@@ -1,3 +1,4 @@
+import { defaultStaff } from '../domain/staff';
 import { generatePersonality, personalitySeed, PRIORITY_HINT } from '../domain/personality';
 import { BALANCE } from '../balance/config';
 import { defaultActions, defaultCycle } from '../simulation/cycle';
@@ -182,6 +183,8 @@ export function createNewGame(opts: NewGameOptions): GameState {
       state.players[id] = playerFromSeed(ps, id, club.id, rng);
       club.roster.push(id);
     }
+    // A standing pitching staff from roles and ratings; the first start goes to the top of the rotation.
+    club.staff = defaultStaff(state, club.id);
     club.lineup = autoLineup(state, club.id);
   }
   state.schedule = generateSchedule(state.clubOrder, 1, rng);

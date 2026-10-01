@@ -37,7 +37,7 @@ export type ClubTab = 'facilities' | 'influence' | 'finances';
 
 export type Route =
   | { name: 'home' }
-  | { name: 'team'; tab: 'roster' | 'style' }
+  | { name: 'team'; tab: 'roster' | 'style' | 'staff' }
   | { name: 'player'; id: string }
   | { name: 'club'; tab: ClubTab }
   | { name: 'league' }
@@ -49,6 +49,7 @@ function parseHash(hash: string): Route {
   switch (parts[0]) {
     case 'team':
       if (parts[1] === 'style') return { name: 'team', tab: 'style' };
+      if (parts[1] === 'staff') return { name: 'team', tab: 'staff' };
       return parts[1] ? { name: 'player', id: parts[1] } : { name: 'team', tab: 'roster' };
     case 'club':
       return { name: 'club', tab: parts[1] === 'finances' ? 'finances' : parts[1] === 'influence' ? 'influence' : 'facilities' };
