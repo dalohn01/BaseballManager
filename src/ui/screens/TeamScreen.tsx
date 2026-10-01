@@ -1,3 +1,4 @@
+import { TeamStrength } from '../components/TeamOvr';
 import { useState } from 'react';
 import { validateLineup } from '../../domain/lineup';
 import { BALANCE } from '../../balance/config';
@@ -82,6 +83,7 @@ function RosterView() {
     .sort((a, b) => SORTS[sort](a, b) || a.id.localeCompare(b.id));
   return (
     <>
+      <TeamStrength state={s} clubId={club.id} />
       <div className="team-grid">
         <Panel title="Roster">
           <div className="filters" role="group" aria-label="Filter players">

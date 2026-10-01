@@ -320,6 +320,20 @@ export const BALANCE = {
     demandBoostRange: [0.5, 1.5] as const,
   },
 
+  /**
+   * Team OVR (presentation only, never used by the simulator). Starting
+   * weights, not empirically calibrated. Offense mix = the simulator's
+   * offenseScore. Pitching: a starter faces up to 27 batters (balanced hook)
+   * of roughly 38 per game, so the rotation takes about 70% of the innings.
+   */
+  teamOvr: {
+    weights: { batting: 0.4, pitching: 0.4, defense: 0.2 },
+    offense: { contact: 0.5, power: 0.35, speed: 0.15 },
+    pitching: { rotationSize: 3, reliefSize: 1, rotationShare: 0.7 },
+    /** Under this spread between the best and worst area the profile reads "Balanced team". */
+    balancedSpread: 5,
+  },
+
   lowMood: {
     tradeRequestBelow: 30,
     ultimatumBelow: 35,

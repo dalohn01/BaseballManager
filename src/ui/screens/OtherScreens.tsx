@@ -1,3 +1,4 @@
+import { TeamOvrBadge } from '../components/TeamOvr';
 import { useRef, useState } from 'react';
 import { InfluenceView } from './InfluenceView';
 import { BALANCE } from '../../balance/config';
@@ -213,6 +214,9 @@ export function LeagueScreen() {
                   <th scope="col">RA</th>
                   <th scope="col">Diff</th>
                   <th scope="col">Strk</th>
+                  <th scope="col" title="Team OVR: basic strength from base ratings (not a forecast; the table is sorted by results)">
+                    OVR
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -228,6 +232,9 @@ export function LeagueScreen() {
                     <td>{r.runsAgainst}</td>
                     <td>{r.diff > 0 ? `+${r.diff}` : r.diff}</td>
                     <td>{r.streak}</td>
+                    <td className="ovr-cell">
+                      <TeamOvrBadge state={s} clubId={r.clubId} size="xs" />
+                    </td>
                   </tr>
                 ))}
               </tbody>

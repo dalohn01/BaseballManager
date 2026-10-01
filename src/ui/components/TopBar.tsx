@@ -1,3 +1,4 @@
+import { TeamOvrBadge } from './TeamOvr';
 import { userClub } from '../../domain/state';
 import { BALANCE } from '../../balance/config';
 import { viewTime } from '../../domain/time';
@@ -31,6 +32,11 @@ export function TopBar({ route }: { route: Route }) {
             {club.city} {club.name}
           </span>
         </a>
+        {route.name === 'home' && (
+          <span className="brand-ovr">
+            <TeamOvrBadge state={s} clubId={club.id} size="xs" />
+          </span>
+        )}
         <nav className="mainnav" aria-label="Main">
           {NAV.map((n) => (
             <a key={n.key} href={href(n.path)} aria-current={active === n.key ? 'page' : undefined}>

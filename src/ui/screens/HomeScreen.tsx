@@ -1,3 +1,4 @@
+import { TeamOvrBadge } from '../components/TeamOvr';
 import { useEffect, useRef } from 'react';
 import { CycleNotice } from './InfluenceView';
 import { BALANCE } from '../../balance/config';
@@ -168,11 +169,13 @@ function NextMatch() {
         <div>
           <Crest club={home} size={54} />
           <span>{clubName(home)}</span>
+          <TeamOvrBadge state={s} clubId={home.id} size="xs" />
         </div>
         <span className="vs">VS</span>
         <div>
           <Crest club={away} size={54} />
           <span>{clubName(away)}</span>
+          <TeamOvrBadge state={s} clubId={away.id} size="xs" />
         </div>
       </div>
       <p className="nm-meta">

@@ -1464,3 +1464,42 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .day-transition { font-size: 0.95rem; }
 }
 .timeline small .cal-ball { position: static; display: inline-block; vertical-align: -2px; width: 12px; height: 12px; color: #8b9ab0; }
+
+/* ===== Team OVR: shield badge, details, team strength ===== */
+.ovr-badge { position: relative; display: inline-flex; }
+.ovr-btn { padding: 0; border: 0; background: none; cursor: pointer; border-radius: 8px; line-height: 0; }
+.ovr-btn:focus-visible { outline: 3px solid var(--blue, #2f6fe4); outline-offset: 2px; }
+.ovr-shield { position: relative; display: inline-grid; place-items: center; width: 40px; height: 46px; font-family: var(--display); color: #fff; }
+.ovr-shield svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.ovr-shape { fill: #0f2a5c; }
+.ovr-inner { fill: none; stroke: #e0a93a; stroke-width: 1.2; opacity: 0.9; }
+.ovr-num { position: relative; font-weight: 900; font-size: 1.2rem; line-height: 1; margin-top: -6px; font-variant-numeric: tabular-nums; }
+.ovr-lbl { position: absolute; bottom: 9px; font-weight: 800; font-size: 0.5rem; letter-spacing: 0.08em; opacity: 0.85; }
+.ovr-xs { width: 32px; height: 37px; }
+.ovr-xs .ovr-num { font-size: 0.95rem; margin-top: -5px; }
+.ovr-xs .ovr-lbl { font-size: 0.42rem; bottom: 7px; }
+.ovr-lg { width: 84px; height: 96px; }
+.ovr-lg .ovr-num { font-size: 2.4rem; margin-top: -12px; }
+.ovr-lg .ovr-lbl { font-size: 0.85rem; bottom: 20px; }
+.ovr-pop { position: fixed; z-index: 60; width: min(300px, 86vw); padding: 12px 14px; background: var(--card); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 10px 30px rgba(15, 42, 92, 0.18); text-align: left; line-height: 1.35; white-space: normal; }
+.ovr-details { display: grid; gap: 4px; }
+.ovr-title { font-family: var(--display); font-weight: 800; font-size: 1.25rem; color: var(--navy); text-transform: uppercase; }
+.ovr-parts { margin: 0; font-weight: 700; }
+.ovr-profile { margin: 0; color: var(--slate); }
+.ovr-details p { margin: 0; }
+.brand-ovr { display: inline-flex; align-items: center; margin-left: -6px; }
+.nm-teams > div { position: relative; }
+.ovr-cell { text-align: center; }
+.team-strength { margin-bottom: 16px; }
+.ts-body { display: flex; gap: 22px; align-items: center; }
+.ts-areas { flex: 1; display: grid; gap: 8px; min-width: 0; }
+.ts-area { display: grid; grid-template-columns: 90px minmax(0, 1fr) 36px; gap: 12px; align-items: center; }
+.ts-label { font-family: var(--display); font-weight: 800; text-transform: uppercase; color: var(--navy); }
+.ts-track { height: 8px; border-radius: 99px; background: #e4e9f1; overflow: hidden; }
+.ts-track span { display: block; height: 100%; background: #0f2a5c; border-radius: 99px; }
+.ts-value { font-family: var(--display); font-weight: 800; font-size: 1.25rem; text-align: right; color: var(--navy); font-variant-numeric: tabular-nums; }
+@media (max-width: 560px) {
+  .brand-ovr { display: none; }
+  .ts-body { flex-direction: column; align-items: stretch; }
+  .ts-body > .ovr-shield { align-self: center; }
+}
