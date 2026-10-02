@@ -1,4 +1,3 @@
-import { nextStarter, normalizeStaff, type PitchingStaff } from '../domain/staff';
 import { BALANCE } from '../balance/config';
 import { nextId } from '../domain/state';
 import type { ActionKind } from '../domain/state';
@@ -47,7 +46,6 @@ export type Command =
   /** Drops every match-only change; the saved plan stays. */
   | { type: 'resetMatchTactics' }
   /** Standing pitching staff: rotation order and bullpen roles. No Time, no event. */
-  | { type: 'setStaff'; staff: PitchingStaff }
   /** Direct manager initiative paid with Influence (and sometimes cash); never Time or an event slot. */
   | { type: 'managerAction'; kind: ActionKind; target: string | null; option: string | null; revision: number };
 
@@ -228,20 +226,6 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       next.revision += 1;
       return { ok: true, state: next };
     }
-    case 'setStaff': {
-      const problem = staffProblem(state, cmd.staff);
-      if (problem) return fail('invalid', problem);
-      const next = structuredClone(state);
-      const club = userClub(next);
-      // Keep whose turn it is when the same pitcher stays next in line.
-      const nextId = club.staff?.rotation[club.staff.next];
-      const staff = normalizeStaff(next, club.id, { ...structuredClone(cmd.staff), next: Math.max(0, cmd.staff.rotation.indexOf(nextId ?? '')) });
-      club.staff = staff;
-      // Today's starter follows the rotation unless a game is being set up right now.
-      if (next.currentEvent?.type !== 'leagueGame') club.lineup = { ...club.lineup, pitcherId: nextStarter(next, club.id) };
-      next.revision += 1;
-      return { ok: true, state: next };
-    }
     case 'resetMatchTactics': {
       const next = structuredClone(state);
       clearMatchTactics(userClub(next));
@@ -274,19 +258,6 @@ export function advanceBlocker(state: GameState, now: number): string | null {
 /** The name an event goes by in today's stack. */
 export const folderTitle = (ev: EventInstance) => (ev.type === 'leagueGame' ? `League game ${ev.title}` : ev.title);
 
-/** Why a staff cannot be saved: unknown or non-pitchers, the same pitcher twice, an empty or too long rotation. */
-export function staffProblem(state: GameState, staff: PitchingStaff): string | null {
-  const club = userClub(state);
-  const ids = [...staff.rotation, staff.closer, staff.setup, staff.long].filter((x): x is string => !!x);
-  if (staff.rotation.length === 0) return 'The rotation needs at least one starter.';
-  if (staff.rotation.length > BALANCE.pitching.maxRotation) return `The rotation can have at most ${BALANCE.pitching.maxRotation} starters.`;
-  if (new Set(ids).size !== ids.length) return 'A pitcher can only have one role.';
-  for (const id of ids) {
-    const p = state.players[id];
-    if (!p || p.clubId !== club.id || !p.isPitcher) return 'Only your own pitchers can be on the staff.';
-  }
-  return null;
-}
 
 export const spendingFrozen = (state: GameState) => {
   const until = userClub(state).spendingFreezeUntil;

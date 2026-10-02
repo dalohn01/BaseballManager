@@ -266,7 +266,8 @@ describe('migration v3 → v4 (fatigue → fitness)', () => {
     }
     const m = migrate(v3);
     expect(m.schemaVersion).toBe(SCHEMA_VERSION);
-    for (const p of Object.values(m.players)) {
+    // Pitchers added by later migrations (fuller staffs) come in fresh; everyone from v3 keeps 88%.
+    for (const p of Object.values(m.players).filter((x) => x.id in v3.players)) {
       expect(p.fitness).toBe(88);
       expect('fatigue' in p).toBe(false);
     }

@@ -15,6 +15,7 @@ import type { ActionKind, GameState } from '../domain/state';
 import { absoluteRound, playerName, userClub } from '../domain/state';
 import type { Player } from '../domain/types';
 import { growthKeys } from './programs';
+import { restLabel, restStage, teamStatus, type RestStage } from '../domain/effective';
 import { goalProgress } from './goals';
 import { boardFundingLeft, communityBlocker, grantBoardFunding, markCommunity, programBlocker, startProgram } from './locks';
 
@@ -120,6 +121,16 @@ export function actionPreview(s: GameState, kind: ActionKind, target: string | n
       else if (s.actions.motivated.includes(p!.id)) r.blocker = `${p!.lastName} is already motivated for the next game.`;
       break;
     }
+    case 'tacticsSession': {
+      const T = A.tacticsSession;
+      const n = since(s, 'tacticsSession');
+      const now = teamStatus(s, c.id);
+      r = { ...base, title: 'Tactics session', cost: { influence: T.influence, cash: 0 }, effect: `The squad goes through the game plan together: Team +${T.team} for everyone in the next league game (Team ${fmtDelta(now.level)} → ${fmtDelta(Math.min(2, now.level + T.team))}).`, duration: 'Next league game', cooldown: `One session per ${games(T.cooldown)}` };
+      if (s.actions.teamBoost) r.blocker = 'The squad has already had a session for the next game.';
+      else if (n < T.cooldown) r.blocker = `The next session can be held in ${games(T.cooldown - n)}.`;
+      else if (now.level >= 2) r.blocker = 'Team is already at its best (+2).';
+      break;
+    }
     case 'extraTraining': {
       r = { ...base, title: 'Extra training', cost: { influence: A.extraTraining.influence, cash: 0 }, effect: p ? `Development progress in ${growthKeys(p).join(' and ')} (same session as an individual program), fitness ${A.extraTraining.fitness}, happiness ${fmtDelta(reactionPreview(p, 'development_opportunity', A.extraTraining.satisfaction))}.` : 'Individual development session.', duration: 'Now; program slot until after the next game', cooldown: 'One program per player' };
       if (!mine) r.blocker = 'Choose a player from your squad.';
@@ -127,9 +138,9 @@ export function actionPreview(s: GameState, kind: ActionKind, target: string | n
       break;
     }
     case 'recovery': {
-      r = { ...base, title: 'Recovery program', cost: { influence: A.recovery.influence, cash: A.recovery.cash }, effect: p ? `Fitness +${A.recovery.fitnessNow} now (${p.fitness}% → ${Math.min(100, p.fitness + A.recovery.fitnessNow)}%).` : 'Extra recovery.', duration: 'Now; program slot until after the next game', cooldown: 'One program per player' };
+      r = { ...base, title: 'Recovery program', cost: { influence: A.recovery.influence, cash: A.recovery.cash }, effect: p?.isPitcher ? `One rest stage now (${restLabel(restStage(p))} → ${restLabel(Math.min(3, restStage(p) + 1) as RestStage)}).` : p ? `Fitness +${A.recovery.fitnessNow} now (${p.fitness}% → ${Math.min(100, p.fitness + A.recovery.fitnessNow)}%).` : 'Extra recovery.', duration: 'Now; program slot until after the next game', cooldown: 'One program per player' };
       if (!mine) r.blocker = 'Choose a player from your squad.';
-      else r.blocker = programBlocker(s, p!.id) ?? (p!.fitness >= 100 ? `${p!.lastName} is already fully fit.` : spendingBlocker(s, A.recovery.cash));
+      else r.blocker = programBlocker(s, p!.id) ?? ((p!.isPitcher ? restStage(p!) === 3 : p!.fitness >= 100) ? `${p!.lastName} is already fully fit.` : spendingBlocker(s, A.recovery.cash));
       break;
     }
     case 'boardMeeting': {
@@ -193,9 +204,16 @@ export function applyAction(s: GameState, kind: ActionKind, target: string | nul
       break;
     }
     case 'recovery':
-      sink.playerMood(p!.id, 'fitness', A.recovery.fitnessNow, 'Recovery program');
+      // A pitcher's rest is a stage: the program moves him one stage up.
+      if (p!.isPitcher) sink.playerMood(p!.id, 'fitness', BALANCE.modifiers.restStages[Math.min(3, restStage(p!) + 1)].fitness - p!.fitness, 'Recovery program');
+      else sink.playerMood(p!.id, 'fitness', A.recovery.fitnessNow, 'Recovery program');
       startProgram(s, p!.id, 'recovery', 'recovery');
       summary = `Recovery program for ${playerName(p!)}.`;
+      break;
+    case 'tacticsSession':
+      s.actions.lastUse.tacticsSession = played(s);
+      s.actions.teamBoost = A.tacticsSession.team;
+      summary = `Tactics session: Team +${A.tacticsSession.team} in the next game.`;
       break;
     case 'boardMeeting': {
       const B = A.boardMeeting;

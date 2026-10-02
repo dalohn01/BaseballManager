@@ -15,6 +15,8 @@ import { PitchersTab } from './PitchersTab';
 import { opponentReport } from '../../simulation/opponentReport';
 import { MatchPlanSummary, TacticsDialog } from '../tactics/TacticsControls';
 import type { DataMode } from './shared';
+import { RELIEF_SLOTS, SLOT_LABEL } from '../../domain/todayPitching';
+import { TeamStatusBar } from '../components/Modifiers';
 
 export type Tab = 'field' | 'order' | 'pitchers';
 
@@ -91,8 +93,10 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   };
   const quick = (label: string, next: LineupDraft) => {
     const changes = describeLineupChange(s, draft.lineup, next.lineup);
-    const rested = next.plan.rest.filter((id) => !draft.plan.rest.includes(id));
-    if (rested.length) changes.push(`Rest today: ${rested.map((id) => s.players[id].lastName).join(', ')}`);
+    for (const slot of RELIEF_SLOTS) {
+      const id = next.plan.bullpen?.[slot];
+      if (id && id !== draft.plan.bullpen?.[slot]) changes.push(`${SLOT_LABEL[slot]}: ${s.players[id].lastName}`);
+    }
     setNotice({ label, changes, undo: draft });
     update(next);
   };
@@ -177,6 +181,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
       <div className="pm-info">
         <OpponentReport gameId={String(ev.data.gameId)} onAdjust={() => setTactics({ playerId: null })} />
         <MatchPlanSummary />
+        <TeamStatusBar state={s} />
       </div>
 
       <div className="pm-body">
@@ -201,8 +206,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
           )}
           {tab === 'pitchers' && (
             <>
-              <QuickButton icon="trophy" label="Suggest setup" onClick={() => quick('Suggest setup', suggestPitching(s, draft))} />
-              <QuickButton icon="back" label="Reset" onClick={() => quick('Reset', { ...draft, lineup: { ...draft.lineup, pitcherId: club.lineup.pitcherId }, plan: structuredClone(club.pitchingPlan) })} />
+              <QuickButton icon="trophy" label="Strongest setup" onClick={() => quick('Strongest setup', suggestPitching(s, draft))} />
             </>
           )}
         </div>

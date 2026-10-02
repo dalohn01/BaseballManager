@@ -1,5 +1,6 @@
 import { staminaBatters } from '../domain/pitching';
-import { BULLPEN_ROLES, bullpenFor, type BullpenRole } from '../domain/staff';
+import { teamModifier, teamStatus } from '../domain/effective';
+import { bullpenToday, RELIEF_SLOTS as BULLPEN_ROLES, type ReliefSlot as BullpenRole } from '../domain/todayPitching';
 import { BALANCE } from '../balance/config';
 import { effectiveRating, fieldingAt, offenseScore } from '../domain/lineup';
 import { clamp, hashSeed, type Rng } from '../domain/rng';
@@ -77,8 +78,10 @@ export interface SimTeam {
 
 export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): SimTeam {
   const club = state.clubs[clubId];
-  // A pep talk lifts the player's ratings in his next game only (user club).
-  const motivation = (id: PlayerId) => (club.isUser && state.actions?.motivated.includes(id) ? state.actions.boosts?.[id] ?? BALANCE.actions.pepTalk.ratingBoost : 0);
+  // Team (the squad's state, temporary boosts and a pep talk) is added to every rating today;
+  // Fitness, Morale and Form are already in effectiveRating.
+  const status = teamStatus(state, clubId);
+  const motivation = (id: PlayerId) => teamModifier(state, state.players[id], status);
   const batters = lineup.battingOrder.map((slot) => {
     const p = state.players[slot.playerId];
     const running = resolveTactic(club.tactics, p.id, 'baserunning');
@@ -107,7 +110,7 @@ export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): 
   };
   const starter = simPitcher(sp);
   const plan = club.pitchingPlan;
-  const pen = bullpenFor(state, clubId, sp.id, plan.rest);
+  const pen = bullpenToday(state, clubId, sp.id, plan.bullpen);
   const asSim = (p: Player | null): SimPitcher | null => (p ? simPitcher(p) : null);
   const bullpen = { closer: asSim(pen.closer), setup: asSim(pen.setup), long: asSim(pen.long) };
 
@@ -127,12 +130,16 @@ export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): 
 
 /** Single comprehensible number (0–100-ish) used for forecasts and sudden-death. */
 export function teamStrength(state: GameState, lineup: Lineup): number {
-  const bats = lineup.battingOrder.map((s) => offenseScore(state.players[s.playerId]));
+  const clubId = state.players[lineup.pitcherId]?.clubId ?? state.players[lineup.battingOrder[0]?.playerId]?.clubId;
+  const status = clubId && state.clubs[clubId] ? teamStatus(state, clubId) : null;
+  // Team is added to every rating in the simulator, so it lifts each part the same way here.
+  const team = (id: PlayerId) => (status ? teamModifier(state, state.players[id], status) : 0);
+  const bats = lineup.battingOrder.map((s) => offenseScore(state.players[s.playerId]) + team(s.playerId));
   const offense = bats.reduce((a, b) => a + b, 0) / Math.max(1, bats.length);
   const defenders = lineup.battingOrder.filter((s) => s.position !== 'DH');
-  const defense = defenders.reduce((a, s) => a + fieldingAt(state.players[s.playerId], s.position), 0) / Math.max(1, defenders.length);
+  const defense = defenders.reduce((a, s) => a + fieldingAt(state.players[s.playerId], s.position) + team(s.playerId), 0) / Math.max(1, defenders.length);
   const sp = state.players[lineup.pitcherId];
-  const pitching = sp ? effectiveRating(sp, 'pitching') : 30;
+  const pitching = sp ? effectiveRating(sp, 'pitching') + team(sp.id) : 30;
   return offense * 0.45 + defense * 0.2 + pitching * 0.35;
 }
 

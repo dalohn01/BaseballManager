@@ -1,4 +1,4 @@
-import { ROLE_LABEL, staffRole } from '../../domain/staff';
+import { SLOT_LABEL, slotOf } from '../../domain/todayPitching';
 import { BALANCE } from '../../balance/config';
 import { ballparkName } from '../../content/ballparks';
 import { autoLineup, isLineupValid } from '../../domain/lineup';
@@ -109,23 +109,18 @@ export function leagueGameOptionNotes(state: GameState, choice: LeagueGameChoice
   return notes;
 }
 
-/** Post-game feedback from actual participation: first starts, planned rest, the planned reliever. */
-function planFollowUp(state: GameState, m: MatchResult, plan: PitchingPlan, idleBefore: Map<string, number>, restFitness: Map<string, number>): string[] {
+/** Post-game feedback from actual participation: first starts and who pitched in which slot. */
+function planFollowUp(state: GameState, m: MatchResult, plan: PitchingPlan, idleBefore: Map<string, number>): string[] {
   const notes: string[] = [];
   const side = m.homeId === state.userClubId ? 'home' : 'away';
   for (const [id, idle] of idleBefore) {
     if (idle >= 3) notes.push(`${state.players[id].lastName} made his first start in ${idle + 1} games.`);
   }
-  for (const [id, before] of restFitness) {
-    const p = state.players[id];
-    if (p && !m.pitchersUsed[side].includes(id)) notes.push(`${p.lastName} rested as planned (fitness ${before}% → ${p.fitness}%).`);
-  }
   const used = m.pitchersUsed[side].slice(1);
-  const staff = state.clubs[state.userClubId].staff;
   if (used.length === 0) notes.push(`${state.players[m.lineups[side].pitcherId]?.lastName ?? 'The starter'} went the distance.`);
   for (const id of used) {
-    const role = staff ? staffRole(staff, id) : 'depth';
-    notes.push(`${state.players[id]?.lastName ?? 'A reliever'} came on in relief (${ROLE_LABEL[role].toLowerCase()}).`);
+    const slot = plan.bullpen ? slotOf(m.lineups[side].pitcherId, plan.bullpen, id) : null;
+    notes.push(`${state.players[id]?.lastName ?? 'A reliever'} came on in relief${slot ? ` (${SLOT_LABEL[slot].toLowerCase()})` : ''}.`);
   }
   const starterLine = m.pitching[m.lineups[side].pitcherId];
   if (starterLine && used.length) notes.push(`${state.players[m.lineups[side].pitcherId].lastName} left after facing ${starterLine.battersFaced} batters (${plan.hook === 'long' ? 'let him pitch' : plan.hook} hook).`);
@@ -168,7 +163,7 @@ export const leagueGame: EventTemplate = {
         {
           id: 'strongest',
           label: 'Strongest available',
-          summary: 'Best nine on today’s form and the best-rested pitcher. Becomes your saved lineup.',
+          summary: 'Best nine and the strongest pitching by effective value (OVR with fitness, morale, team and form). Becomes your saved lineup.',
           certain: leagueGameOptionNotes(state, 'strongest'),
           uncertain: [],
           cost: { time: BALANCE.time.costPerEvent, cash: 0, influence: 0 },
@@ -193,9 +188,8 @@ export const leagueGame: EventTemplate = {
     // Snapshot what the plan intended, to report afterwards what actually happened.
     const plan = structuredClone(userClub(state).pitchingPlan);
     const idleBefore = new Map(lineup.battingOrder.map((s) => [s.playerId, gamesWithoutStart(state, state.players[s.playerId])]));
-    const restFitness = new Map(plan.rest.map((id) => [id, state.players[id]?.fitness ?? 0]));
     const out = playRound(state, lineup, rng, sink);
-    narrative.push(...planFollowUp(state, out.userMatch, plan, idleBefore, restFitness));
+    narrative.push(...planFollowUp(state, out.userMatch, plan, idleBefore));
     const m = out.userMatch;
     const isHome = m.homeId === state.userClubId;
     const us = isHome ? m.runs.home : m.runs.away;

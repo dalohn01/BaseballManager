@@ -10,7 +10,7 @@ import type {
 } from './types';
 import { BALANCE } from '../balance/config';
 
-export const SCHEMA_VERSION = 13;
+export const SCHEMA_VERSION = 14;
 
 export type EventType =
   | 'leagueGame'
@@ -325,7 +325,7 @@ export interface CycleState {
   lowStreak: { owners: number; fans: number; players: Record<PlayerId, number> };
 }
 
-export type ActionKind = 'pepTalk' | 'extraTraining' | 'recovery' | 'boardMeeting' | 'communityInitiative' | 'fundraiser';
+export type ActionKind = 'pepTalk' | 'tacticsSession' | 'extraTraining' | 'recovery' | 'boardMeeting' | 'communityInitiative' | 'fundraiser';
 
 export interface ActionRecord {
   id: string;
@@ -347,6 +347,8 @@ export interface ActionState {
   motivated: PlayerId[];
   /** Rating boost per motivated player (a private demand scales with discipline); absent = the standard pep talk boost. */
   boosts?: Record<PlayerId, number>;
+  /** Squad Team boost for the next league game (tactics session). */
+  teamBoost?: number;
   /** Active fundraiser: pays out once when it ends. */
   fundraiser: { purpose: string; startedAt: number; endsAt: number; amount: number } | null;
   /** Money raised for facility upgrades only (a credit, not free cash). */

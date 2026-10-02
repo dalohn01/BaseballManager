@@ -33,7 +33,7 @@ export function ClubStatus() {
   const club = userClub(s);
   const players = clubPlayers(s, club.id);
   const happy = avg(players.map((p) => p.satisfaction));
-  const fitness = Math.round(avg(players.map((p) => p.fitness)));
+  const fitness = Math.round(avg(players.filter((p) => !p.isPitcher).map((p) => p.fitness)));
   const [open, setOpen] = useState<RowKey | null>(null);
   const toggle = (k: RowKey) => setOpen(open === k ? null : k);
   const mood = (actor: MoodActor, v: number) => ({ tone: MOOD_TONE[moodBand(v)], word: moodLabel(actor, v) });
@@ -106,11 +106,13 @@ function Details({ row, players }: { row: RowKey; players: Player[] }) {
       </>
     );
   }
-  const tired = [...players].filter((p) => p.fitness < BALANCE.fitness.warnBelow).sort((a, b) => a.fitness - b.fitness);
+  // Pitchers rest by games (a starter is Exhausted after every start); this list is the hitters.
+  const hitters = players.filter((p) => !p.isPitcher);
+  const tired = hitters.filter((p) => p.fitness < BALANCE.fitness.warnBelow).sort((a, b) => a.fitness - b.fitness);
   return (
     <>
       <p className="small">
-        Squad average {Math.round(avg(players.map((p) => p.fitness)))}%. 100% is fully ready; each point below costs {BALANCE.match.fitnessPenaltyPerPoint} rating.
+        Hitters average {Math.round(avg(hitters.map((p) => p.fitness)))}%. 100% is fully ready; each point below costs {BALANCE.modifiers.hitterFitnessPerPoint} rating. Pitchers rest in games (see the lineup).
       </p>
       {tired.length ? (
         <ul className="cs-list">

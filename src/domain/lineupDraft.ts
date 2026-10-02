@@ -1,4 +1,4 @@
-import { nextStarter } from './staff';
+import { bestPitching, emptyBullpen, RELIEF_SLOTS, slotOf, type PitchingSlot } from './todayPitching';
 import { BALANCE } from '../balance/config';
 import { autoLineup, orderBatters, validateLineup, validatePitchingPlan, type LineupIssue } from './lineup';
 import type { GameState } from './state';
@@ -15,13 +15,18 @@ export interface LineupDraft {
   plan: PitchingPlan;
 }
 
-export type PitcherRole = 'starter' | 'available' | 'rest';
-
 const clone = (d: LineupDraft): LineupDraft => structuredClone(d);
 
+/**
+ * A new game's draft starts from the strongest setup by effective value (OVR
+ * plus Fitness, Morale, Team and Form): the best nine and today's pitching.
+ * Only the hook is carried over from the last game.
+ */
 export function draftFromClub(state: GameState): LineupDraft {
   const club = userClub(state);
-  return { lineup: structuredClone(club.lineup), plan: structuredClone(club.pitchingPlan) };
+  const lineup = autoLineup(state, club.id);
+  const best = bestPitching(state, club.id, lineup.pitcherId);
+  return { lineup, plan: { relieverId: null, rest: [], bullpen: best.bullpen, hook: club.pitchingPlan.hook } };
 }
 
 export function draftIssues(state: GameState, d: LineupDraft): LineupIssue[] {
@@ -66,26 +71,52 @@ export function moveBatter(d: LineupDraft, from: number, to: number): LineupDraf
   return next;
 }
 
-export function pitcherRole(d: LineupDraft, id: PlayerId): PitcherRole {
-  if (d.lineup.pitcherId === id) return 'starter';
-  if (d.plan.rest.includes(id)) return 'rest';
-  return 'available';
+/** Today's slot for a pitcher, or null (not used today). */
+export const pitcherSlot = (d: LineupDraft, id: PlayerId): PitchingSlot | null => slotOf(d.lineup.pitcherId, d.plan.bullpen ?? emptyBullpen(), id);
+
+const pitcherIn = (d: LineupDraft, slot: PitchingSlot): PlayerId | null => (slot === 'starter' ? d.lineup.pitcherId : (d.plan.bullpen ?? emptyBullpen())[slot]);
+
+function put(d: LineupDraft, slot: PitchingSlot, id: PlayerId | null) {
+  if (slot === 'starter') {
+    if (id) d.lineup.pitcherId = id;
+  } else {
+    d.plan.bullpen = { ...(d.plan.bullpen ?? emptyBullpen()), [slot]: id };
+  }
 }
 
-/** Today's role for a pitcher: the starter, available to the bullpen, or resting (never used today). */
-export function setPitcherRole(d: LineupDraft, id: PlayerId, role: PitcherRole): LineupDraft {
+/**
+ * Puts a pitcher in a slot for today. If he already has another slot, the two
+ * swap; a pitcher coming from the bench sends the slot's pitcher to the bench
+ * (the starting slot can never be left empty).
+ */
+export function assignPitcher(d: LineupDraft, slot: PitchingSlot, id: PlayerId): LineupDraft {
   const next = clone(d);
-  next.plan.rest = next.plan.rest.filter((x) => x !== id);
-  next.plan.relieverId = null;
-  if (role === 'starter') {
-    // The previous starter simply becomes available.
-    next.lineup.pitcherId = id;
-  } else if (role === 'rest') {
-    if (next.lineup.pitcherId === id) return d;
-    next.plan.rest.push(id);
-  }
+  next.plan.bullpen = { ...(next.plan.bullpen ?? emptyBullpen()) };
+  const from = pitcherSlot(next, id);
+  if (from === slot) return next;
+  const current = pitcherIn(next, slot);
+  if (from) put(next, from, current);
+  put(next, slot, id);
   return next;
 }
+
+/** Swaps the pitchers in two slots. */
+export function swapSlots(d: LineupDraft, a: PitchingSlot, b: PitchingSlot): LineupDraft {
+  const pa = pitcherIn(d, a);
+  const pb = pitcherIn(d, b);
+  if (pa) return assignPitcher(d, b, pa);
+  if (pb) return assignPitcher(d, a, pb);
+  return clone(d);
+}
+
+/** Takes a reliever out of today's staff (the starting slot is never empty). */
+export function benchPitcher(d: LineupDraft, slot: Exclude<PitchingSlot, 'starter'>): LineupDraft {
+  const next = clone(d);
+  put(next, slot, null);
+  return next;
+}
+
+export const filledReliefSlots = (d: LineupDraft) => RELIEF_SLOTS.filter((s) => (d.plan.bullpen ?? emptyBullpen())[s]).length;
 
 export function setHook(d: LineupDraft, hook: PitchingPlan['hook']): LineupDraft {
   const next = clone(d);
@@ -109,11 +140,12 @@ export function suggestOrder(state: GameState, d: LineupDraft): LineupDraft {
   return next;
 }
 
-/** The next ready starter in the rotation; nobody is held back (the bullpen roles decide who relieves). */
+/** The strongest pitching for today by effective value: starter and the three relief slots. */
 export function suggestPitching(state: GameState, d: LineupDraft): LineupDraft {
   const next = clone(d);
-  next.lineup.pitcherId = nextStarter(state, state.userClubId);
-  next.plan = { ...next.plan, relieverId: null, rest: [] };
+  const best = bestPitching(state, state.userClubId);
+  next.lineup.pitcherId = best.starterId;
+  next.plan = { ...next.plan, relieverId: null, rest: [], bullpen: best.bullpen };
   return next;
 }
 

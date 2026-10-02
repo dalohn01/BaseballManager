@@ -94,8 +94,10 @@ export interface Player {
   lastReaction: { text: string; context: string; season: number; round: number } | null;
   /** Personality reactions with their cause and the personality's share (newest first, capped). */
   reactions: ReactionEntry[];
-  /** Day number (absDay) of his last appearance as a pitcher, for rest days. */
+  /** Day number (absDay) of his last appearance as a pitcher. */
   pitchedOn?: number;
+  /** Running form score from recent games (shown as −2..+2, Very cold … Very hot); absent = neutral. */
+  form?: number;
 }
 
 /**
@@ -128,14 +130,22 @@ export interface Lineup {
 /** When the starter is replaced: thresholds per setting live in BALANCE.match.hooks. */
 export type PitchingHook = 'early' | 'balanced' | 'long';
 
+/** Today's three relief slots (null = left empty: the simulator picks the strongest). */
+export interface PitchingBullpen {
+  long: PlayerId | null;
+  setup: PlayerId | null;
+  closer: PlayerId | null;
+}
+
 /**
- * Today's pitching plan, followed by the simulator: the designated reliever (or
- * automatic choice when null), pitchers who must not be used, and how long the
- * starter stays in. Reliever and rest apply to the next game only.
+ * Today's pitching plan, followed by the simulator: the relief slots for this
+ * game (the starter is lineup.pitcherId; everyone else is not used) and how
+ * long the starter stays in. relieverId and rest are legacy and always empty.
  */
 export interface PitchingPlan {
   relieverId: PlayerId | null;
   rest: PlayerId[];
+  bullpen: PitchingBullpen;
   hook: PitchingHook;
 }
 
@@ -208,7 +218,7 @@ export interface Club {
   roster: PlayerId[];
   lineup: Lineup;
   pitchingPlan: PitchingPlan;
-  /** Standing pitching staff: rotation order and bullpen roles (absent until first normalised). */
+  /** Legacy (saves up to v13): the old standing pitching staff. Pitching is now set per game. */
   staff?: PitchingStaff;
   cash: number;
   ownerConfidence: number;

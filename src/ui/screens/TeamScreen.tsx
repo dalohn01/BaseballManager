@@ -1,5 +1,4 @@
 import { positionLabel } from '../../domain/pitching';
-import { StaffTab } from '../prematch/StaffTab';
 import { TeamStrength } from '../components/TeamOvr';
 import { useState } from 'react';
 import { validateLineup } from '../../domain/lineup';
@@ -26,17 +25,14 @@ const SORTS: Record<Sort, (a: Player, b: Player) => number> = {
   fitness: (a, b) => a.fitness - b.fitness,
 };
 
-export function TeamScreen({ tab = 'roster' }: { tab?: 'roster' | 'style' | 'staff' }) {
+export function TeamScreen({ tab = 'roster' }: { tab?: 'roster' | 'style' }) {
   return (
     <div className="page">
       <div className="club-head">
-        <h1 className="page-title">{tab === 'style' ? 'Playing style' : tab === 'staff' ? 'Pitching staff' : 'Team'}</h1>
+        <h1 className="page-title">{tab === 'style' ? 'Playing style' : 'Team'}</h1>
         <nav className="segmented club-tabs" aria-label="Team sections">
           <a href={href('team')} className={tab === 'roster' ? 'on' : ''} aria-current={tab === 'roster' ? 'page' : undefined}>
             Roster
-          </a>
-          <a href={href('team/staff')} className={tab === 'staff' ? 'on' : ''} aria-current={tab === 'staff' ? 'page' : undefined}>
-            Pitching staff
           </a>
           <a href={href('team/style')} className={tab === 'style' ? 'on' : ''} aria-current={tab === 'style' ? 'page' : undefined}>
             Playing style
@@ -45,8 +41,6 @@ export function TeamScreen({ tab = 'roster' }: { tab?: 'roster' | 'style' | 'sta
       </div>
       {tab === 'style' ? (
         <PlayingStyle />
-      ) : tab === 'staff' ? (
-        <StaffTab />
       ) : (
         <RosterView />
       )}

@@ -1,3 +1,4 @@
+import { defaultStaff } from '../src/domain/staff';
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../src/balance/config';
 import { execute, optionBlocker } from '../src/application/engine';
@@ -15,8 +16,8 @@ describe('new game', () => {
       const players = clubPlayers(s, id);
       expect(players).toHaveLength(18);
       expect(players.filter((p) => p.isPitcher)).toHaveLength(7);
-      // A standing staff: four in the rotation, all three bullpen roles filled, today's starter from the rotation.
-      const staff = s.clubs[id].staff!;
+      // A depth chart of four starters and three relievers; the strongest starter takes the first game.
+      const staff = defaultStaff(s, id);
       expect(staff.rotation).toHaveLength(4);
       expect([staff.closer, staff.setup, staff.long].every(Boolean)).toBe(true);
       expect(staff.rotation).toContain(s.clubs[id].lineup.pitcherId);

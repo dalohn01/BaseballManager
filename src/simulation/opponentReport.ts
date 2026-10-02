@@ -1,5 +1,7 @@
 import { BALANCE } from '../balance/config';
-import { effectiveRating, fieldingAt } from '../domain/lineup';
+import { restLabel, restStage, teamStatus } from '../domain/effective';
+import { fieldingAt } from '../domain/lineup';
+import { bullpenToday } from '../domain/todayPitching';
 import type { GameState } from '../domain/state';
 import type { ClubId, GameId, TacticArea } from '../domain/types';
 import { lineupFor } from './round';
@@ -44,15 +46,19 @@ export function opponentReport(state: GameState, gameId: GameId): { opponentId: 
     const pit = sp.ratings.pitching;
     if (pit >= 64) obs.push({ kind: 'Trait', text: `Probable starter ${sp.lastName} gets a lot of strikeouts (pitching ${Math.round(pit)}).`, hint: { area: 'batting', value: 'contact', text: 'A contact approach cuts strikeouts.' }, weight: pit - 50 });
     else if (pit <= 46) obs.push({ kind: 'Trait', text: `Probable starter ${sp.lastName} is hittable (pitching ${Math.round(pit)}).`, hint: { area: 'batting', value: 'power', text: 'Strong hitters could swing for power.' }, weight: 55 - pit });
-    if (sp.fitness < BALANCE.fitness.warnBelow) obs.push({ kind: 'Status', text: `${sp.lastName} is not fully rested (fitness ${sp.fitness}%), so he pitches below his rating (${Math.round(effectiveRating(sp, 'pitching'))} today).`, weight: 20 + (BALANCE.fitness.warnBelow - sp.fitness) * 2 });
+    const stage = restStage(sp);
+    if (stage < 2) obs.push({ kind: 'Status', text: `${sp.lastName} starts on short rest (${restLabel(stage)}, ${BALANCE.modifiers.restStages[stage].modifier} today).`, hint: { area: 'batting', value: 'power', text: 'A tired arm leaves pitches up.' }, weight: 40 - stage * 10 });
   }
 
-  // Status: the bullpen (every other pitcher).
-  const pen = opp.roster.map((id) => state.players[id]).filter((p) => p.isPitcher && p.id !== lineup.pitcherId);
-  if (pen.length) {
-    const avg = Math.round(pen.reduce((a, p) => a + p.fitness, 0) / pen.length);
-    if (avg < 88) obs.push({ kind: 'Status', text: `Their bullpen is tired (average fitness ${avg}%).`, hint: { area: 'pitching', value: 'attack', text: 'Their relievers may be vulnerable late.' }, weight: 15 + (88 - avg) * 2 });
-  }
+  // Status: today's relief slots, by rest stage.
+  const pen = Object.values(bullpenToday(state, oppId, lineup.pitcherId, opp.pitchingPlan.bullpen)).filter((p) => !!p);
+  const tired = pen.filter((p) => restStage(p!) < 2);
+  if (tired.length >= 2) obs.push({ kind: 'Status', text: `Their bullpen is worn: ${tired.map((p) => p!.lastName).join(' and ')} pitched recently.`, hint: { area: 'pitching', value: 'attack', text: 'Their relievers may be vulnerable late.' }, weight: 15 + tired.length * 6 });
+
+  // Status: the squad's Team state (morale, hot and cold players, fans).
+  const team = teamStatus(state, oppId);
+  if (team.level >= 1) obs.push({ kind: 'Status', text: `Their squad is in good spirits (Team +${team.level}): ${team.hot} player${team.hot === 1 ? '' : 's'} on a hot streak.`, weight: 14 + team.level * 4 });
+  else if (team.level <= -1) obs.push({ kind: 'Status', text: `Their squad is low (Team ${team.level}): ${team.cold} player${team.cold === 1 ? '' : 's'} in a cold spell.`, weight: 14 - team.level * 4 });
 
   // Recent form: runs per game over their last games (at least three, small samples labelled).
   const played = state.schedule

@@ -1,5 +1,5 @@
 import type { EffectRecord, GameState } from '../domain/state';
-import { normalizeStaff } from '../domain/staff';
+import { defaultStaff } from '../domain/staff';
 import { computeTeamOvr, ovrDisplay } from '../domain/teamOvr';
 import type { ClubId, PlayerId, RatingKey } from '../domain/types';
 
@@ -49,7 +49,7 @@ export function nearNextStep(state: GameState, effects: EffectRecord[], limit = 
  */
 export function teamOvrChange(state: GameState, clubId: ClubId, effects: EffectRecord[]): { before: number; after: number } | null {
   const club = state.clubs[clubId];
-  const staff = normalizeStaff(state, clubId, club.staff);
+  const staff = defaultStaff(state, clubId);
   const now = club.roster.map((id) => state.players[id]).filter(Boolean);
   const after = computeTeamOvr(now, staff);
   if (!after) return null;

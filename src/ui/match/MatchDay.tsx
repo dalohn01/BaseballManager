@@ -1,8 +1,8 @@
 import { pitcherPosition } from '../../domain/pitching';
-import { overall } from '../../domain/ratings';
+import { effectiveValue, restText } from '../../domain/effective';
+import { draftFromClub } from '../../domain/lineupDraft';
 import { useSyncExternalStore } from 'react';
 import { ballparkName } from '../../content/ballparks';
-import { nextStarter } from '../../domain/staff';
 import type { EventInstance } from '../../domain/state';
 import { clubName, playerName, userClub } from '../../domain/state';
 import { forecastForLineup } from '../../events/templates/leagueGame';
@@ -65,8 +65,11 @@ export function MatchDayCard({ ev }: { ev: EventInstance }) {
   const away = s.clubs[g.awayId];
   const isHome = g.homeId === club.id;
   const opp = isHome ? away : home;
-  const win = forecastForLineup(s, gameId, club.lineup);
-  const starter = s.players[club.lineup.pitcherId] ?? s.players[nextStarter(s, club.id)];
+  // The lineup screen opens on the strongest setup by effective value; the card previews it.
+  const preset = draftFromClub(s).lineup;
+  const win = forecastForLineup(s, gameId, preset);
+  const starter = s.players[preset.pitcherId];
+  const sv = starter ? effectiveValue(s, starter, 'SP') : null;
   const report = opponentReport(s, gameId).observations[0];
   return (
     <section className="event-card match-day" aria-labelledby="matchday-title">
@@ -94,10 +97,10 @@ export function MatchDayCard({ ev }: { ev: EventInstance }) {
           <div className="md-fact">
             <PlayerAvatar player={starter} club={club} size={44} />
             <span>
-              <small>Your starter</small>
+              <small>Probable starter</small>
               <strong>{playerName(starter)}</strong>
               <small className="muted">
-                {pitcherPosition(starter)} · OVR {overall(starter)} · {starter.fitness}%
+                {pitcherPosition(starter)} · OVR {sv!.ovr} · EFF {sv!.effective} · {restText(starter)}
               </small>
             </span>
           </div>
@@ -107,7 +110,7 @@ export function MatchDayCard({ ev }: { ev: EventInstance }) {
           <span>
             <small>Forecast</small>
             <strong>{Math.round(win * 100)}% win chance</strong>
-            <small className="muted">With your saved lineup</small>
+            <small className="muted">With the strongest lineup</small>
           </span>
         </div>
       </div>

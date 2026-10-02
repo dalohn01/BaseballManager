@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execute } from '../src/application/engine';
 import { autoLineup, defaultPitchingPlan, validateLineup } from '../src/domain/lineup';
-import { draftFromClub, moveBatter, pitcherRole, setPitcherRole, swapFromBench, swapPositions, type LineupDraft } from '../src/domain/lineupDraft';
+import { assignPitcher, draftFromClub, moveBatter, pitcherSlot, swapFromBench, swapPositions, type LineupDraft } from '../src/domain/lineupDraft';
 import { battingStats, fmtIp, pitchingStats, recentClubMatches } from '../src/domain/playerStats';
 import { createRng } from '../src/domain/rng';
 import type { GameState } from '../src/domain/state';
@@ -52,30 +52,26 @@ describe('lineup draft', () => {
     expect(pos(next)).toEqual(pos(d));
   });
 
-  it("today's pitcher roles stay exclusive: one starter, the rest available or resting", () => {
-    const pitchers = s.clubs.hfx.roster.filter((id) => s.players[id].isPitcher && id !== d.lineup.pitcherId);
-    let x = setPitcherRole(d, pitchers[1], 'rest');
-    expect(pitcherRole(x, pitchers[1])).toBe('rest');
-    x = setPitcherRole(x, pitchers[1], 'starter');
-    expect(x.lineup.pitcherId).toBe(pitchers[1]);
-    expect(x.plan.rest).not.toContain(pitchers[1]);
-    expect(pitcherRole(x, d.lineup.pitcherId)).toBe('available');
-    // A starter cannot be rested at the same time.
-    expect(setPitcherRole(x, pitchers[1], 'rest')).toBe(x);
+  it("today's pitching slots stay exclusive: every pitcher has at most one slot", () => {
+    const pitchers = s.clubs.hfx.roster.filter((id) => s.players[id].isPitcher);
+    let x = d;
+    for (const [slot, i] of [['closer', 5], ['starter', 4], ['setup', 0], ['long', 6]] as const) x = assignPitcher(x, slot, pitchers[i]);
+    const slots = pitchers.map((id) => pitcherSlot(x, id)).filter(Boolean);
+    expect(new Set(slots).size).toBe(slots.length);
+    expect(slots.length).toBe(4);
   });
 });
 
 describe('confirmed selection reaches the simulator', () => {
-  it('uses the confirmed lineup and never uses a resting pitcher', () => {
+  it('uses the confirmed lineup and never uses a pitcher without a slot today', () => {
     let s = toLeagueGame(newGame(32));
     let d = draftFromClub(s);
     const bench = s.clubs.hfx.roster.filter((id) => !s.players[id].isPitcher && !d.lineup.battingOrder.some((x) => x.playerId === id));
     d = moveBatter(swapFromBench(d, 2, bench[0]), 0, 8);
-    const others = s.clubs.hfx.roster.filter((id) => s.players[id].isPitcher && id !== d.lineup.pitcherId);
-    const staff = s.clubs.hfx.staff!;
-    // Rest today's closer: the bullpen must work around him.
-    const rested = staff.closer && staff.closer !== d.lineup.pitcherId ? staff.closer : others[0];
-    d = setPitcherRole(d, rested, 'rest');
+    // Take today's closer out: a bench pitcher closes instead.
+    const rested = d.plan.bullpen.closer!;
+    const benchArm = s.clubs.hfx.roster.find((id) => s.players[id].isPitcher && !pitcherSlot(d, id))!;
+    d = assignPitcher(d, 'closer', benchArm);
     const r = confirm(s, d);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -85,8 +81,8 @@ describe('confirmed selection reaches the simulator', () => {
     expect(m.lineups[side].battingOrder).toEqual(d.lineup.battingOrder);
     expect(m.lineups[side].pitcherId).toBe(d.lineup.pitcherId);
     expect(m.pitchersUsed[side]).not.toContain(rested);
-    expect(m.pitchersUsed[side].length).toBeLessThanOrEqual(3);
-    // Today's rest list is cleared after the game; the hook preference stays.
+    expect(m.pitchersUsed[side].length).toBeLessThanOrEqual(4);
+    // Today's slots are cleared after the game; the hook preference stays.
     expect(s.clubs.hfx.pitchingPlan).toEqual({ ...defaultPitchingPlan(), hook: d.plan.hook });
     // Confirming twice is a no-op.
     expect(confirm(s, d).ok).toBe(false);
@@ -95,10 +91,10 @@ describe('confirmed selection reaches the simulator', () => {
   it('rejects an invalid plan with a concrete message and charges nothing', () => {
     const s = toLeagueGame(newGame(33));
     const d = draftFromClub(s);
-    const bad: LineupDraft = { ...d, plan: { ...d.plan, rest: [d.lineup.pitcherId] } };
+    const bad: LineupDraft = { ...d, plan: { ...d.plan, bullpen: { ...d.plan.bullpen, closer: d.lineup.pitcherId } } };
     const r = confirm(s, bad);
     expect(r.ok).toBe(false);
-    if (!r.ok) expect(r.error).toMatch(/starter and cannot also rest/);
+    if (!r.ok) expect(r.error).toMatch(/two roles today/);
   });
 
   it('the hook setting measurably changes how long starters pitch', () => {

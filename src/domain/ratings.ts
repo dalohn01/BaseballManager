@@ -48,6 +48,9 @@ function weighted(ratings: Record<RatingKey, number>, w: Weights): number {
 /** OVR at the player's primary position. */
 export const overall = (p: Player): number => (p.isPitcher ? weighted(p.ratings, PITCHER_OVR[pitcherPosition(p)]) : weighted(p.ratings, OVR_WEIGHTS[primaryPosition(p)]));
 
+/** A pitcher's OVR in a given job today: as the starter (stamina counts) or in relief. */
+export const overallAs = (p: Player, job: 'SP' | 'RP'): number => weighted(p.ratings, PITCHER_OVR[job]);
+
 /** OVR if he played a given position, including the match engine's out-of-position fielding penalty. */
 export function overallAt(p: Player, pos: LineupPosition | 'P'): number {
   const outOfPosition = pos !== 'DH' && pos !== 'P' && !p.positions.includes(pos);

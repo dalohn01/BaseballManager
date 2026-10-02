@@ -9,12 +9,13 @@ import { SCHEMA_VERSION } from '../src/domain/state';
 import { buildSimTeam, simulateMatch, tiresAfterBatters } from '../src/simulation/match';
 import { applyProgress } from '../src/simulation/training';
 import { newGame } from './helpers';
+import { defaultStaff } from '../src/domain/staff';
 
 describe('pitcher values: velocity, control, stamina, fielding', () => {
   it('every pitcher has four values; pitching is their derived quality; the rotation is SP and the bullpen mostly RP', () => {
     const s = newGame(601);
     for (const id of s.clubOrder) {
-      const staff = s.clubs[id].staff!;
+      const staff = defaultStaff(s, id);
       for (const pid of s.clubs[id].roster) {
         const p = s.players[pid];
         if (!p.isPitcher) continue;
@@ -42,7 +43,7 @@ describe('pitcher values: velocity, control, stamina, fielding', () => {
     expect(tiresAfterBatters('balanced', 40)).toBe(14);
     expect(tiresAfterBatters('attack', 70)).toBe(23);
     const s = structuredClone(newGame(602));
-    const p = s.players[s.clubs.hfx.staff!.rotation[0]];
+    const p = s.players[defaultStaff(s, 'hfx').rotation[0]];
     const before = overall(p);
     p.ratings.stamina += 10;
     expect(overall(p)).toBeGreaterThan(before);
@@ -78,7 +79,7 @@ describe('pitcher values: velocity, control, stamina, fielding', () => {
 
   it('training velocity or control keeps the derived pitching in line', () => {
     const s = structuredClone(newGame(604));
-    const p = s.players[s.clubs.hfx.staff!.rotation[0]];
+    const p = s.players[defaultStaff(s, 'hfx').rotation[0]];
     p.progress.velocity = 99;
     applyProgress(p, 'velocity', 40, 1, createRng(1));
     expect(p.ratings.pitching).toBe(Math.round((p.ratings.velocity + p.ratings.control) / 2));
@@ -89,6 +90,7 @@ describe('migration to four pitcher values (v13)', () => {
   it('splits pitching around the old value and gives the rotation starter stamina', () => {
     const v12 = JSON.parse(JSON.stringify(newGame(605)));
     v12.schemaVersion = 12;
+    for (const id of v12.clubOrder) v12.clubs[id].staff = JSON.parse(JSON.stringify(defaultStaff(newGame(605), id)));
     const old: Record<string, number> = {};
     for (const p of Object.values(v12.players) as { id: string; isPitcher: boolean; ratings: Record<string, number>; progress: Record<string, number> }[]) {
       for (const k of ['velocity', 'control', 'stamina']) {
@@ -104,7 +106,7 @@ describe('migration to four pitcher values (v13)', () => {
       if (!p.isPitcher) continue;
       expect(Math.abs((p.ratings.velocity + p.ratings.control) / 2 - old[p.id])).toBeLessThanOrEqual(0.5);
     }
-    for (const id of m.clubOrder) for (const pid of m.clubs[id].staff!.rotation) expect(pitcherPosition(m.players[pid])).toBe('SP');
+    for (const id of m.clubOrder) for (const pid of v12.clubs[id].staff.rotation) expect(pitcherPosition(m.players[pid])).toBe('SP');
     expect(JSON.stringify(migrate(JSON.parse(JSON.stringify(v12))).players)).toBe(JSON.stringify(m.players));
   });
 });

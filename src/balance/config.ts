@@ -50,6 +50,8 @@ export const BALANCE = {
   /** Direct manager actions (Influence, no Time). Durations and cooldowns count completed league games. */
   actions: {
     pepTalk: { influence: 40, ratingBoost: 3 },
+    /** Tactics session: the whole squad's Team modifier +team for the next game. */
+    tacticsSession: { influence: 60, cooldown: 2, team: 1 },
     extraTraining: { influence: 60, base: 45, fitness: -2, satisfaction: 2, duration: 1 },
     recovery: { influence: 60, cash: 0, fitnessNow: 10, duration: 1 },
     facilityUpgrade: { influence: 100 },
@@ -124,9 +126,6 @@ export const BALANCE = {
     /** After this many innings a clearly labelled prototype sudden-death decides the game. */
     suddenDeathAfterInning: 15,
     homeAdvantage: 1.5,
-    /** Rating points lost per fitness point below 100% (90% → −3, 80% → −6). */
-    fitnessPenaltyPerPoint: 0.3,
-    satisfactionSwing: 0.06,
     outOfPositionFieldingPenalty: 15,
     starterTiresAfterBatters: 18,
     /**
@@ -147,13 +146,13 @@ export const BALANCE = {
      * (see tests/calibration.test.ts). Ratings shift these per matchup.
      */
     odds: {
-      walk: 0.098,
-      strikeout: 0.215,
+      walk: 0.103,
+      strikeout: 0.19,
       /** Chance a ball in play (not a strikeout or walk) falls for a hit. */
-      hit: 0.362,
+      hit: 0.37,
       hitMax: 0.47,
       /** Shares of hits that go for extra bases (before power/speed shifts). */
-      homeRunShare: 0.095,
+      homeRunShare: 0.1,
       doubleShare: 0.18,
       tripleShare: 0.015,
       /** Balanced baserunning: runners at least this fast try to steal second. */
@@ -190,14 +189,10 @@ export const BALANCE = {
    * a penalty. Positive numbers below restore fitness, negative ones cost it.
    */
   fitness: {
-    /** Everyone recovers this much each new day (3 per round, as before per round). */
+    /** Hitters recover this much each new day; pitchers' rest is counted in games (BALANCE.modifiers.restStages). */
     naturalRecoveryPerDay: 1,
     lineupPerGame: -3,
     benchRecoveryPerGame: 4,
-    startingPitcherPerGame: -24,
-    reliefPitcherPerGame: -3,
-    /** Extra daily recovery for a pitcher who did not pitch the day before. */
-    pitcherRecoveryPerDay: 3,
     /** "Rest tired players" sits anyone below this if a replacement exists. */
     restBelow: 90,
     aiRestBelow: 82,
@@ -205,6 +200,57 @@ export const BALANCE = {
     warnBelow: 85,
     needsRestBelow: 80,
     exhaustedBelow: 72,
+  },
+
+  /**
+   * Effective value = OVR + four modifiers (Fitness, Morale, Team, Form): the
+   * same numbers the simulator adds to every rating a player uses today.
+   */
+  modifiers: {
+    /**
+     * Pitchers' rest is counted in their club's games: a start leaves him
+     * Exhausted, each game without pitching moves him one stage up and a relief
+     * outing one stage down. Stages are fitness bands; `fitness` is where a
+     * pitcher lands when he enters a stage.
+     */
+    restStages: [
+      { label: 'Exhausted', from: 0, fitness: 35, modifier: -25 },
+      { label: 'Tired', from: 50, fitness: 65, modifier: -10 },
+      { label: 'Ready', from: 80, fitness: 88, modifier: 0 },
+      { label: 'Fresh', from: 96, fitness: 100, modifier: 1 },
+    ],
+    /** Hitters: rating points lost per fitness point below 100% (90% → −3). */
+    hitterFitnessPerPoint: 0.3,
+    /** Morale from satisfaction: the first band the player reaches (else −2). */
+    morale: [
+      { from: 85, modifier: 2 },
+      { from: 70, modifier: 1 },
+      { from: 45, modifier: 0 },
+      { from: 30, modifier: -1 },
+    ],
+    /**
+     * Form: a running score from recent games, shown as −2..+2 (Very cold to
+     * Very hot). Each appearance: score × keep + game value × weight; every
+     * club game he does not play: score × idleKeep (drifts back to neutral).
+     * Pitchers sit out most games by design, so their form fades more slowly.
+     */
+    form: { keep: 0.75, weight: 0.35, idleKeep: { hitter: 0.8, pitcher: 0.93 }, cap: 2.5, leagueEra: 4.2 },
+    /**
+     * Team: the squad's shared state. Squad morale (average satisfaction), the
+     * hot and cold players (sum of form levels) and the fans' happiness, each
+     * scaled to −2..+2 and weighted. Temporary boosts (a tactics session) come
+     * on top, and a pep talk adds to that one player's Team.
+     */
+    team: {
+      weights: { morale: 0.5, form: 0.3, fans: 0.2 },
+      moraleNeutral: 65,
+      moralePerStep: 12,
+      formPerStep: 6,
+      fansNeutral: 75,
+      fansPerStep: 15,
+    },
+    /** Default pitching: a starter in a relief slot counts this much lower (he usually only starts). */
+    starterInReliefPenalty: 8,
   },
 
   training: {
@@ -323,25 +369,22 @@ export const BALANCE = {
   },
 
   /**
-   * Pitching staff: a standing rotation (the next starter comes up in turn)
-   * and bullpen roles with simple entry rules. At most `maxPitchersPerGame`
+   * Pitching is set per game: a starter and three relief slots with simple
+   * entry rules. At most `maxPitchersPerGame`
    * per side: the starter goes by the hook; then long relief early (to the
    * 5th), setup in the 6th–8th, and the closer in a save situation from the
    * 9th (lead of 1–3 runs when the inning starts).
    */
   pitching: {
-    maxPitchersPerGame: 3,
+    /** The starter plus today's three relief slots. */
+    maxPitchersPerGame: 4,
     /** Pitchers with at least this stamina are SP (starters), the rest RP (relievers). */
     starterStaminaFrom: 55,
     /** Batters before a pitcher tires = tiresBase + stamina × tiresPerStamina (stamina 70 → 20, 40 → 14). */
     tiresBase: 6,
     tiresPerStamina: 0.2,
+    /** Starters in a club's depth chart (Team OVR, old saves). */
     rotationSize: 4,
-    maxRotation: 5,
-    /** A rotation pitcher below this fitness is skipped (the next ready one starts). */
-    starterReadyFitness: 80,
-    /** A bullpen arm below this fitness is not used. */
-    relieverMinFitness: 60,
     longReliefUntilInning: 5,
     setupFromInning: 6,
     saveLead: [1, 3] as const,

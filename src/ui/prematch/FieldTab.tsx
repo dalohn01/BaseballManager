@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { BALANCE } from '../../balance/config';
-import { benchSwapBlocker, setPitcherRole, suitability, swapFromBench, swapPositions } from '../../domain/lineupDraft';
+import { assignPitcher, benchSwapBlocker, suitability, swapFromBench, swapPositions } from '../../domain/lineupDraft';
 import { battingStats, gamesWithoutStart, pitcherWorkload, playerNotes, pitchingStats, fmtRate, fmtEra, fmtIp } from '../../domain/playerStats';
 import { overall, overallAt } from '../../domain/ratings';
 import { playerName, shortName, userClub } from '../../domain/state';
@@ -60,7 +60,7 @@ export function FieldTab({ api }: { api: DraftApi }) {
     if (!proposal) return;
     if (proposal.kind === 'bench') update(swapFromBench(draft, proposal.index, proposal.inId));
     else if (proposal.kind === 'positions') update(swapPositions(draft, proposal.a, proposal.b));
-    else update(setPitcherRole(draft, proposal.inId, 'starter'));
+    else update(assignPitcher(draft, 'starter', proposal.inId));
     setProposal(null);
     setSel(null);
   };

@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { ActionConfirm } from '../components/ActionConfirm';
 import { releaseBlocker, releaseCost } from '../../application/engine';
 import { effectiveRating } from '../../domain/lineup';
+import { effectiveValue, restText, teamModifier } from '../../domain/effective';
+import { EffValue, ModChips, modifierReasons } from '../components/Modifiers';
 import { BALANCE } from '../../balance/config';
 import { fitnessLabel, moodLabel, moodThresholds } from '../../domain/mood';
 import { playerName, userClub } from '../../domain/state';
@@ -145,8 +147,8 @@ export function PlayerScreen({ id }: { id: string }) {
                       <span className="ab-num">{p.ratings[k]}</span>
                       {lastGain.get(k) ? <span className="gain">↑ +{lastGain.get(k)}</span> : null}
                     </span>
-                    <span className="ab-eff small muted" title="Rating used in matches after fitness and mood">
-                      today {Math.round(effectiveRating(p, k))}
+                    <span className="ab-eff small muted" title="Rating used in matches today: with Fitness, Morale, Team and Form">
+                      today {Math.round(effectiveRating(p, k) + (p.clubId ? teamModifier(s, p) : 0))}
                     </span>
                   </li>
                 ))}
@@ -236,7 +238,12 @@ export function PlayerScreen({ id }: { id: string }) {
 
         <Panel title="Player status" className="profile-status">
           <Meter label="Happiness" value={p.satisfaction} caption={`${moodLabel('player', p.satisfaction)}${th.below !== null ? ` · drops a level below ${th.below}` : ''}`} />
-          <Meter label="Fitness" value={p.fitness} display={`${p.fitness}%`} caption={`${fitnessLabel(p.fitness)} · 100% = fully ready; each point below costs ${BALANCE.match.fitnessPenaltyPerPoint} rating`} tone={p.fitness < BALANCE.fitness.warnBelow ? 'warn' : 'slate'} />
+          {p.isPitcher ? (
+            <Meter label="Rest" value={p.fitness} display={restText(p)} caption="Counted in games: a start leaves him Exhausted (−25), then Tired (−10), Ready (0), Fresh (+1); relief costs one stage" tone={p.fitness < BALANCE.fitness.needsRestBelow ? 'warn' : 'slate'} />
+          ) : (
+            <Meter label="Fitness" value={p.fitness} display={`${p.fitness}%`} caption={`${fitnessLabel(p.fitness)} · 100% = fully ready; each point below costs ${BALANCE.modifiers.hitterFitnessPerPoint} rating`} tone={p.fitness < BALANCE.fitness.warnBelow ? 'warn' : 'slate'} />
+          )}
+          {p.clubId && s.clubs[p.clubId] && <TodayValue id={p.id} />}
           <Meter label="Popularity" value={p.popularity} caption="How much the fans love him" />
           <PersonalityItem id={p.id} />
           {p.moodLog.length > 0 && (
@@ -397,6 +404,22 @@ function PersonalityItem({ id }: { id: string }) {
             ))}
           </dl>
         </details>
+      </div>
+    </div>
+  );
+}
+
+/** Today's effective value: OVR plus Fitness, Morale, Team and Form. */
+function TodayValue({ id }: { id: string }) {
+  const s = useGame();
+  const p = s.players[id];
+  const v = effectiveValue(s, p);
+  return (
+    <div className="status-item block today-value">
+      <small>Effective today</small>
+      <div className="tv-row">
+        <EffValue ovr={v.ovr} eff={v.effective} />
+        <ModChips mods={v.mods} reasons={modifierReasons(s, p)} />
       </div>
     </div>
   );

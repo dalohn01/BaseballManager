@@ -24,7 +24,8 @@ type IconName =
   | 'warning'
   | 'mic'
   | 'pause'
-  | 'list';
+  | 'list'
+  | 'swap';
 
 const PATHS: Record<IconName, string> = {
   cash: 'M3 7h18v10H3z M12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M6 9.5v5 M18 9.5v5',
@@ -51,6 +52,7 @@ const PATHS: Record<IconName, string> = {
   mic: 'M12 3a3 3 0 0 0-3 3v6a3 3 0 0 0 6 0V6a3 3 0 0 0-3-3z M5.5 11a6.5 6.5 0 0 0 13 0 M12 17.5V21 M8.5 21h7',
   pause: 'M8 5v14 M16 5v14',
   list: 'M9 6h11 M9 12h11 M9 18h11 M4.5 6h.01 M4.5 12h.01 M4.5 18h.01',
+  swap: 'M7 4L3 8l4 4 M3 8h14 M17 12l4 4-4 4 M21 16H7',
 };
 
 const FILLED: Partial<Record<IconName, boolean>> = { influence: true, play: true, forward: true };

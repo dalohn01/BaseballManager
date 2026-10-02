@@ -1,6 +1,6 @@
 import { BALANCE } from '../balance/config';
 import type { GameState } from './state';
-import { normalizeStaff, type PitchingStaff } from './staff';
+import { defaultStaff, type PitchingStaff } from './staff';
 import type { ClubId, DefensivePosition, LineupPosition, Player, PlayerId, RatingKey } from './types';
 
 /*
@@ -132,7 +132,7 @@ export function teamOvr(state: GameState, clubId: ClubId): TeamOvr | null {
     m = new Map();
     cache.set(state, m);
   }
-  if (!m.has(clubId)) m.set(clubId, computeTeamOvr(state.clubs[clubId].roster.map((id) => state.players[id]).filter(Boolean), normalizeStaff(state, clubId, state.clubs[clubId].staff)));
+  if (!m.has(clubId)) m.set(clubId, computeTeamOvr(state.clubs[clubId].roster.map((id) => state.players[id]).filter(Boolean), defaultStaff(state, clubId)));
   return m.get(clubId)!;
 }
 

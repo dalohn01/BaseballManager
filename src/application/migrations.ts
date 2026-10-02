@@ -7,6 +7,7 @@ import { BALANCE } from '../balance/config';
 import { generatePersonality, personalitySeed, PRIORITY_HINT } from '../domain/personality';
 import type { Player } from '../domain/types';
 import { defaultPitchingPlan } from '../domain/lineup';
+import { bestPitching, emptyBullpen } from '../domain/todayPitching';
 import { cycleId, defaultActions, defaultCycle } from '../simulation/cycle';
 import { defaultTactics } from '../domain/tactics';
 import { createRng } from '../domain/rng';
@@ -236,6 +237,25 @@ export function migrate(input: AnyState): GameState {
     for (const p of Object.values(s.players)) upgrade(p);
     for (const ev of [s.currentEvent, s.nextEvent]) for (const c of ev?.candidates ?? []) upgrade(c);
     s.schemaVersion = 13;
+  }
+  if (s.schemaVersion === 13) {
+    // Pitching is set per game: the standing staff goes, today's relief slots start empty
+    // (the strongest are used until the manager sets them). Pitchers' rest is counted in
+    // games from now on: each one lands at the start of the rest stage his fitness is in.
+    for (const p of Object.values(s.players)) {
+      if (!p.isPitcher) continue;
+      const stages = BALANCE.modifiers.restStages;
+      let stage = 0;
+      for (let i = stages.length - 1; i > 0; i--) if (p.fitness >= stages[i].from) { stage = i; break; }
+      p.fitness = stages[stage].fitness;
+    }
+    for (const clubId of s.clubOrder) {
+      const club = s.clubs[clubId];
+      delete club.staff;
+      club.pitchingPlan = { relieverId: null, rest: [], bullpen: emptyBullpen(), hook: club.pitchingPlan?.hook ?? 'balanced' };
+      club.lineup = { ...club.lineup, pitcherId: bestPitching(s, clubId).starterId || club.lineup.pitcherId };
+    }
+    s.schemaVersion = 14;
   }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;

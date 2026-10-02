@@ -1,4 +1,6 @@
-import { absDay, advanceRotation, nextStarter } from '../domain/staff';
+import { absDay } from '../domain/staff';
+import { battingGameValue, pitchingGameValue, restAfterGame, updateForm } from '../domain/effective';
+import { bestPitching, emptyBullpen } from '../domain/todayPitching';
 import { BALANCE } from '../balance/config';
 import { settleFundraiser } from './actions';
 import type { EffectSink } from '../domain/effects';
@@ -49,7 +51,7 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
   if (!userGame) throw new Error('User has no game this round');
 
   state.clubs[state.userClubId].lineup = structuredClone(userLineup);
-  const fitnessBefore = Math.round(avg(clubPlayers(state, state.userClubId).map((p) => p.fitness)));
+  const fitnessBefore = Math.round(avg(clubPlayers(state, state.userClubId).filter((p) => !p.isPitcher).map((p) => p.fitness)));
   let userMatch: MatchResult | null = null;
   let expectedWin = 0.5;
 
@@ -63,9 +65,8 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
     applyStats(state, result);
     applyFitness(state, g.homeId, result, 'home');
     applyFitness(state, g.awayId, result, 'away');
-    // The rotation moves on past whoever started.
-    advanceRotation(state, g.homeId, result.lineups.home.pitcherId);
-    advanceRotation(state, g.awayId, result.lineups.away.pitcherId);
+    applyForm(state, g.homeId, result);
+    applyForm(state, g.awayId, result);
     if (g === userGame) {
       userMatch = result;
       const pHome = winProbability(home.strength, away.strength);
@@ -78,15 +79,16 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
   }
 
   const match = userMatch!;
-  // The next start goes to the next ready pitcher in the rotation unless the manager changes it.
+  // Pitching is set per game: the next one starts from the strongest setup again.
   const userClubState = state.clubs[state.userClubId];
-  userClubState.lineup = { ...userClubState.lineup, pitcherId: nextStarter(state, state.userClubId) };
-  // Reliever and rest applied to this game only; the hook setting is a standing preference.
-  userClubState.pitchingPlan = { relieverId: null, rest: [], hook: userClubState.pitchingPlan.hook };
+  userClubState.lineup = { ...userClubState.lineup, pitcherId: bestPitching(state, state.userClubId).starterId };
+  // The relief slots applied to this game only; the hook setting is a standing preference.
+  userClubState.pitchingPlan = { relieverId: null, rest: [], bullpen: emptyBullpen(), hook: userClubState.pitchingPlan.hook };
   // One more completed league game for durations and cooldowns; a pep talk lasts one game.
   state.cycle.matchesPlayed += 1;
   state.actions.motivated = [];
   state.actions.boosts = {};
+  delete state.actions.teamBoost;
   const raised = settleFundraiser(state);
   // Match-only tactics end with the match; the saved style and instructions stay.
   clearMatchTactics(userClubState);
@@ -94,11 +96,11 @@ export function playRound(state: GameState, userLineup: Lineup, rng: Rng, sink: 
   sink.record({
     targetKind: 'team',
     targetId: state.userClubId,
-    targetLabel: 'Squad average',
+    targetLabel: 'Hitters average',
     stat: 'fitness',
     statLabel: 'Fitness',
     before: fitnessBefore,
-    after: Math.round(avg(clubPlayers(state, state.userClubId).map((p) => p.fitness))),
+    after: Math.round(avg(clubPlayers(state, state.userClubId).filter((p) => !p.isPitcher).map((p) => p.fitness))),
   });
   const notes: string[] = [];
   if (raised > 0) notes.push(`Fundraiser complete: $${raised.toLocaleString('en-US')} set aside for facility upgrades.`);
@@ -157,24 +159,34 @@ function applyStats(state: GameState, m: MatchResult) {
   }
 }
 
-/** Match load and recovery for one round. Config values are fitness changes (negative = load). */
+/**
+ * Match load and recovery for one game. Pitchers' rest is counted in games: a
+ * start leaves him Exhausted, relief costs one stage, a game off gains one.
+ * Hitters lose fitness by playing and recover on the bench (and daily).
+ */
 function applyFitness(state: GameState, clubId: ClubId, m: MatchResult, side: 'home' | 'away') {
   const f = BALANCE.fitness;
   const lineup = m.lineups[side];
   const batters = new Set(lineup.battingOrder.map((s) => s.playerId));
   const used = m.pitchersUsed[side];
-  // Daily recovery happens as each day starts (recoverDay); here only the game's own load and bench rest.
   const today = absDay(state.calendar);
   for (const p of clubPlayers(state, clubId)) {
-    let delta = 0;
     if (p.isPitcher) {
-      if (p.id === lineup.pitcherId) delta += f.startingPitcherPerGame;
-      else if (used.includes(p.id)) delta += f.reliefPitcherPerGame;
+      restAfterGame(p, p.id === lineup.pitcherId ? 'start' : used.includes(p.id) ? 'relief' : 'none');
       if (used.includes(p.id)) p.pitchedOn = today;
     } else {
-      delta += batters.has(p.id) ? f.lineupPerGame : f.benchRecoveryPerGame;
+      const delta = batters.has(p.id) ? f.lineupPerGame : f.benchRecoveryPerGame;
+      p.fitness = Math.max(0, Math.min(100, p.fitness + delta));
     }
-    p.fitness = Math.max(0, Math.min(100, p.fitness + delta));
+  }
+}
+
+/** Form after a game: those who played move toward this game's value, the rest drift toward neutral. */
+function applyForm(state: GameState, clubId: ClubId, m: MatchResult) {
+  for (const p of clubPlayers(state, clubId)) {
+    const line = p.isPitcher ? m.pitching[p.id] : m.batting[p.id];
+    if (!line) updateForm(p, null);
+    else updateForm(p, p.isPitcher ? pitchingGameValue(m.pitching[p.id]) : battingGameValue(m.batting[p.id]));
   }
 }
 

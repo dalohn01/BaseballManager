@@ -1,4 +1,5 @@
-import { nextStarter } from './staff';
+import { personalModifier, restLabel, restStage } from './effective';
+import { bestPitching, emptyBullpen, RELIEF_SLOTS } from './todayPitching';
 import { BALANCE } from '../balance/config';
 import type { GameState } from './state';
 import type {
@@ -14,11 +15,9 @@ import type {
 } from './types';
 import { DEFENSIVE_POSITIONS, LINEUP_POSITIONS } from './types';
 
-/** Rating as used in matches: fitness below 100% lowers it, satisfaction nudges it slightly. */
+/** Rating as used in matches: the base rating plus Fitness, Morale and Form (Team is added per club). */
 export function effectiveRating(p: Player, key: RatingKey): number {
-  const m = BALANCE.match;
-  const v = p.ratings[key] - (100 - p.fitness) * m.fitnessPenaltyPerPoint + (p.satisfaction - 50) * m.satisfactionSwing;
-  return Math.max(1, v);
+  return Math.max(1, p.ratings[key] + personalModifier(p));
 }
 
 export const offenseScore = (p: Player) =>
@@ -65,8 +64,8 @@ export function validateLineup(state: GameState, clubId: ClubId, lineup: Lineup)
   const pitcher = state.players[lineup.pitcherId];
   if (!pitcher || !roster.has(lineup.pitcherId) || !pitcher.isPitcher) {
     issues.push({ severity: 'error', text: 'Choose a starting pitcher from the roster.' });
-  } else if (pitcher.fitness < BALANCE.fitness.needsRestBelow) {
-    issues.push({ severity: 'warning', text: `${pitcher.lastName} is tired (fitness ${pitcher.fitness}%) and will pitch worse.` });
+  } else if (restStage(pitcher) < 2) {
+    issues.push({ severity: 'warning', text: `${pitcher.lastName} is ${restLabel(restStage(pitcher)).toLowerCase()} and will pitch much worse today.` });
   }
   return issues;
 }
@@ -74,24 +73,25 @@ export function validateLineup(state: GameState, clubId: ClubId, lineup: Lineup)
 export const isLineupValid = (state: GameState, clubId: ClubId, lineup: Lineup) =>
   validateLineup(state, clubId, lineup).every((i) => i.severity !== 'error');
 
-export const defaultPitchingPlan = (): PitchingPlan => ({ relieverId: null, rest: [], hook: 'balanced' });
+export const defaultPitchingPlan = (): PitchingPlan => ({ relieverId: null, rest: [], bullpen: emptyBullpen(), hook: 'balanced' });
 
-/** Problems with a pitching plan for a given starter. Errors block confirmation; warnings inform. */
+/** Problems with today's pitching for a given starter. Errors block confirmation; warnings inform. */
 export function validatePitchingPlan(state: GameState, clubId: ClubId, starterId: PlayerId, plan: PitchingPlan): LineupIssue[] {
   const club = state.clubs[clubId];
   const issues: LineupIssue[] = [];
-  const pitchers = club.roster.map((id) => state.players[id]).filter((p) => p.isPitcher);
-  const name = (id: PlayerId) => state.players[id]?.lastName ?? 'That pitcher';
-  if (plan.rest.includes(starterId)) issues.push({ severity: 'error', text: `${name(starterId)} is today's starter and cannot also rest.` });
-  if (plan.relieverId) {
-    if (plan.relieverId === starterId) issues.push({ severity: 'error', text: `${name(starterId)} cannot be both starter and reliever.` });
-    else if (!pitchers.some((p) => p.id === plan.relieverId)) issues.push({ severity: 'error', text: 'The planned reliever is not on the roster.' });
-    else if (plan.rest.includes(plan.relieverId)) issues.push({ severity: 'error', text: `${name(plan.relieverId)} cannot relieve and rest at the same time.` });
+  const pitchers = new Set(club.roster.filter((id) => state.players[id]?.isPitcher));
+  const seen = new Set<PlayerId>([starterId]);
+  const pen = plan.bullpen ?? emptyBullpen();
+  for (const slot of RELIEF_SLOTS) {
+    const id = pen[slot];
+    if (!id) continue;
+    const p = state.players[id];
+    if (!pitchers.has(id)) issues.push({ severity: 'error', text: 'A relief pitcher is no longer on the roster.' });
+    else if (seen.has(id)) issues.push({ severity: 'error', text: `${p.lastName} has two roles today.` });
+    else if (restStage(p) === 0) issues.push({ severity: 'warning', text: `${p.lastName} is exhausted and will pitch much worse in relief.` });
+    seen.add(id);
   }
-  const available = pitchers.filter((p) => p.id !== starterId && !plan.rest.includes(p.id));
-  if (available.length === 0) {
-    issues.push({ severity: 'warning', text: 'No reliever is available: the starter will pitch the whole game, whatever happens.' });
-  }
+  if (!RELIEF_SLOTS.some((s) => pen[s])) issues.push({ severity: 'warning', text: 'No relief pitcher is set: the strongest available will be used.' });
   return issues;
 }
 
@@ -134,14 +134,7 @@ export function autoLineup(state: GameState, clubId: ClubId, opts: AutoLineupOpt
 
   const battingOrder = orderBatters(state, slots);
 
-  return { battingOrder, pitcherId: nextStarter(state, clubId) };
-}
-
-/** Rotation helper: strongest pitcher once fitness is taken into account. */
-export function bestRestedPitcher(state: GameState, clubId: ClubId): string {
-  const pitchers = state.clubs[clubId].roster.map((id) => state.players[id]).filter((p) => p.isPitcher);
-  const value = (p: Player) => effectiveRating(p, 'pitching') - (100 - p.fitness) * 1.5;
-  return [...pitchers].sort((a, b) => value(b) - value(a) || a.id.localeCompare(b.id))[0]?.id ?? '';
+  return { battingOrder, pitcherId: bestPitching(state, clubId).starterId };
 }
 
 /** Classic shape: on-base/speed first, best hitters 2–4, rest descending. */
