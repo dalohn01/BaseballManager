@@ -381,7 +381,7 @@ function PitcherCard({ match, pitcherId, line, fieldingClubId }: { match: MatchR
   const s = useGame();
   const p = s.players[pitcherId];
   const style = match.pitchStyles?.[pitcherId] ?? 'balanced';
-  const limit = tiresAfterBatters(style);
+  const limit = tiresAfterBatters(style, p?.ratings.stamina);
   const drop = Math.max(0, line.bf - limit);
   const left = limit - line.bf;
   const status = drop > 0 ? 'tired' : left <= 3 ? 'tiring' : 'fresh';

@@ -12,7 +12,8 @@ export type DefensivePosition = (typeof DEFENSIVE_POSITIONS)[number];
 export type LineupPosition = DefensivePosition | 'DH';
 export const LINEUP_POSITIONS: LineupPosition[] = [...DEFENSIVE_POSITIONS, 'DH'];
 
-export type RatingKey = 'contact' | 'power' | 'speed' | 'fielding' | 'pitching';
+/** Hitters: contact, power, speed, fielding. Pitchers: velocity, control, stamina, fielding; pitching = (velocity + control) / 2, kept in sync. */
+export type RatingKey = 'contact' | 'power' | 'speed' | 'fielding' | 'pitching' | 'velocity' | 'control' | 'stamina';
 export type Ratings = Record<RatingKey, number>;
 
 /** Legacy single-trait field (replaced by `personality`; only read by the v10 migration). */

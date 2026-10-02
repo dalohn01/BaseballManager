@@ -40,7 +40,7 @@ describe('Team OVR', () => {
     const before = teamOvr(s, s.userClubId)!;
     const t = fresh(s);
     const base = roster(t)[0];
-    const rookie: Player = { ...structuredClone(base), id: 'pX', role: 'prospect', ratings: { contact: 30, power: 30, speed: 30, fielding: 30, pitching: 10 } };
+    const rookie: Player = { ...structuredClone(base), id: 'pX', role: 'prospect', ratings: { contact: 30, power: 30, speed: 30, fielding: 30, pitching: 10, velocity: 10, control: 10, stamina: 10 } };
     t.players[rookie.id] = rookie;
     t.clubs[t.userClubId].roster.push(rookie.id);
     const after = teamOvr(t, t.userClubId)!;

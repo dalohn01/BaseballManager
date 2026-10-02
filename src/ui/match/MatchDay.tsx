@@ -1,3 +1,5 @@
+import { pitcherPosition } from '../../domain/pitching';
+import { overall } from '../../domain/ratings';
 import { useSyncExternalStore } from 'react';
 import { ballparkName } from '../../content/ballparks';
 import { nextStarter } from '../../domain/staff';
@@ -95,7 +97,7 @@ export function MatchDayCard({ ev }: { ev: EventInstance }) {
               <small>Your starter</small>
               <strong>{playerName(starter)}</strong>
               <small className="muted">
-                PIT {starter.ratings.pitching} · {starter.fitness}%
+                {pitcherPosition(starter)} · OVR {overall(starter)} · {starter.fitness}%
               </small>
             </span>
           </div>

@@ -17,13 +17,16 @@ import { href, useController, useGame, useSnapshot } from '../hooks';
 import { instructionSummary, InstructionsEditor } from '../tactics/TacticsControls';
 
 const HITTER_KEYS: RatingKey[] = ['contact', 'power', 'speed', 'fielding'];
-const PITCHER_KEYS: RatingKey[] = ['pitching', 'fielding'];
-const ICONS: Record<RatingKey, 'bat' | 'chart' | 'forward' | 'glove' | 'influence'> = {
+const PITCHER_KEYS: RatingKey[] = ['velocity', 'control', 'stamina', 'fielding'];
+const ICONS: Record<RatingKey, 'bat' | 'chart' | 'forward' | 'glove' | 'influence' | 'check' | 'recovery'> = {
   contact: 'bat',
   power: 'chart',
   speed: 'forward',
   fielding: 'glove',
   pitching: 'influence',
+  velocity: 'influence',
+  control: 'check',
+  stamina: 'recovery',
 };
 
 export function PlayerScreen({ id }: { id: string }) {

@@ -66,8 +66,8 @@ export function PitchersTab({ api, gameId }: { api: DraftApi; gameId: string }) 
         <div className="p-list-head" aria-hidden="true">
           <span />
           <span />
-          <span>PIT</span>
           <span>OVR</span>
+          <span>VEL · CTL · STA</span>
           <span>Condition</span>
           <span>Morale</span>
           <span>{mode === 'stats' ? 'Season' : 'Last outing'}</span>

@@ -1,3 +1,4 @@
+import { withPitchingRatings } from '../domain/pitching';
 import { createPlayer, marketSalary } from '../content/playerFactory';
 import { defaultStaff, nextStarter, normalizeStaff } from '../domain/staff';
 import { hashSeed } from '../domain/rng';
@@ -220,6 +221,21 @@ export function migrate(input: AnyState): GameState {
       club.staff = staff;
     }
     s.schemaVersion = 12;
+  }
+  if (s.schemaVersion === 12) {
+    // Pitchers get four values like hitters: pitching splits into velocity and control
+    // around the old value (their average stays it), and stamina follows the staff role:
+    // the rotation lasts long, the bullpen is short. Hitters get placeholder values.
+    const rotation = new Set(s.clubOrder.flatMap((id) => s.clubs[id].staff?.rotation ?? []));
+    const upgrade = (p: Player) => {
+      if (p.ratings.velocity !== undefined) return;
+      const r = withPitchingRatings(p.id, p.isPitcher, p.ratings, rotation.has(p.id) || (!p.clubId && p.role === 'starter'));
+      p.ratings = r;
+      p.progress = { ...p.progress, velocity: 0, control: 0, stamina: 0 };
+    };
+    for (const p of Object.values(s.players)) upgrade(p);
+    for (const ev of [s.currentEvent, s.nextEvent]) for (const c of ev?.candidates ?? []) upgrade(c);
+    s.schemaVersion = 13;
   }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;

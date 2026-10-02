@@ -1,3 +1,5 @@
+import { withPitchingRatings } from '../domain/pitching';
+import { hashSeed } from '../domain/rng';
 import { generatePersonality, personalitySeed, PRIORITY_HINT } from '../domain/personality';
 import { BALANCE } from '../balance/config';
 import { clamp, type Rng } from '../domain/rng';
@@ -70,7 +72,8 @@ export function createPlayer(spec: PlayerSpec, rng: Rng): Player {
   const speed = r(pos === 'CF' || pos === 'SS' ? spec.level + 8 : pitcher ? 40 : spec.level - 6);
   const fielding = r(pos === 'DH' ? spec.level - 14 : spec.level + 2);
   const pitching = pitcher ? r(spec.level, 5) : 10;
-  const ratings = { contact, power, speed, fielding, pitching };
+  // Starters last long; a drafted or signed pitcher without a starter role is a starter one time in three.
+  const ratings = withPitchingRatings(spec.id, pitcher, { contact, power, speed, fielding, pitching }, spec.role === 'starter' || hashSeed(`sp:${spec.id}`) % 3 === 0);
   const best = pitcher ? pitching : Math.max(contact, fielding);
   const potential = clamp(best + spec.upside, best, 97);
   return {
@@ -85,7 +88,7 @@ export function createPlayer(spec: PlayerSpec, rng: Rng): Player {
     isPitcher: pitcher,
     positions: pitcher ? [] : SECONDARY[spec.primary],
     ratings,
-    progress: { contact: 0, power: 0, speed: 0, fielding: 0, pitching: 0 },
+    progress: { contact: 0, power: 0, speed: 0, fielding: 0, pitching: 0, velocity: 0, control: 0, stamina: 0 },
     potential,
     potentialEstimate: scoutEstimate(potential, best, spec.scoutingLevel, rng),
     fitness: rng.int(92, 98),

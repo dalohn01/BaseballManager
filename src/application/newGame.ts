@@ -1,3 +1,4 @@
+import { withPitchingRatings } from '../domain/pitching';
 import { defaultStaff } from '../domain/staff';
 import { generatePersonality, personalitySeed, PRIORITY_HINT } from '../domain/personality';
 import { BALANCE } from '../balance/config';
@@ -25,7 +26,8 @@ export interface NewGameOptions {
 }
 
 function playerFromSeed(seed: PlayerSeed, id: string, clubId: string, rng: Rng): Player {
-  const ratings = { contact: seed.contact, power: seed.power, speed: seed.speed, fielding: seed.fielding, pitching: seed.pitching };
+  const ratings = withPitchingRatings(id, !!seed.pitcher, { contact: seed.contact, power: seed.power, speed: seed.speed, fielding: seed.fielding, pitching: seed.pitching }, seed.role === 'starter');
+  if (seed.pitcher && seed.stamina) ratings.stamina = seed.stamina;
   const main = seed.pitcher ? seed.pitching : Math.max(seed.contact, seed.fielding);
   return {
     id,
@@ -39,7 +41,7 @@ function playerFromSeed(seed: PlayerSeed, id: string, clubId: string, rng: Rng):
     isPitcher: !!seed.pitcher,
     positions: seed.positions,
     ratings,
-    progress: { contact: 0, power: 0, speed: 0, fielding: 0, pitching: 0 },
+    progress: { contact: 0, power: 0, speed: 0, fielding: 0, pitching: 0, velocity: 0, control: 0, stamina: 0 },
     potential: seed.potential,
     potentialEstimate: scoutEstimate(seed.potential, main, 1, rng),
     fitness: seed.fitness,

@@ -116,7 +116,9 @@ export function hitterValues(state: GameState, p: Player, mode: DataMode, period
 export function pitcherValues(state: GameState, p: Player, mode: DataMode, period: StatsPeriod, compact = false): Val[] {
   if (mode === 'attributes') {
     return [
-      { label: 'PIT', value: String(p.ratings.pitching), title: 'Pitching' },
+      { label: 'VEL', value: String(p.ratings.velocity), title: 'Velocity: strikeouts' },
+      { label: 'CTL', value: String(p.ratings.control), title: 'Control: walks and mistakes' },
+      { label: 'STA', value: String(p.ratings.stamina), title: 'Stamina: how long he lasts' },
       { label: 'OVR', value: String(overall(p)) },
     ];
   }

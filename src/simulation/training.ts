@@ -1,3 +1,4 @@
+import { syncPitching } from '../domain/pitching';
 import { demandingness, moodPenaltyShare, nd, trainingFactor } from '../domain/personality';
 import { BALANCE } from '../balance/config';
 import { clamp, type Rng } from '../domain/rng';
@@ -61,6 +62,7 @@ export function applyProgress(
   if (rating >= Math.min(100, p.potential)) progress = Math.min(progress, 99);
   p.ratings[key] = rating;
   p.progress[key] = progress;
+  if (key === 'velocity' || key === 'control') syncPitching(p);
   return { gain, ratingBefore, ratingAfter: rating, progressBefore, progressAfter: progress, atCeiling: expected === 0 };
 }
 
@@ -184,7 +186,7 @@ export function runTeamTraining(
     for (const p of players) {
       const keys: RatingKey[] = p.isPitcher
         ? focus === 'defense'
-          ? ['pitching']
+          ? ['velocity', 'control']
           : []
         : focus === 'batting'
           ? ['contact', 'power']

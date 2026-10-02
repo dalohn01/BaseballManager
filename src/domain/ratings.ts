@@ -1,3 +1,4 @@
+import { pitcherPosition } from './pitching';
 import { BALANCE } from '../balance/config';
 import type { LineupPosition, Player, RatingKey } from './types';
 
@@ -22,7 +23,14 @@ export const OVR_WEIGHTS: Record<LineupPosition | 'P', Weights> = {
   LF: CORNER,
   RF: CORNER,
   DH: { contact: 0.5, power: 0.42, speed: 0.08 },
-  P: { pitching: 0.92, fielding: 0.08 },
+  /** Generic pitcher (no stamina view): velocity and control, as before. */
+  P: { velocity: 0.46, control: 0.46, fielding: 0.08 },
+};
+
+/** Starters need stamina; relievers are judged on stuff and control. */
+export const PITCHER_OVR: Record<'SP' | 'RP', Weights> = {
+  SP: { velocity: 0.36, control: 0.36, stamina: 0.2, fielding: 0.08 },
+  RP: { velocity: 0.48, control: 0.44, fielding: 0.08 },
 };
 
 export const primaryPosition = (p: Player): LineupPosition | 'P' => (p.isPitcher ? 'P' : (p.positions[0] ?? 'DH'));
@@ -38,7 +46,7 @@ function weighted(ratings: Record<RatingKey, number>, w: Weights): number {
 }
 
 /** OVR at the player's primary position. */
-export const overall = (p: Player): number => weighted(p.ratings, OVR_WEIGHTS[primaryPosition(p)]);
+export const overall = (p: Player): number => (p.isPitcher ? weighted(p.ratings, PITCHER_OVR[pitcherPosition(p)]) : weighted(p.ratings, OVR_WEIGHTS[primaryPosition(p)]));
 
 /** OVR if he played a given position, including the match engine's out-of-position fielding penalty. */
 export function overallAt(p: Player, pos: LineupPosition | 'P'): number {
@@ -52,7 +60,7 @@ export function overallAt(p: Player, pos: LineupPosition | 'P'): number {
  * best rating, shifted by how far OVR sits below that rating today.
  */
 export function potentialOverall(p: Player): { low: number; high: number } {
-  const best = p.isPitcher ? p.ratings.pitching : Math.max(p.ratings.contact, p.ratings.fielding);
+  const best = p.isPitcher ? Math.max(p.ratings.velocity, p.ratings.control) : Math.max(p.ratings.contact, p.ratings.fielding);
   const ovr = overall(p);
   const gap = best - ovr;
   return {

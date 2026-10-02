@@ -45,6 +45,8 @@ export interface PlayerSeed {
   speed: number;
   fielding: number;
   pitching: number;
+  /** Pitchers: how long he lasts (SP from 55). Generated when absent. */
+  stamina?: number;
   potential: number;
   satisfaction: number;
   popularity: number;
@@ -74,13 +76,13 @@ export const USER_ROSTER: PlayerSeed[] = [
   { firstName: 'Dwayne', lastName: 'Price', number: 25, age: 28, bats: 'R', throws: 'R', positions: ['LF', 'RF'], contact: 60, power: 58, speed: 60, fielding: 58, pitching: 10, potential: 63, satisfaction: 60, popularity: 44, fitness: 89, priority: 'money', role: 'starter', salary: 34_000, seasonsLeft: 1, bio: 'Streaky left fielder with pop.' },
   { firstName: 'Diego', lastName: 'Ramos', number: 9, age: 30, bats: 'R', throws: 'R', positions: ['C'], contact: 55, power: 54, speed: 30, fielding: 72, pitching: 10, potential: 58, satisfaction: 66, popularity: 50, fitness: 87, priority: 'loyalty', role: 'starter', salary: 42_000, seasonsLeft: 2, bio: 'Veteran catcher who handles the staff.' },
   { firstName: 'Tom', lastName: 'Kowalski', number: 29, age: 25, bats: 'R', throws: 'R', positions: ['C', '1B'], contact: 50, power: 48, speed: 32, fielding: 62, pitching: 10, potential: 64, satisfaction: 60, popularity: 25, fitness: 96, priority: 'playingTime', role: 'reserve', salary: 18_000, seasonsLeft: 2, bio: 'Backup catcher waiting for his chance.' },
-  { firstName: 'Cole', lastName: 'Bennett', number: 31, age: 29, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 40, fielding: 55, pitching: 74, potential: 76, satisfaction: 70, popularity: 64, fitness: 92, priority: 'titles', role: 'starter', salary: 78_000, seasonsLeft: 2, bio: 'The ace. Wants to pitch in big games.' },
-  { firstName: 'Mateo', lastName: 'Silva', number: 45, age: 27, bats: 'L', throws: 'L', positions: [], pitcher: true, contact: 10, power: 10, speed: 40, fielding: 52, pitching: 66, potential: 70, satisfaction: 64, popularity: 40, fitness: 93, priority: 'money', role: 'starter', salary: 46_000, seasonsLeft: 2, bio: 'Crafty lefty with good command.' },
-  { firstName: 'Owen', lastName: 'Park', number: 51, age: 20, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 45, fielding: 50, pitching: 56, potential: 84, satisfaction: 62, popularity: 22, fitness: 97, priority: 'playingTime', role: 'prospect', salary: 12_000, seasonsLeft: 3, bio: 'Big arm, raw command. Could be special.' },
-  { firstName: 'Gus', lastName: 'Whitaker', number: 38, age: 36, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 30, fielding: 48, pitching: 62, potential: 62, satisfaction: 66, popularity: 70, fitness: 90, priority: 'loyalty', role: 'reserve', salary: 30_000, seasonsLeft: 1, bio: 'Veteran arm and local legend.' },
-  { firstName: 'Ray', lastName: 'Okafor', number: 47, age: 31, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 38, fielding: 50, pitching: 64, potential: 65, satisfaction: 68, popularity: 35, fitness: 94, priority: 'titles', role: 'reserve', salary: 26_000, seasonsLeft: 2, bio: 'Late-inning arm who wants the ball in big spots.' },
-  { firstName: 'Marcus', lastName: 'Lee', number: 27, age: 28, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 40, fielding: 53, pitching: 61, potential: 64, satisfaction: 67, popularity: 30, fitness: 95, priority: 'loyalty', role: 'reserve', salary: 24_000, seasonsLeft: 2, bio: 'Dependable swingman: starts or relieves.' },
-  { firstName: 'Danny', lastName: 'Cho', number: 29, age: 25, bats: 'L', throws: 'L', positions: [], pitcher: true, contact: 10, power: 10, speed: 42, fielding: 51, pitching: 58, potential: 68, satisfaction: 66, popularity: 24, fitness: 96, priority: 'playingTime', role: 'reserve', salary: 15_000, seasonsLeft: 2, bio: 'Lefty swingman who can pitch long.' },
+  { firstName: 'Cole', lastName: 'Bennett', number: 31, age: 29, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 40, fielding: 55, pitching: 74, stamina: 78, potential: 76, satisfaction: 70, popularity: 64, fitness: 92, priority: 'titles', role: 'starter', salary: 78_000, seasonsLeft: 2, bio: 'The ace. Wants to pitch in big games.' },
+  { firstName: 'Mateo', lastName: 'Silva', number: 45, age: 27, bats: 'L', throws: 'L', positions: [], pitcher: true, contact: 10, power: 10, speed: 40, fielding: 52, pitching: 66, stamina: 72, potential: 70, satisfaction: 64, popularity: 40, fitness: 93, priority: 'money', role: 'starter', salary: 46_000, seasonsLeft: 2, bio: 'Crafty lefty with good command.' },
+  { firstName: 'Owen', lastName: 'Park', number: 51, age: 20, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 45, fielding: 50, pitching: 56, stamina: 44, potential: 84, satisfaction: 62, popularity: 22, fitness: 97, priority: 'playingTime', role: 'prospect', salary: 12_000, seasonsLeft: 3, bio: 'Big arm, raw command. Could be special.' },
+  { firstName: 'Gus', lastName: 'Whitaker', number: 38, age: 36, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 30, fielding: 48, pitching: 62, stamina: 66, potential: 62, satisfaction: 66, popularity: 70, fitness: 90, priority: 'loyalty', role: 'reserve', salary: 30_000, seasonsLeft: 1, bio: 'Veteran arm and local legend.' },
+  { firstName: 'Ray', lastName: 'Okafor', number: 47, age: 31, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 38, fielding: 50, pitching: 64, stamina: 36, potential: 65, satisfaction: 68, popularity: 35, fitness: 94, priority: 'titles', role: 'reserve', salary: 26_000, seasonsLeft: 2, bio: 'Late-inning arm who wants the ball in big spots.' },
+  { firstName: 'Marcus', lastName: 'Lee', number: 27, age: 28, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 40, fielding: 53, pitching: 61, stamina: 63, potential: 64, satisfaction: 67, popularity: 30, fitness: 95, priority: 'loyalty', role: 'reserve', salary: 24_000, seasonsLeft: 2, bio: 'Dependable swingman: starts or relieves.' },
+  { firstName: 'Danny', lastName: 'Cho', number: 29, age: 25, bats: 'L', throws: 'L', positions: [], pitcher: true, contact: 10, power: 10, speed: 42, fielding: 51, pitching: 58, stamina: 52, potential: 68, satisfaction: 66, popularity: 24, fitness: 96, priority: 'playingTime', role: 'reserve', salary: 15_000, seasonsLeft: 2, bio: 'Lefty swingman who can pitch long.' },
 ];
 
 /** Position template for generated 18-man rosters: 11 hitters + 7 pitchers (four starters, three relievers). */
@@ -99,7 +101,7 @@ export const GENERATED_ROSTER_SHAPE: { positions: LineupPosition[]; pitcher?: bo
   { positions: [], pitcher: true, role: 'starter' },
   { positions: [], pitcher: true, role: 'starter' },
   { positions: [], pitcher: true, role: 'starter' },
-  { positions: [], pitcher: true, role: 'reserve' },
+  { positions: [], pitcher: true, role: 'starter' },
   { positions: [], pitcher: true, role: 'reserve' },
   { positions: [], pitcher: true, role: 'reserve' },
   { positions: [], pitcher: true, role: 'reserve' },

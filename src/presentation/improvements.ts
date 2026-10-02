@@ -10,7 +10,7 @@ import type { ClubId, PlayerId, RatingKey } from '../domain/types';
  * game data.
  */
 
-export const RATING_KEYS: RatingKey[] = ['contact', 'power', 'speed', 'fielding', 'pitching'];
+export const RATING_KEYS: RatingKey[] = ['contact', 'power', 'speed', 'fielding', 'velocity', 'control', 'stamina'];
 const isRating = (stat: string): stat is RatingKey => (RATING_KEYS as string[]).includes(stat);
 
 export interface PlayerImprovement {
@@ -61,7 +61,13 @@ export function teamOvrChange(state: GameState, clubId: ClubId, effects: EffectR
     if (m[e.stat] === undefined) m[e.stat] = e.before;
     back.set(e.targetId, m);
   }
-  const then = now.map((p) => (back.has(p.id) ? { ...p, ratings: { ...p.ratings, ...back.get(p.id) } } : p));
+  const then = now.map((p) => {
+    if (!back.has(p.id)) return p;
+    const ratings = { ...p.ratings, ...back.get(p.id) };
+    // A pitcher's quality is derived from velocity and control.
+    if (p.isPitcher) ratings.pitching = Math.round((ratings.velocity + ratings.control) / 2);
+    return { ...p, ratings };
+  });
   const before = computeTeamOvr(then, staff);
   if (!before) return null;
   return { before: ovrDisplay(before.overall), after: ovrDisplay(after.overall) };

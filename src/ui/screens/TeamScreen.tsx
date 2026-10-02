@@ -1,3 +1,4 @@
+import { positionLabel } from '../../domain/pitching';
 import { StaffTab } from '../prematch/StaffTab';
 import { TeamStrength } from '../components/TeamOvr';
 import { useState } from 'react';
@@ -119,9 +120,9 @@ function RosterView() {
                   <th scope="col" title="Overall rating at his primary position">OVR</th>
                   <th scope="col">Pos</th>
                   <th scope="col">Age</th>
-                  <th scope="col" title="Contact / Pitching">CON/PIT</th>
-                  <th scope="col">POW</th>
-                  <th scope="col">SPD</th>
+                  <th scope="col" title="Hitters: contact · Pitchers: velocity">CON·VEL</th>
+                  <th scope="col" title="Hitters: power · Pitchers: control">POW·CTL</th>
+                  <th scope="col" title="Hitters: speed · Pitchers: stamina">SPD·STA</th>
                   <th scope="col">FLD</th>
                   <th scope="col" title="Happiness">Happy</th>
                   <th scope="col" title="Fitness: match readiness, 100% = fully ready">Fit.</th>
@@ -161,11 +162,11 @@ function RosterRow({ p, starting }: { p: Player; starting: boolean }) {
       <td>
         <OvrBadge player={p} size="sm" />
       </td>
-      <td>{p.isPitcher ? 'P' : p.positions.join('/')}</td>
+      <td>{positionLabel(p)}</td>
       <td>{p.age}</td>
-      <td className="num">{p.isPitcher ? p.ratings.pitching : p.ratings.contact}</td>
-      <td className="num">{p.isPitcher ? '–' : p.ratings.power}</td>
-      <td className="num">{p.ratings.speed}</td>
+      <td className="num">{p.isPitcher ? p.ratings.velocity : p.ratings.contact}</td>
+      <td className="num">{p.isPitcher ? p.ratings.control : p.ratings.power}</td>
+      <td className="num">{p.isPitcher ? p.ratings.stamina : p.ratings.speed}</td>
       <td className="num">{p.ratings.fielding}</td>
       <td className={`num ${p.satisfaction < 50 ? 'bad' : ''}`} title={moodLabel('player', p.satisfaction)}>
         {Math.round(p.satisfaction)}

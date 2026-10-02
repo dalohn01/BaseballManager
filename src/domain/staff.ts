@@ -42,8 +42,9 @@ const byPitching = (a: Player, b: Player) => b.ratings.pitching - a.ratings.pitc
 /** A sensible staff from squad roles and base ratings: three starters, then closer, setup, long relief. */
 export function defaultStaff(state: GameState, clubId: ClubId): PitchingStaff {
   const all = pitchersOf(state, clubId).sort(byPitching);
-  const starters = all.filter((p) => p.role === 'starter');
-  const rotation = [...starters, ...all.filter((p) => p.role !== 'starter')].slice(0, BALANCE.pitching.rotationSize).map((p) => p.id);
+  // Starters by stamina (SP) first, the rest after; within each, the better pitcher.
+  const isSP = (p: Player) => (p.ratings.stamina ?? 0) >= BALANCE.pitching.starterStaminaFrom;
+  const rotation = [...all.filter(isSP), ...all.filter((p) => !isSP(p))].slice(0, BALANCE.pitching.rotationSize).map((p) => p.id);
   const pen = all.filter((p) => !rotation.includes(p.id));
   return { rotation, closer: pen[0]?.id ?? null, setup: pen[1]?.id ?? null, long: pen[2]?.id ?? null, next: 0 };
 }

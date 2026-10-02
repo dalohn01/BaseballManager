@@ -1,3 +1,4 @@
+import { pitcherPosition, positionLabel } from '../../domain/pitching';
 import { applyReaction } from '../../simulation/reactions';
 import { BALANCE } from '../../balance/config';
 import type { EffectSink } from '../../domain/effects';
@@ -69,8 +70,8 @@ export const youngest = (state: GameState, filter: (p: Player) => boolean) =>
 
 export function describeCandidate(p: Player): string {
   const main = p.isPitcher
-    ? `PIT ${p.ratings.pitching}`
+    ? `${pitcherPosition(p)} · VEL ${p.ratings.velocity} · CTL ${p.ratings.control} · STA ${p.ratings.stamina}`
     : `CON ${p.ratings.contact} · POW ${p.ratings.power} · SPD ${p.ratings.speed} · FLD ${p.ratings.fielding}`;
   const pot = potentialOverall(p);
-  return `OVR ${overall(p)} (pot. ${pot.low}–${pot.high}) · ${p.isPitcher ? 'P' : p.positions.join('/')} · age ${p.age} · ${main}`;
+  return `OVR ${overall(p)} (pot. ${pot.low}–${pot.high}) · ${positionLabel(p)} · age ${p.age} · ${main}`;
 }

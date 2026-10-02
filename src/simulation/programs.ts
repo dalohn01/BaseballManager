@@ -9,7 +9,7 @@ import { applyReaction } from './reactions';
 import { applyProgress, recordProgress } from './training';
 
 export const growthKeys = (p: Player): RatingKey[] =>
-  p.isPitcher ? ['pitching'] : (['contact', 'power', 'fielding'] as RatingKey[]).sort((a, b) => p.ratings[a] - p.ratings[b]).slice(0, 2);
+  (p.isPitcher ? (['velocity', 'control', 'stamina'] as RatingKey[]) : (['contact', 'power', 'fielding'] as RatingKey[])).sort((a, b) => p.ratings[a] - p.ratings[b]).slice(0, 2);
 
 /**
  * An individual development program, however it was started (event option

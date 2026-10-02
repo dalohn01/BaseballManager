@@ -1,3 +1,4 @@
+import { syncPitching } from '../domain/pitching';
 import { overall } from '../domain/ratings';
 import { clamp } from '../domain/rng';
 import { nd, type Personality } from '../domain/personality';
@@ -87,7 +88,7 @@ export function startNextSeason(state: GameState, rng: Rng): TransitionReport {
       p.age += 1;
       if (p.age >= O.ageingFrom) {
         const extra = p.age >= 34 ? 1 : 0;
-        const keys = p.isPitcher ? (['pitching'] as const) : (['contact', 'power', 'speed'] as const);
+        const keys = p.isPitcher ? (['velocity', 'control', 'stamina'] as const) : (['contact', 'power', 'speed'] as const);
         let total = 0;
         for (const k of keys) {
           const d = rng.int(0, 2) + extra;
@@ -97,6 +98,7 @@ export function startNextSeason(state: GameState, rng: Rng): TransitionReport {
         const f = rng.int(0, 1);
         p.ratings.fielding = Math.max(15, p.ratings.fielding - f);
         total += f;
+        syncPitching(p);
         const best = p.isPitcher ? p.ratings.pitching : Math.max(p.ratings.contact, p.ratings.fielding);
         p.potential = Math.min(p.potential, Math.max(best, p.potential - total));
         if (clubId === user && total >= 3) report.declines.push(`${playerName(p)} (age ${p.age}) −${total} rating points`);

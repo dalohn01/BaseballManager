@@ -11,18 +11,21 @@ import { OvrShield } from '../components/TeamOvr';
 import { useGame } from '../hooks';
 import { ContinueButton } from './EventCard';
 
-const ICON: Record<RatingKey, 'bat' | 'chart' | 'forward' | 'glove' | 'influence'> = {
+const ICON: Record<RatingKey, 'bat' | 'chart' | 'forward' | 'glove' | 'influence' | 'check' | 'recovery'> = {
   contact: 'bat',
   power: 'chart',
   speed: 'forward',
   fielding: 'glove',
   pitching: 'influence',
+  velocity: 'influence',
+  control: 'check',
+  stamina: 'recovery',
 };
 
 /** Training results show improvements when a session moved players' ratings or progress. */
 export function isTrainingResult(ev: EventInstance): boolean {
   if (ev.type !== 'teamTraining' && ev.type !== 'individualTraining') return false;
-  return (ev.resolution?.effects ?? []).some((e) => e.targetKind === 'player' && (['contact', 'power', 'speed', 'fielding', 'pitching'].includes(e.stat) || e.stat.endsWith('Progress')));
+  return (ev.resolution?.effects ?? []).some((e) => e.targetKind === 'player' && (['contact', 'power', 'speed', 'fielding', 'velocity', 'control', 'stamina'].includes(e.stat) || e.stat.endsWith('Progress')));
 }
 
 /**

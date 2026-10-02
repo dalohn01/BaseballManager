@@ -1,3 +1,4 @@
+import { pitcherPosition } from '../../domain/pitching';
 import type { ReactNode } from 'react';
 import { fitnessLabel } from '../../domain/mood';
 import { fmtIp, pitcherWorkload } from '../../domain/playerStats';
@@ -65,6 +66,9 @@ export function PitcherRow({ state, player: p, role, readiness, selected, restin
       </span>
       <span className="pr-name">
         <strong>
+          <span className={`pos-chip pos-${pitcherPosition(p).toLowerCase()}`} title={pitcherPosition(p) === 'SP' ? 'Starting pitcher: stamina to go deep' : 'Relief pitcher: short outings'}>
+            {pitcherPosition(p)}
+          </span>
           {playerName(p)} {extra}
         </strong>
         <small>
@@ -73,13 +77,23 @@ export function PitcherRow({ state, player: p, role, readiness, selected, restin
           <span className="pr-throws"> · Throws {p.throws}</span>
         </small>
       </span>
-      <span className="pr-pit" title="Pitching">
-        <small>PIT</small>
-        <strong>{p.ratings.pitching}</strong>
-      </span>
-      <span className="pr-ovr" title="Overall">
+      <span className="pr-pit" title="Overall">
         <small>OVR</small>
         <strong>{overall(p)}</strong>
+      </span>
+      <span className="pr-ovr pr-trio" title="Velocity · Control · Stamina">
+        <span>
+          <small>VEL</small>
+          <b>{p.ratings.velocity}</b>
+        </span>
+        <span>
+          <small>CTL</small>
+          <b>{p.ratings.control}</b>
+        </span>
+        <span>
+          <small>STA</small>
+          <b>{p.ratings.stamina}</b>
+        </span>
       </span>
       <span className="pr-cond">
         <Condition value={p.fitness} />

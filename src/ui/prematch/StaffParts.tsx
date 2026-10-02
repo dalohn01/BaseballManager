@@ -1,3 +1,4 @@
+import { pitcherPosition } from '../../domain/pitching';
 import { useEffect, useRef } from 'react';
 import { BALANCE } from '../../balance/config';
 import { overall } from '../../domain/ratings';
@@ -57,13 +58,21 @@ export function RoleCards({ state, staff, todayStarterId, busy, onPick }: { stat
                 <div className="rc-player">
                   <Portrait state={state} player={p} size={56} nested />
                   <div>
-                    <strong className="rc-name">{playerName(p)}</strong>
+                    <strong className="rc-name">
+                      <span className={`pos-chip pos-${pitcherPosition(p).toLowerCase()}`}>{pitcherPosition(p)}</span> {playerName(p)}
+                    </strong>
                     <span className="rc-ratings">
                       <span>
-                        PIT <b>{p.ratings.pitching}</b>
+                        OVR <b>{overall(p)}</b>
                       </span>
                       <span>
-                        OVR <b>{overall(p)}</b>
+                        VEL <b>{p.ratings.velocity}</b>
+                      </span>
+                      <span>
+                        CTL <b>{p.ratings.control}</b>
+                      </span>
+                      <span>
+                        STA <b>{p.ratings.stamina}</b>
                       </span>
                     </span>
                     <Condition value={p.fitness} />

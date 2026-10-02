@@ -1,3 +1,4 @@
+import { staminaBatters } from '../domain/pitching';
 import { BULLPEN_ROLES, bullpenFor, type BullpenRole } from '../domain/staff';
 import { BALANCE } from '../balance/config';
 import { effectiveRating, fieldingAt, offenseScore } from '../domain/lineup';
@@ -51,7 +52,12 @@ interface SimBatter {
 interface SimPitcher {
   id: PlayerId;
   name: string;
+  /** Derived quality: (velocity + control) / 2, today's effective value. */
   pitching: number;
+  velocity: number;
+  control: number;
+  /** Base stamina: how many batters before he tires. */
+  stamina: number;
   style: PitchingStyle;
 }
 export interface SimTeam {
@@ -95,10 +101,14 @@ export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): 
 
   const sp = state.players[lineup.pitcherId];
   const pitchStyle = (id: PlayerId) => resolveTactic(club.tactics, id, 'pitching').value as PitchingStyle;
-  const starter = { id: sp.id, name: sp.lastName, pitching: effectiveRating(sp, 'pitching') + motivation(sp.id), style: pitchStyle(sp.id) };
+  const simPitcher = (p: Player): SimPitcher => {
+    const lift = motivation(p.id);
+    return { id: p.id, name: p.lastName, pitching: effectiveRating(p, 'pitching') + lift, velocity: effectiveRating(p, 'velocity') + lift, control: effectiveRating(p, 'control') + lift, stamina: p.ratings.stamina, style: pitchStyle(p.id) };
+  };
+  const starter = simPitcher(sp);
   const plan = club.pitchingPlan;
   const pen = bullpenFor(state, clubId, sp.id, plan.rest);
-  const asSim = (p: Player | null): SimPitcher | null => (p ? { id: p.id, name: p.lastName, pitching: effectiveRating(p, 'pitching') + motivation(p.id), style: pitchStyle(p.id) } : null);
+  const asSim = (p: Player | null): SimPitcher | null => (p ? simPitcher(p) : null);
   const bullpen = { closer: asSim(pen.closer), setup: asSim(pen.setup), long: asSim(pen.long) };
 
   return {
@@ -167,18 +177,28 @@ export function tacticShift(b: Pick<SimBatter, 'batting' | 'contact' | 'power'>,
   return s;
 }
 
-function rollOutcome(b: SimBatter, pitcher: SimPitcher, pitching: number, fielding: number, rng: Rng): Outcome {
+/** Today's values after tiring: velocity decides strikeouts, control walks (and some home runs), their average hits. */
+interface PitchNow {
+  pitching: number;
+  velocity: number;
+  control: number;
+}
+
+function rollOutcome(b: SimBatter, pitcher: SimPitcher, now: PitchNow, fielding: number, rng: Rng): Outcome {
+  const pitching = now.pitching;
   const sh = tacticShift(b, { style: pitcher.style, pitching });
   const O = BALANCE.match.odds;
-  const walk = clamp(O.walk + (50 - pitching) * 0.0012 + (b.contact - 50) * 0.0004 + sh.walk, 0.03, 0.16);
-  const k = clamp(O.strikeout + (pitching - b.contact) * 0.0035 + sh.k, 0.07, 0.4);
+  const walk = clamp(O.walk + (50 - now.control) * 0.0012 + (b.contact - 50) * 0.0004 + sh.walk, 0.03, 0.16);
+  const k = clamp(O.strikeout + (now.velocity - b.contact) * 0.0035 + sh.k, 0.07, 0.4);
   const r = rng.next();
   if (r < k) return 'strikeout';
   if (r < k + walk) return 'walk';
   const hitChance = clamp(O.hit + (b.contact - pitching) * 0.0022 - (fielding - 50) * 0.0018 + sh.hit, 0.18, O.hitMax);
   if (rng.next() < hitChance) {
     // The ceiling only rises when a hitter swings for power; Balanced keeps the old cap.
-    const hr = clamp((O.homeRunShare + (b.power - 50) * 0.005) * sh.hr, 0.02, sh.hr > 1 ? 0.36 : 0.28);
+    // Mistakes over the plate: poor control gives up a few more home runs.
+    const mistakes = clamp(1 - (now.control - 60) * 0.004, 0.85, 1.15);
+    const hr = clamp((O.homeRunShare + (b.power - 50) * 0.005) * sh.hr * mistakes, 0.02, sh.hr > 1 ? 0.36 : 0.28);
     const triple = clamp(O.tripleShare + (b.speed - 50) * 0.0008, 0.005, 0.05);
     const dbl = clamp((O.doubleShare + (b.power - 50) * 0.002) * sh.dbl, 0.1, 0.3);
     const t = rng.next();
@@ -194,8 +214,9 @@ function rollOutcome(b: SimBatter, pitcher: SimPitcher, pitching: number, fieldi
  * Batters a pitcher faces before he tires; each batter beyond costs 1 pitching.
  * Attacking the zone saves pitches, working the corners tires him sooner.
  */
-export function tiresAfterBatters(style: PitchingStyle = 'balanced'): number {
-  return BALANCE.match.starterTiresAfterBatters + (style === 'attack' ? 3 : style === 'careful' ? -4 : 0);
+export function tiresAfterBatters(style: PitchingStyle = 'balanced', stamina?: number): number {
+  const base = stamina === undefined ? BALANCE.match.starterTiresAfterBatters : staminaBatters(stamina);
+  return base + (style === 'attack' ? 3 : style === 'careful' ? -4 : 0);
 }
 
 /** Chance a runner on first tries to steal second, by speed and running style. */
@@ -377,13 +398,14 @@ export function simulateMatch(input: MatchInput): MatchResult {
       const pitcher = def.pitcher;
       const pLine = pitching[pitcher.id];
       // Attacking the zone saves pitches; working the corners tires a pitcher sooner.
-      const tiredBy = Math.max(0, pLine.battersFaced - tiresAfterBatters(pitcher.style));
+      const tiredBy = Math.max(0, pLine.battersFaced - tiresAfterBatters(pitcher.style, pitcher.stamina));
       const pitchValue = pitcher.pitching - tiredBy * 1.0;
+      const now: PitchNow = { pitching: pitchValue, velocity: pitcher.velocity - tiredBy, control: pitcher.control - tiredBy };
       pLine.battersFaced += 1;
       const bLine = batting[batter.id];
       bLine.pa += 1;
 
-      const outcome = rollOutcome(batter, pitcher, pitchValue, def.team.fielding, rng);
+      const outcome = rollOutcome(batter, pitcher, now, def.team.fielding, rng);
       const runnerOf = (id: PlayerId) => off.team.batters.find((b) => b.id === id)!;
       let tacticNote: MatchSequence['tactic'];
       /**

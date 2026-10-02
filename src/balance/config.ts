@@ -331,6 +331,11 @@ export const BALANCE = {
    */
   pitching: {
     maxPitchersPerGame: 3,
+    /** Pitchers with at least this stamina are SP (starters), the rest RP (relievers). */
+    starterStaminaFrom: 55,
+    /** Batters before a pitcher tires = tiresBase + stamina × tiresPerStamina (stamina 70 → 20, 40 → 14). */
+    tiresBase: 6,
+    tiresPerStamina: 0.2,
     rotationSize: 4,
     maxRotation: 5,
     /** A rotation pitcher below this fitness is skipped (the next ready one starts). */
