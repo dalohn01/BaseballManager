@@ -1,6 +1,7 @@
 import 'fake-indexeddb/auto';
 import { describe, expect, it } from 'vitest';
 import { GameController } from '../src/application/controller';
+import { optionBlocker } from '../src/application/engine';
 import { ManualClock } from '../src/platform/clock';
 import { IndexedDbSaveRepository } from '../src/platform/indexedDbRepository';
 import { MemorySaveRepository } from '../src/platform/saveRepository';
@@ -16,7 +17,8 @@ async function ready(repo = new MemorySaveRepository()) {
 const resolveFirst = (c: GameController) => {
   const s = c.getSnapshot().state!;
   const ev = s.currentEvent!;
-  return c.dispatch({ type: 'resolveEvent', eventId: ev.id, revision: s.revision, optionId: ev.options[0].id, boostId: null });
+  const o = ev.options.find((x) => optionBlocker(s, ev, x, null, T0) === null) ?? ev.options[0];
+  return c.dispatch({ type: 'resolveEvent', eventId: ev.id, revision: s.revision, optionId: o.id, boostId: null });
 };
 
 describe('controller + saving', () => {

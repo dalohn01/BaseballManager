@@ -148,7 +148,7 @@ describe('chain 2: public message → fan reaction → evaluation', () => {
     let s = toRound1(newGame(13));
     expect(lossExpectation(s).multiplier).toBe(1);
     s = force(s, 'media_expectations');
-    s = ack(resolve(s, 'patience'));
+    s = toNextEvent(ack(resolve(s, 'patience')));
     expect(lossExpectation(s).multiplier).toBe(BALANCE.stance.patienceLossMultiplier);
     const fu = s.followUps.find((f) => f.templateId === 'media_stance_review')!;
     expect(fu.dueRound).toBe(absoluteRound(1, 1 + BALANCE.stance.reviewAfterRounds));

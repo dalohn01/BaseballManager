@@ -4,7 +4,7 @@ import { migrate } from '../src/application/migrations';
 import { BALANCE } from '../src/balance/config';
 import { autoLineup } from '../src/domain/lineup';
 import { createRng } from '../src/domain/rng';
-import { absDay, daysUntil, defaultStaff, nextStarter, pitcherReadiness, staffRole } from '../src/domain/staff';
+import { absDay, daysUntil, nextStarter, pitcherReadiness, staffRole } from '../src/domain/staff';
 import { SCHEMA_VERSION } from '../src/domain/state';
 import { buildSimTeam, simulateMatch } from '../src/simulation/match';
 import { advanceDay, newGame, run, step, T0, toNextEvent } from './helpers';
@@ -21,7 +21,7 @@ describe('rotation', () => {
     s.players[staff.rotation[1]].fitness = P.starterReadyFitness - 1;
     expect(nextStarter(s, 'hfx')).toBe(staff.rotation[2]);
     // Resting today also skips him.
-    expect(nextStarter(s, 'hfx', [staff.rotation[2]])).toBe(staff.rotation[0]);
+    expect(nextStarter(s, 'hfx', [staff.rotation[2]])).toBe(staff.rotation[3]);
   });
 
   it('over a season every club works through its rotation (every starter gets starts)', () => {
@@ -108,8 +108,8 @@ describe('editing the staff', () => {
   });
 });
 
-describe('migration to pitching staffs (v11)', () => {
-  it('adds two pitchers per club, builds a staff, and is stable', () => {
+describe('migration to pitching staffs (v11, v12)', () => {
+  it('brings every club to seven pitchers with a four-man rotation and full bullpen, and is stable', () => {
     const v10 = JSON.parse(JSON.stringify(newGame(407)));
     v10.schemaVersion = 10;
     for (const id of v10.clubOrder) {
@@ -126,8 +126,11 @@ describe('migration to pitching staffs (v11)', () => {
     expect(m.schemaVersion).toBe(SCHEMA_VERSION);
     for (const id of m.clubOrder) {
       const pitchers = m.clubs[id].roster.filter((pid) => m.players[pid].isPitcher);
-      expect(pitchers).toHaveLength(6);
-      expect(m.clubs[id].staff).toEqual(defaultStaff(m, id));
+      expect(pitchers).toHaveLength(7);
+      const st = m.clubs[id].staff!;
+      expect(st.rotation).toHaveLength(4);
+      expect([st.closer, st.setup, st.long].every(Boolean)).toBe(true);
+      expect(new Set([...st.rotation, st.closer, st.setup, st.long]).size).toBe(7);
       for (const pid of pitchers) expect(m.players[pid].personality).toBeTruthy();
     }
     const again = migrate(JSON.parse(JSON.stringify(v10)));

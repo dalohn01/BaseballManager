@@ -1618,3 +1618,16 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .role-cards { grid-template-columns: minmax(0, 1fr); }
   .role-card .rc-when { min-height: 0; }
 }
+.order-btns { display: inline-flex; gap: 4px; }
+.add-rotation { width: 100%; margin-top: 8px; min-height: 52px; }
+.warn-line { display: flex; gap: 6px; align-items: center; color: #a8660d; margin: 8px 2px 0; }
+.staff-tab .p-row.selected { border-color: #3d7bd9; background: #eef4fd; }
+/* Very narrow containers: the action gets its own row so the name keeps its space. */
+@container (max-width: 360px) {
+  .p-row { grid-template-columns: 44px minmax(0, 1fr) 40px; }
+  .p-row .pr-pit { grid-column: 3; grid-row: 1; }
+  .p-row .pr-cond { grid-column: 2 / 4; grid-row: 2; }
+  .p-row .pr-last { grid-column: 2 / 4; grid-row: 3; }
+  .p-row .pr-action { grid-column: 1 / -1; grid-row: 4; justify-content: flex-end; }
+  .p-row .pr-portrait { grid-row: 1 / 4; }
+}

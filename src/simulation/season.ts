@@ -1,3 +1,4 @@
+import { overall } from '../domain/ratings';
 import { clamp } from '../domain/rng';
 import { nd, type Personality } from '../domain/personality';
 
@@ -114,8 +115,19 @@ export function startNextSeason(state: GameState, rng: Rng): TransitionReport {
     for (let guard = 0; guard <= BALANCE.roster.max; guard++) {
       const problem = squadProblem(state, club.roster);
       if (!problem && club.roster.length >= O.minRosterSize) break;
-      if (club.roster.length >= BALANCE.roster.max) break;
       const need = neededPosition(state, clubId, problem);
+      if (club.roster.length >= BALANCE.roster.max) {
+        // A full roster that still misses a requirement (e.g. seven pitchers) lets its
+        // weakest player of the other kind go, so the squad can be completed.
+        if (!problem) break;
+        const surplus = club.roster
+          .map((id) => state.players[id])
+          .filter((p) => (need === 'P' ? !p.isPitcher && !p.positions.includes('C') : p.isPitcher))
+          .sort((a, b) => overall(a) - overall(b) || a.id.localeCompare(b.id))[0];
+        if (!surplus) break;
+        if (clubId === user) report.departures.push(`${playerName(surplus)} (released to make room)`);
+        releasePlayer(state, surplus.id);
+      }
       const level = rng.int(48, 56);
       const age = rng.int(22, 30);
       const p = createPlayer(

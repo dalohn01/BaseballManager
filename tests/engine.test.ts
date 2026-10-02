@@ -13,11 +13,11 @@ describe('new game', () => {
     expect(s.clubOrder).toHaveLength(6);
     for (const id of s.clubOrder) {
       const players = clubPlayers(s, id);
-      expect(players).toHaveLength(17);
-      expect(players.filter((p) => p.isPitcher)).toHaveLength(6);
-      // A standing staff: three in the rotation, all three bullpen roles filled, today's starter from the rotation.
+      expect(players).toHaveLength(18);
+      expect(players.filter((p) => p.isPitcher)).toHaveLength(7);
+      // A standing staff: four in the rotation, all three bullpen roles filled, today's starter from the rotation.
       const staff = s.clubs[id].staff!;
-      expect(staff.rotation).toHaveLength(3);
+      expect(staff.rotation).toHaveLength(4);
       expect([staff.closer, staff.setup, staff.long].every(Boolean)).toBe(true);
       expect(staff.rotation).toContain(s.clubs[id].lineup.pitcherId);
       const errors = validateLineup(s, id, s.clubs[id].lineup).filter((i) => i.severity === 'error');

@@ -1,4 +1,4 @@
-import { StaffEditor } from '../tactics/StaffEditor';
+import { StaffTab } from '../prematch/StaffTab';
 import { TeamStrength } from '../components/TeamOvr';
 import { useState } from 'react';
 import { validateLineup } from '../../domain/lineup';
@@ -45,9 +45,7 @@ export function TeamScreen({ tab = 'roster' }: { tab?: 'roster' | 'style' | 'sta
       {tab === 'style' ? (
         <PlayingStyle />
       ) : tab === 'staff' ? (
-        <Panel title="Rotation and bullpen" className="staff-panel">
-          <StaffEditor />
-        </Panel>
+        <StaffTab />
       ) : (
         <RosterView />
       )}

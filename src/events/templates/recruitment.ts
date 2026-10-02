@@ -251,6 +251,8 @@ export const draft: EventTemplate = {
     // AI picks happen regardless of the user's choice; players keep one identity each.
     for (const pair of String(event.data.aiPicks).split(',').filter(Boolean)) {
       const [pid, cid] = pair.split(':');
+      // A club with a full roster passes on its pick.
+      if (state.clubs[cid].roster.length >= BALANCE.roster.max) continue;
       const p = structuredClone(event.candidates.find((c) => c.id === pid)!);
       joinClub(state, p, cid);
     }

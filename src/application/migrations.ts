@@ -1,5 +1,5 @@
 import { createPlayer, marketSalary } from '../content/playerFactory';
-import { defaultStaff, nextStarter } from '../domain/staff';
+import { defaultStaff, nextStarter, normalizeStaff } from '../domain/staff';
 import { hashSeed } from '../domain/rng';
 import { absoluteRound } from '../domain/state';
 import { BALANCE } from '../balance/config';
@@ -191,6 +191,35 @@ export function migrate(input: AnyState): GameState {
       club.lineup = { ...club.lineup, pitcherId: nextStarter(s, clubId) };
     }
     s.schemaVersion = 11;
+  }
+  if (s.schemaVersion === 11) {
+    // Four-man rotations and at least seven pitchers per club. Missing pitchers are
+    // generated from a fixed per-club seed; the rotation grows with the best depth arm
+    // (bullpen roles the manager set are kept) and empty roles are filled from depth.
+    let n = Math.max(0, ...Object.keys(s.players).map((id) => Number(id.replace(/\D/g, '')) || 0)) + 1;
+    const usedNames = new Set(Object.values(s.players).map((p) => `${p.firstName} ${p.lastName}`));
+    for (const clubId of s.clubOrder) {
+      const club = s.clubs[clubId];
+      const pitchers = () => club.roster.map((id) => s.players[id]).filter((p) => p?.isPitcher);
+      const level = Math.round(pitchers().reduce((a, p) => a + p.ratings.pitching, 0) / Math.max(1, pitchers().length)) - 3;
+      const rng = createRng(hashSeed(`v12:${s.seed}:${clubId}`));
+      while (pitchers().length < BALANCE.roster.minPitchers && club.roster.length < BALANCE.roster.max) {
+        const id = `p${n++}`;
+        const age = 24 + rng.int(0, 8);
+        s.players[id] = createPlayer(
+          { id, clubId, primary: 'P', age, level, upside: rng.int(1, 6), role: 'reserve', salary: marketSalary(level, age), seasonsLeft: 2, startRound: absoluteRound(s.calendar.season, s.calendar.round), joinedSeason: s.calendar.season, scoutingLevel: club.facilities?.scouting ?? 1, usedNames },
+          rng,
+        );
+        club.roster.push(id);
+      }
+      const staff = normalizeStaff(s, clubId, club.staff);
+      const assigned = () => new Set([...staff.rotation, staff.closer, staff.setup, staff.long].filter(Boolean));
+      const depth = () => pitchers().filter((p) => !assigned().has(p.id)).sort((a, b) => b.ratings.pitching - a.ratings.pitching || a.id.localeCompare(b.id));
+      while (staff.rotation.length < BALANCE.pitching.rotationSize && depth().length) staff.rotation.push(depth()[0].id);
+      for (const r of ['closer', 'setup', 'long'] as const) if (!staff[r] && depth().length) staff[r] = depth()[0].id;
+      club.staff = staff;
+    }
+    s.schemaVersion = 12;
   }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;

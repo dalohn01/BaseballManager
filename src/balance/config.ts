@@ -59,8 +59,9 @@ export const BALANCE = {
   },
 
   roster: {
-    max: 20,
-    minPitchers: 3,
+    max: 25,
+    /** Four starters and three relievers. */
+    minPitchers: 7,
     minHitters: 10,
     /** Releasing a player pays this share of his remaining salary this season. */
     releaseBuyoutShare: 0.5,
@@ -268,7 +269,7 @@ export const BALANCE = {
     /** Players below this satisfaction refuse to re-sign. */
     renewalMinSatisfaction: 45,
     aiRenewMaxAge: 33,
-    minRosterSize: 15,
+    minRosterSize: 18,
     ageingFrom: 31,
     fitnessAfterBreak: [94, 100] as const,
     moodDriftToward: 62,
@@ -330,7 +331,7 @@ export const BALANCE = {
    */
   pitching: {
     maxPitchersPerGame: 3,
-    rotationSize: 3,
+    rotationSize: 4,
     maxRotation: 5,
     /** A rotation pitcher below this fitness is skipped (the next ready one starts). */
     starterReadyFitness: 80,
@@ -352,7 +353,7 @@ export const BALANCE = {
   teamOvr: {
     weights: { batting: 0.4, pitching: 0.4, defense: 0.2 },
     offense: { contact: 0.5, power: 0.35, speed: 0.15 },
-    pitching: { rotationSize: 3, reliefSize: 3, rotationShare: 0.7 },
+    pitching: { rotationSize: 4, reliefSize: 3, rotationShare: 0.7 },
     /** Under this spread between the best and worst area the profile reads "Balanced team". */
     balancedSpread: 5,
   },

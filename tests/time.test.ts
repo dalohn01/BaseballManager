@@ -1,3 +1,4 @@
+import { optionBlocker } from '../src/application/engine';
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../src/balance/config';
 import { execute } from '../src/application/engine';
@@ -40,7 +41,7 @@ describe('Time regeneration', () => {
     // Handle the whole preseason day with no Time at all.
     for (let i = 0; i < 6 && s.currentEvent; i++) {
       const ev = s.currentEvent;
-      if (ev.status === 'pending') s = run(s, { type: 'resolveEvent', eventId: ev.id, revision: s.revision, optionId: ev.options[0].id, boostId: null });
+      if (ev.status === 'pending') s = run(s, { type: 'resolveEvent', eventId: ev.id, revision: s.revision, optionId: (ev.options.find((o) => optionBlocker(s, ev, o, null, T0) === null) ?? ev.options[0]).id, boostId: null });
       else s = run(s, { type: 'acknowledgeEvent', eventId: ev.id });
     }
     expect(s.currentEvent).toBeNull();

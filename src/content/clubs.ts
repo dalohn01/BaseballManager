@@ -79,10 +79,11 @@ export const USER_ROSTER: PlayerSeed[] = [
   { firstName: 'Owen', lastName: 'Park', number: 51, age: 20, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 45, fielding: 50, pitching: 56, potential: 84, satisfaction: 62, popularity: 22, fitness: 97, priority: 'playingTime', role: 'prospect', salary: 12_000, seasonsLeft: 3, bio: 'Big arm, raw command. Could be special.' },
   { firstName: 'Gus', lastName: 'Whitaker', number: 38, age: 36, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 30, fielding: 48, pitching: 62, potential: 62, satisfaction: 66, popularity: 70, fitness: 90, priority: 'loyalty', role: 'reserve', salary: 30_000, seasonsLeft: 1, bio: 'Veteran arm and local legend.' },
   { firstName: 'Ray', lastName: 'Okafor', number: 47, age: 31, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 38, fielding: 50, pitching: 64, potential: 65, satisfaction: 68, popularity: 35, fitness: 94, priority: 'titles', role: 'reserve', salary: 26_000, seasonsLeft: 2, bio: 'Late-inning arm who wants the ball in big spots.' },
+  { firstName: 'Marcus', lastName: 'Lee', number: 27, age: 28, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 40, fielding: 53, pitching: 61, potential: 64, satisfaction: 67, popularity: 30, fitness: 95, priority: 'loyalty', role: 'reserve', salary: 24_000, seasonsLeft: 2, bio: 'Dependable swingman: starts or relieves.' },
   { firstName: 'Danny', lastName: 'Cho', number: 29, age: 25, bats: 'L', throws: 'L', positions: [], pitcher: true, contact: 10, power: 10, speed: 42, fielding: 51, pitching: 58, potential: 68, satisfaction: 66, popularity: 24, fitness: 96, priority: 'playingTime', role: 'reserve', salary: 15_000, seasonsLeft: 2, bio: 'Lefty swingman who can pitch long.' },
 ];
 
-/** Position template for generated 17-man rosters: 11 hitters + 6 pitchers (three starters, three relievers). */
+/** Position template for generated 18-man rosters: 11 hitters + 7 pitchers (four starters, three relievers). */
 export const GENERATED_ROSTER_SHAPE: { positions: LineupPosition[]; pitcher?: boolean; role: SquadRole }[] = [
   { positions: ['C'], role: 'starter' },
   { positions: ['C', '1B'], role: 'reserve' },
@@ -98,6 +99,7 @@ export const GENERATED_ROSTER_SHAPE: { positions: LineupPosition[]; pitcher?: bo
   { positions: [], pitcher: true, role: 'starter' },
   { positions: [], pitcher: true, role: 'starter' },
   { positions: [], pitcher: true, role: 'starter' },
+  { positions: [], pitcher: true, role: 'reserve' },
   { positions: [], pitcher: true, role: 'reserve' },
   { positions: [], pitcher: true, role: 'reserve' },
   { positions: [], pitcher: true, role: 'reserve' },
