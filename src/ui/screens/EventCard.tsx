@@ -1,3 +1,4 @@
+import { MatchDayCard } from '../match/MatchDay';
 import { dayCosts, dayLedgerId } from '../../simulation/economy';
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { PlayerAvatar } from '../components/PlayerAvatar';
@@ -29,6 +30,7 @@ export function EventCard() {
   const s = useGame();
   const ev = s.currentEvent;
   if (!ev) return <DayCompleteCard />;
+  if (ev.status === 'pending' && ev.type === 'leagueGame') return <MatchDayCard ev={ev} key={ev.id} />;
   if (ev.status === 'pending') return <EventDecision ev={ev} key={ev.id} />;
   if (ev.type === 'leagueGame' && ev.resolution?.matchId) return <MatchView ev={ev} key={ev.id} />;
   if (isTrainingResult(ev)) return <TrainingResult ev={ev} key={ev.id} />;

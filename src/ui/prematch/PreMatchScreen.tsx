@@ -1,3 +1,4 @@
+import { closeLineup } from '../match/MatchDay';
 import { useState } from 'react';
 import { optionBlocker } from '../../application/engine';
 import { bestLineup, draftErrors, draftFromClub, draftIssues, rotateTired, suggestOrder, suggestPitching, type LineupDraft } from '../../domain/lineupDraft';
@@ -128,6 +129,9 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
       {/* One compact bar: title, matchup and the view controls, so the field gets the height. */}
       <header className="pm-head">
         <div className="pm-titles">
+          <button className="link pm-back" onClick={closeLineup} aria-label="Back to match day">
+            <Icon name="back" size={16} /> Match day
+          </button>
           <span className="ribbon">Pre-match</span>
           <h1 className="pm-title">Set your lineup</h1>
         </div>

@@ -1708,3 +1708,19 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 .ab-value.just-gained .gain { background: #e3f6e8; color: #16753a; border-radius: 99px; padding: 0 6px; font-weight: 800; }
 .fac-level-change { display: inline-flex; align-items: center; gap: 6px; margin-left: 6px; font-family: var(--display); font-weight: 700; }
 @media (prefers-reduced-motion: reduce) { .ab-value.just-gained .ab-num { animation: none; } }
+
+/* ===== Match day card ===== */
+.match-day { display: grid; gap: 12px; }
+.md-matchup { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 14px; padding: 6px 0; }
+.md-side { display: grid; justify-items: center; gap: 6px; text-align: center; }
+.md-side strong { font-family: var(--display); font-weight: 800; text-transform: uppercase; color: var(--navy); font-size: 1.15rem; }
+.md-vs { font-family: var(--display); font-weight: 900; font-size: 1.6rem; color: var(--muted); }
+.md-where { margin: 0; text-align: center; font-family: var(--display); font-weight: 700; text-transform: uppercase; color: var(--muted); letter-spacing: 0.03em; }
+.md-facts { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.md-fact { display: flex; gap: 12px; align-items: center; padding: 10px 12px; border: 1px solid var(--line); border-radius: 12px; color: #3d7bd9; }
+.md-fact > span { display: grid; color: var(--ink); }
+.md-fact small:first-child { font-family: var(--display); font-weight: 700; text-transform: uppercase; color: var(--muted); }
+.md-fact strong { font-family: var(--display); font-weight: 800; color: var(--navy); font-size: 1.1rem; }
+.md-report { margin: 0; padding: 8px 12px; border-radius: 10px; background: #f4f7fb; color: var(--slate); }
+.match-day .btn-confirm { width: 100%; }
+.pm-back { display: inline-flex; align-items: center; gap: 4px; font-weight: 700; margin-right: 8px; }

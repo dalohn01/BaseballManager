@@ -74,6 +74,14 @@ async function advance(): Promise<string> {
     await waitFor(() => expect((screen.queryByRole('button', { name: /^Next day/ }) as HTMLButtonElement | null)?.disabled ?? false).toBe(false));
     return 'day';
   }
+  // Match day is its own event: its card opens the lineup screen.
+  const lineup = screen.queryByRole('button', { name: /^Set lineup/ });
+  if (lineup) {
+    expect(screen.getByText(/win chance/)).toBeTruthy();
+    await click(lineup);
+    await waitFor(() => expect(screen.getByRole('button', { name: /^Confirm lineup/ })).toBeTruthy());
+    return 'lineup';
+  }
   const confirm = await screen.findByRole('button', { name: /^Confirm/ });
   await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
   await click(confirm);
@@ -121,6 +129,7 @@ describe('end-to-end', () => {
     expect(screen.getByRole('table', { name: 'Line score' })).toBeTruthy();
     expect(clicks).toContain('confirm');
     expect(clicks).toContain('day');
+    expect(clicks).toContain('lineup');
     expect(clicks).toContain('intro');
     expect(clicks).toContain('skip');
 

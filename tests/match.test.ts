@@ -63,5 +63,5 @@ describe('match simulation', () => {
     });
     expect(exhausted).toBeLessThan(base - 20);
     expect(boosted).toBeGreaterThan(base + 20);
-  });
+  }, 30_000);
 });

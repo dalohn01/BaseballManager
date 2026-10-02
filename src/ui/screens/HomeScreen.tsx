@@ -1,3 +1,4 @@
+import { useLineupOpen } from '../match/MatchDay';
 import { TeamOvrBadge } from '../components/TeamOvr';
 import { useEffect, useRef } from 'react';
 import { CycleNotice } from './InfluenceView';
@@ -22,6 +23,7 @@ import { dateOf, matchSeasonDay, seasonDayOf, seasonLength, shortDate } from '..
 
 export function HomeScreen() {
   const s = useGame();
+  const lineupOpen = useLineupOpen(s.currentEvent?.id);
   const mainRef = useRef<HTMLDivElement>(null);
   const eventKey = `${s.currentEvent?.id}:${s.currentEvent?.status}`;
   // Bring the new event or its result into view after each decision.
@@ -31,8 +33,8 @@ export function HomeScreen() {
   }, [eventKey]);
   const ev = s.currentEvent;
   const liveMatch = ev?.type === 'leagueGame' && ev.status === 'resolved' && ev.resolution?.matchId ? s.matches[ev.resolution.matchId] : null;
-  if (ev?.type === 'leagueGame' && ev.status === 'pending') {
-    // Pre-match team selection replaces the old three-option choice.
+  if (ev?.type === 'leagueGame' && ev.status === 'pending' && lineupOpen) {
+    // The match day card's "Set lineup" opens the pre-match team selection.
     return (
       <div className="home" ref={mainRef}>
         <p className="crumb">
