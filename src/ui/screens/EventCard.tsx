@@ -20,6 +20,7 @@ import { Icon } from '../components/icons';
 import { money, moneyExact } from '../format';
 import { href, useController, useGame, useNow, useSnapshot } from '../hooks';
 import { MatchView } from './MatchView';
+import { isTrainingResult, TrainingResult } from './TrainingResult';
 
 /** Inside a day folder the folder's tab carries the event's name: the card skips its own ribbon and title. */
 export const FolderContext = createContext(false);
@@ -30,6 +31,7 @@ export function EventCard() {
   if (!ev) return <DayCompleteCard />;
   if (ev.status === 'pending') return <EventDecision ev={ev} key={ev.id} />;
   if (ev.type === 'leagueGame' && ev.resolution?.matchId) return <MatchView ev={ev} key={ev.id} />;
+  if (isTrainingResult(ev)) return <TrainingResult ev={ev} key={ev.id} />;
   return <EventResult ev={ev} key={ev.id} />;
 }
 

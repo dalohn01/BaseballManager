@@ -1,3 +1,4 @@
+import { ChangeValue } from '../components/ChangeValue';
 import { useRef, useState, type Ref } from 'react';
 import { BALANCE } from '../../balance/config';
 import { absoluteRound, userClub } from '../../domain/state';
@@ -100,7 +101,7 @@ function UpgradePanel({ id, ref }: { id: FacilityId; ref: Ref<HTMLElement> }) {
   const c = useController();
   const snap = useSnapshot();
   const club = userClub(s);
-  const [done, setDone] = useState<string | null>(null);
+  const [done, setDone] = useState<{ label: string; from: number; to: number } | null>(null);
   const level = club.facilities[id];
   const max = level >= MAX_FACILITY_LEVEL;
   const next = level + 1;
@@ -114,7 +115,8 @@ function UpgradePanel({ id, ref }: { id: FacilityId; ref: Ref<HTMLElement> }) {
 
   const buy = () => {
     const label = `${FACILITY_LABELS[id]} is now level ${next}.`;
-    void c.dispatch({ type: 'upgradeFacility', facility: id, revision: s.revision }).then((ok) => ok && setDone(label));
+    const from = level;
+    void c.dispatch({ type: 'upgradeFacility', facility: id, revision: s.revision }).then((ok) => ok && setDone({ label, from, to: from + 1 }));
   };
 
   return (
@@ -221,7 +223,7 @@ function UpgradePanel({ id, ref }: { id: FacilityId; ref: Ref<HTMLElement> }) {
       )}
       {done && (
         <p className="fac-done" role="status">
-          <Icon name="check" size={18} /> {done}
+          <Icon name="check" size={18} /> {done.label} <span className="fac-level-change">Level <ChangeValue before={done.from} after={done.to} size="md" /></span>
         </p>
       )}
       {snap.commandError && (

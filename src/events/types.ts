@@ -32,6 +32,8 @@ export interface ResolveOutput {
   narrative: string[];
   reactions?: { playerId: PlayerId; text: string }[];
   matchId?: GameId;
+  /** Structured numbers for result screens (e.g. development points), never parsed from text. */
+  metrics?: Record<string, number>;
 }
 
 /**

@@ -138,9 +138,9 @@ export function PlayerScreen({ id }: { id: string }) {
                         <span style={{ width: `${p.progress[k]}%` }} />
                       </span>
                     </span>
-                    <span className="ab-value">
-                      {p.ratings[k]}
-                      {lastGain.get(k) ? <span className="gain">+{lastGain.get(k)}</span> : null}
+                    <span className={`ab-value ${lastGain.get(k) ? 'just-gained' : ''}`}>
+                      <span className="ab-num">{p.ratings[k]}</span>
+                      {lastGain.get(k) ? <span className="gain">↑ +{lastGain.get(k)}</span> : null}
                     </span>
                     <span className="ab-eff small muted" title="Rating used in matches after fitness and mood">
                       today {Math.round(effectiveRating(p, k))}

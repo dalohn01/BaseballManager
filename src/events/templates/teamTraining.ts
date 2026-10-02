@@ -103,8 +103,8 @@ export const teamTraining: EventTemplate = {
       focus === 'recovery'
         ? 'A lighter day. The legs feel fresher.'
         : summary.pointsGained.length > 0
-          ? `Training pays off: ${summary.pointsGained.length} rating gain${summary.pointsGained.length > 1 ? 's' : ''}.`
-          : 'Solid session. Progress is building.';
-    return { headline, narrative, reactions };
+          ? 'Hard work pays off.'
+          : 'Progress made.';
+    return { headline, narrative, reactions, metrics: { developmentPoints: summary.totalProgress, facilityPoints: summary.facilityContribution } };
   },
 };

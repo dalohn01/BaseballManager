@@ -394,6 +394,7 @@ function resolveEvent(state: GameState, cmd: Extract<Command, { type: 'resolveEv
     effects: sink.records,
     reactions: out.reactions ?? [],
     matchId: out.matchId ?? null,
+    ...(out.metrics ? { metrics: out.metrics } : {}),
     resolvedAt: { season: next.calendar.season, round: next.calendar.round },
   };
   next.history.push({

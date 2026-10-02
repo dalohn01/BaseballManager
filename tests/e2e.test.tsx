@@ -78,7 +78,7 @@ async function advance(): Promise<string> {
   await waitFor(() => expect((confirm as HTMLButtonElement).disabled).toBe(false));
   await click(confirm);
   // A normal event shows its result; a league game goes straight into the arena intro.
-  await waitFor(() => expect(screen.queryByText('What changed') ?? screen.queryByRole('button', { name: /Skip intro/i })).toBeTruthy());
+  await waitFor(() => expect(screen.queryByText('What changed') ?? screen.queryByText('Squad development') ?? screen.queryByRole('button', { name: /Skip intro/i })).toBeTruthy());
   return 'confirm';
 }
 

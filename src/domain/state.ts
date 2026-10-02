@@ -89,6 +89,8 @@ export interface Resolution {
   reactions: { playerId: PlayerId; text: string }[];
   matchId: GameId | null;
   resolvedAt: { season: number; round: number };
+  /** Structured numbers for the result screen (absent on older results). */
+  metrics?: Record<string, number>;
 }
 
 export interface EventInstance {
