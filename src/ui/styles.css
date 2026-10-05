@@ -1566,9 +1566,6 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 .pr-swap { grid-area: swap; width: 38px; height: 38px; border-radius: 10px; border: 1px solid #b9cbe8; background: #fff; color: var(--navy); display: grid; place-items: center; cursor: pointer; }
 .pr-swap:hover, .pr-swap:focus-visible { background: #f0f4fa; }
 .ps-row .pr-empty { grid-column: 3 / -1; margin: 0; min-height: 52px; }
-.ps-hook { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 12px 14px 0; }
-.ps-hook-label { font-family: var(--display); font-weight: 800; text-transform: uppercase; color: var(--navy); font-size: 0.9rem; }
-.ps-hook .segmented { margin: 0; }
 .ps-none { padding: 12px 14px 0; }
 @container (max-width: 680px) {
   .ps-row {
@@ -1822,7 +1819,7 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .bat-head .pr-mod { display: flex; align-items: center; justify-content: center; gap: 2px; }
   .bat-head .pr-mod, .bat-row .pr-mod { width: 52px; }
   .bat-head .pr-mod svg { width: 15px; height: 15px; }
-  .bat-row, .bat-head { grid-template-columns: 18px 16px 40px minmax(130px, 1fr) 76px auto 118px 32px; grid-template-areas: 'grip num pos player eff mods stats swap'; column-gap: 8px; }
+  .bat-row, .bat-head { grid-template-columns: 18px 16px 40px minmax(130px, 1fr) 76px auto 132px 32px; grid-template-areas: 'grip num pos player eff mods stats swap'; column-gap: 8px; }
   .bat-row { min-height: 0; padding: 5px 8px; }
   .bat-head { display: grid; align-items: end; padding: 0 9px; font-family: var(--display); font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
   .bh-order { grid-area: num; } .bh-pos { grid-area: pos; text-align: center; } .bh-player { grid-area: player; } .bh-eff { grid-area: eff; } .bh-stats { grid-area: stats; }
@@ -1874,20 +1871,20 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .bench-row .pr-num { font-size: 1.1rem; }
 }
 @container (min-width: 500px) {
-  .bench-row, .bench-head { grid-template-columns: 18px minmax(120px, 1fr) 76px auto 118px; grid-template-areas: 'grip player eff mods stats'; column-gap: 8px; }
+  .bench-row, .bench-head { grid-template-columns: 18px minmax(120px, 1fr) 76px auto 132px; grid-template-areas: 'grip player eff mods stats'; column-gap: 8px; }
 }
 /* Medium widths (e.g. 1280 px screens): the same one-line rows with narrower columns;
    the header stacks each modifier's icon over its label. */
 @container (min-width: 590px) and (max-width: 670px) {
-  .bat-row, .bat-head { grid-template-columns: 18px 16px 38px minmax(110px, 1fr) 56px auto 92px 32px; column-gap: 6px; }
+  .bat-row, .bat-head { grid-template-columns: 18px 16px 38px minmax(110px, 1fr) 52px auto 104px 32px; column-gap: 6px; }
   .bat-row .pr-id strong { white-space: nowrap; font-size: 0.86rem; }
-  .bat-head .pr-mod, .bat-row .pr-mod { width: 40px; }
+  .bat-head .pr-mod, .bat-row .pr-mod { width: 38px; }
   .bat-head .pr-mod { flex-direction: column; gap: 0; }
   .bat-row .eff-block strong { font-size: 1.3rem; }
   .bat-row .pr-stats { column-gap: 8px; font-size: 0.74rem; }
 }
 @container (min-width: 500px) and (max-width: 560px) {
-  .bench-row, .bench-head { grid-template-columns: 18px minmax(110px, 1fr) 56px auto 92px; column-gap: 6px; }
+  .bench-row, .bench-head { grid-template-columns: 18px minmax(110px, 1fr) 56px auto 104px; column-gap: 6px; }
   .bench-row .pr-id strong { white-space: nowrap; font-size: 0.86rem; }
   .bench-head .pr-mod, .bench-row .pr-mod { width: 40px; }
   .bench-head .pr-mod { flex-direction: column; gap: 0; }
@@ -1929,3 +1926,19 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .pm-step-back { flex: none; padding-inline: 14px; }
   .pm-step-back .lbl { display: none; }
 }
+
+/* Slim pre-match banner: back link, ribbon and title on the left, the matchup on the right. */
+.prematch .pm-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px 18px; }
+.prematch .pm-matchup { justify-self: auto; margin-left: auto; }
+@media (max-width: 720px) {
+  .prematch .pm-matchup { margin-left: 0; }
+}
+@media (max-width: 720px) {
+  .prematch .pm-titles { flex-wrap: wrap; gap: 6px 10px; }
+  .prematch .pm-back { flex-basis: 100%; white-space: nowrap; }
+  .prematch .pm-head .ribbon { white-space: nowrap; }
+  .prematch .pm-title { white-space: nowrap; }
+}
+
+/* Stats never break inside a label or value (e.g. "W-L", "0.00"). */
+.pr-stat dt, .pr-stat dd { white-space: nowrap; }

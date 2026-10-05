@@ -5,17 +5,15 @@ import { bestLineup, draftErrors, draftFromClub, draftIssues, suggestPitching, t
 import { playerNotes, type StatsPeriod } from '../../domain/playerStats';
 import type { EventInstance, GameState } from '../../domain/state';
 import { clubName, userClub } from '../../domain/state';
+import { Crest } from '../components/art';
 import { describeLineupChange, forecastForLineup } from '../../events/templates/leagueGame';
 import { validateBatters } from '../../domain/lineup';
-import { Crest } from '../components/art';
 import { Icon } from '../components/icons';
 import { useController, useGame, useNow, useSnapshot } from '../hooks';
 import { BattersTab } from './BattersTab';
 import { PitchersTab } from './PitchersTab';
-import { opponentReport } from '../../simulation/opponentReport';
 import { MatchPlanSummary, TacticsDialog } from '../tactics/TacticsControls';
 import { RELIEF_SLOTS, SLOT_LABEL } from '../../domain/todayPitching';
-import { TeamStatusBar } from '../components/Modifiers';
 
 export type Tab = 'batters' | 'pitchers';
 
@@ -52,22 +50,6 @@ function saveDraft(eventId: string, d: LineupDraft | null) {
     /* the draft simply is not kept across reloads */
   }
 }
-function readPref<T extends string>(key: string, allowed: readonly T[], fallback: T): T {
-  try {
-    const v = localStorage.getItem(`bm.${key}`) as T | null;
-    return v && allowed.includes(v) ? v : fallback;
-  } catch {
-    return fallback;
-  }
-}
-function writePref(key: string, v: string) {
-  try {
-    localStorage.setItem(`bm.${key}`, v);
-  } catch {
-    /* per-viewer convenience only */
-  }
-}
-
 /**
  * Pre-match team selection: Field, Batting order and Pitchers edit one shared
  * draft. Confirm sends the draft together with the league game decision, so the
@@ -83,8 +65,8 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   const [opened] = useState(draft);
   // Two steps: the nine batters first, then the pitchers; Confirm only on the second.
   const [tab, setTab] = useState<Tab>('batters');
-  const [showInfo, setShowInfo] = useState(() => readPref('pmInfo', ['shown', 'hidden'] as const, 'hidden') === 'shown');
-  const [period, setPeriod] = useState<StatsPeriod>(() => readPref('pmPeriod', ['season', 'last5'] as const, 'season'));
+  // Season stats in the rows (the header keeps only what the step needs).
+  const period: StatsPeriod = 'season';
   const [notice, setNotice] = useState<{ label: string; changes: string[]; undo: LineupDraft } | null>(null);
   const [tactics, setTactics] = useState<{ playerId: string | null } | null>(null);
 
@@ -104,9 +86,9 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   const api: DraftApi = { state: s, draft, update, quick, period, openTactics: (playerId) => setTactics({ playerId }) };
 
   const game = s.schedule.find((g) => g.id === String(ev.data.gameId))!;
+  const club = userClub(s);
   const isHome = game.homeId === s.userClubId;
   const opp = s.clubs[isHome ? game.awayId : game.homeId];
-  const club = userClub(s);
   const option = ev.options.find((o) => o.id === 'current') ?? ev.options[0];
   const issues = draftIssues(s, draft);
   const errors = issues.filter((i) => i.severity === 'error');
@@ -131,14 +113,10 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
       .dispatch({ type: 'resolveEvent', eventId: ev.id, revision: s.revision, optionId: option.id, boostId: null, selection: { lineup: draft.lineup, pitchingPlan: draft.plan } })
       .then((ok) => ok && saveDraft(ev.id, null));
   };
-  const setAndStore = <T extends string>(key: string, set: (v: T) => void) => (v: T) => {
-    set(v);
-    writePref(key, v);
-  };
 
   return (
-    <div className={`prematch ${showInfo ? "info-open" : ""}`}>
-      {/* One compact bar: title, matchup and the view controls, so the field gets the height. */}
+    <div className="prematch">
+      {/* One compact bar: the way back, the title and the matchup; the lineup gets the height. */}
       <header className="pm-head">
         <div className="pm-titles">
           <button className="link pm-back" onClick={closeLineup} aria-label="Back to match day">
@@ -148,7 +126,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
           <h1 className="pm-title">Set your lineup</h1>
         </div>
         <div className="pm-matchup">
-          <Crest club={club} size={40} />
+          <Crest club={club} size={36} />
           <div>
             <strong>
               {club.name} <span className="muted">vs</span> {clubName(opp)}
@@ -157,43 +135,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
               {isHome ? 'Home' : 'Away'} · Round {ev.round}
             </small>
           </div>
-          <Crest club={opp} size={40} />
-        </div>
-        <div className="pm-toolbar">
-        <ol className="pm-steps" aria-label="Lineup steps">
-          {([['batters', 'Batters / Fielders'], ['pitchers', 'Pitchers']] as const).map(([step, label], i) => {
-            const done = step === 'batters' && batterErrors.length === 0 && tab === 'pitchers';
-            return (
-              <li key={step}>
-                <button
-                  className={`pm-step ${tab === step ? 'on' : ''} ${done ? 'done' : ''}`}
-                  aria-current={tab === step ? 'step' : undefined}
-                  disabled={step === 'pitchers' && batterErrors.length > 0}
-                  title={step === 'pitchers' && batterErrors.length ? batterErrors[0].text : undefined}
-                  onClick={() => goTo(step)}
-                >
-                  <span className="pm-step-num">{done ? <Icon name="check" size={14} /> : i + 1}</span>
-                  {label}
-                </button>
-              </li>
-            );
-          })}
-        </ol>
-        <Segmented
-          label="Stats"
-          value={period}
-          onChange={setAndStore<StatsPeriod>('pmPeriod', setPeriod)}
-          options={[['season', 'Season'], ['last5', 'Last 5 games']]}
-          hint="Season: this season through the last completed game. Last 5 games: your club's five latest games (a player who did not play shows no sample)."
-        />
-        <span className="pm-tools">
-          <button className="btn btn-small btn-secondary" aria-expanded={showInfo} onClick={() => setAndStore<'shown' | 'hidden'>('pmInfo', (v) => setShowInfo(v === 'shown'))(showInfo ? 'hidden' : 'shown')}>
-            {showInfo ? 'Hide' : 'Show'} scouting &amp; team status
-          </button>
-          <button className="btn btn-small btn-secondary" onClick={() => setTactics({ playerId: null })}>
-            Adjust tactics
-          </button>
-        </span>
+          <Crest club={opp} size={36} />
         </div>
       </header>
 
@@ -211,9 +153,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
 
       {/* Scouting and Team status are folded away by default so the lineup gets the room. */}
       <div className="pm-info">
-        {showInfo && <OpponentReport gameId={String(ev.data.gameId)} onAdjust={() => setTactics({ playerId: null })} />}
         <MatchPlanSummary />
-        {showInfo && <TeamStatusBar state={s} />}
       </div>
 
       <div className="pm-body">
@@ -272,34 +212,6 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   );
 }
 
-/** Small, muted scouting note: at most three observations, each labelled by kind. */
-function OpponentReport({ gameId, onAdjust }: { gameId: string; onAdjust: () => void }) {
-  const s = useGame();
-  const { opponentId, observations } = opponentReport(s, gameId);
-  return (
-    <aside className="opp-report" aria-label="Opponent report">
-      <div className="opp-head">
-        <strong>Opponent report · {s.clubs[opponentId].name}</strong>
-        <button className="link opp-adjust" onClick={onAdjust}>
-          Adjust tactics
-        </button>
-      </div>
-      {observations.length === 0 ? (
-        <p className="small muted">Nothing stands out about this opponent right now.</p>
-      ) : (
-        <ul>
-          {observations.map((o) => (
-            <li key={o.text}>
-              <span className="opp-kind">{o.kind}</span> {o.text}
-              {o.hint && <span className="muted"> {o.hint.text}</span>}
-            </li>
-          ))}
-        </ul>
-      )}
-    </aside>
-  );
-}
-
 function QuickButton({ icon, label, onClick }: { icon: 'trophy' | 'rest' | 'chart' | 'back'; label: string; onClick: () => void }) {
   return (
     <button className="btn btn-small btn-secondary" onClick={onClick}>
@@ -308,21 +220,3 @@ function QuickButton({ icon, label, onClick }: { icon: 'trophy' | 'rest' | 'char
   );
 }
 
-function Segmented<T extends string>({ label, value, onChange, options, role, hint }: { label: string; value: T; onChange: (v: T) => void; options: [T, string][]; role?: 'tablist'; hint?: string }) {
-  return (
-    <div className="segmented" role={role ?? 'group'} aria-label={label} title={hint}>
-      {options.map(([v, text]) => (
-        <button
-          key={v}
-          role={role ? 'tab' : undefined}
-          aria-selected={role ? value === v : undefined}
-          aria-pressed={role ? undefined : value === v}
-          className={value === v ? 'on' : ''}
-          onClick={() => onChange(v)}
-        >
-          {text}
-        </button>
-      ))}
-    </div>
-  );
-}

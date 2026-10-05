@@ -1,25 +1,19 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { BALANCE } from '../../balance/config';
 import { effectiveValue, MODIFIER_KEYS, MODIFIER_LABEL, teamStatus, type TeamStatus } from '../../domain/effective';
-import { assignPitcher, benchPitcher, pitcherSlot, setHook } from '../../domain/lineupDraft';
+import { assignPitcher, benchPitcher, pitcherSlot } from '../../domain/lineupDraft';
 import { pitcherPosition } from '../../domain/pitching';
 import { fmtEra, fmtIp, pitchingStats, playerNotes, type StatsPeriod } from '../../domain/playerStats';
 import { playerName, userClub } from '../../domain/state';
 import type { GameState } from '../../domain/state';
 import { canPitchIn, emptyBullpen, PITCHING_SLOTS, SLOT_LABEL, SLOT_SHORT, type PitchingSlot } from '../../domain/todayPitching';
-import type { PitchingHook, Player } from '../../domain/types';
+import type { Player } from '../../domain/types';
 import { Icon } from '../components/icons';
 import { EffValue, ModChips, modifierReasons } from '../components/Modifiers';
 import { ChangeButton, EffBlock, ModColumns, modIcon, PlayerIdent, StatBlock } from './LineupParts';
 import { instructionSummary } from '../tactics/TacticsControls';
 import type { DraftApi } from './PreMatchScreen';
 import { Notes, Portrait } from './shared';
-
-const HOOK_TEXT: Record<PitchingHook, string> = {
-  early: 'Early',
-  balanced: 'Balanced',
-  long: 'Let him pitch',
-};
 
 const P = BALANCE.pitching;
 const SLOT_WHEN: Record<PitchingSlot, string> = {
@@ -103,7 +97,6 @@ export function PitchersTab({ api }: { api: DraftApi; gameId: string }) {
   };
   const dropState = (slot: PitchingSlot) => (!dragging ? '' : canPitchIn(dragging, slot) ? 'can-drop' : 'no-drop');
   const reasons = (p: Player) => modifierReasons(s, p, status);
-  const hook = BALANCE.match.hooks[draft.plan.hook];
 
   return (
     <div className="pitch-v4 bat-view pitch-view">
@@ -182,19 +175,6 @@ export function PitchersTab({ api }: { api: DraftApi; gameId: string }) {
             );
           })}
         </ol>
-        <div className="ps-hook">
-          <span className="ps-hook-label">Take out the starter</span>
-          <div className="segmented" role="group" aria-label="When to replace the starter">
-            {(Object.keys(HOOK_TEXT) as PitchingHook[]).map((h) => (
-              <button key={h} className={draft.plan.hook === h ? 'on' : ''} aria-pressed={draft.plan.hook === h} onClick={() => update(setHook(draft, h))}>
-                {HOOK_TEXT[h]}
-              </button>
-            ))}
-          </div>
-          <small className="muted">
-            After {hook.maxBatters} batters, or {hook.pullRuns} runs after {hook.minBatters}+ batters.
-          </small>
-        </div>
       </section>
 
       <section className={`panel ps-bench ${over === 'bench' ? 'drop' : ''}`} onDragOver={dragOver('bench')} onDragLeave={() => setOver(null)} onDrop={drop('bench')}>
