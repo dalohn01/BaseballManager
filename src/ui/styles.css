@@ -1817,7 +1817,7 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .bat-view .panel { padding-bottom: 6px; }
   .bat-view .bat-rows { gap: 4px; padding-top: 4px; }
 }
-@container (min-width: 681px) {
+@container (min-width: 590px) {
   .bat-head .pr-mod { display: flex; align-items: center; justify-content: center; gap: 2px; }
   .bat-head .pr-mod, .bat-row .pr-mod { width: 52px; }
   .bat-head .pr-mod svg { width: 15px; height: 15px; }
@@ -1847,7 +1847,7 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 .bench-row { grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-areas: 'grip player eff' 'grip mods mods' 'grip stats stats'; }
 
 /* Bench rows in the same compact form, from a narrower panel width. */
-@container (min-width: 600px) {
+@container (min-width: 500px) {
   .bench-head .pr-mod { display: flex; align-items: center; justify-content: center; gap: 2px; }
   .bench-head .pr-mod, .bench-row .pr-mod { width: 52px; }
   .bench-head .pr-mod svg { width: 15px; height: 15px; }
@@ -1872,8 +1872,26 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .bench-row .pr-swap svg { width: 16px; height: 16px; }
   .bench-row .pr-num { font-size: 1.1rem; }
 }
-@container (min-width: 600px) {
+@container (min-width: 500px) {
   .bench-row, .bench-head { grid-template-columns: 18px minmax(120px, 1fr) 76px auto 118px; grid-template-areas: 'grip player eff mods stats'; column-gap: 8px; }
+}
+/* Medium widths (e.g. 1280 px screens): the same one-line rows with narrower columns;
+   the header stacks each modifier's icon over its label. */
+@container (min-width: 590px) and (max-width: 670px) {
+  .bat-row, .bat-head { grid-template-columns: 18px 16px 38px minmax(110px, 1fr) 56px auto 92px 32px; column-gap: 6px; }
+  .bat-row .pr-id strong { white-space: nowrap; font-size: 0.86rem; }
+  .bat-head .pr-mod, .bat-row .pr-mod { width: 40px; }
+  .bat-head .pr-mod { flex-direction: column; gap: 0; }
+  .bat-row .eff-block strong { font-size: 1.3rem; }
+  .bat-row .pr-stats { column-gap: 8px; font-size: 0.74rem; }
+}
+@container (min-width: 500px) and (max-width: 560px) {
+  .bench-row, .bench-head { grid-template-columns: 18px minmax(110px, 1fr) 56px auto 92px; column-gap: 6px; }
+  .bench-row .pr-id strong { white-space: nowrap; font-size: 0.86rem; }
+  .bench-head .pr-mod, .bench-row .pr-mod { width: 40px; }
+  .bench-head .pr-mod { flex-direction: column; gap: 0; }
+  .bench-row .eff-block strong { font-size: 1.3rem; }
+  .bench-row .pr-stats { column-gap: 8px; font-size: 0.74rem; }
 }
 /* Narrowest last, so it wins over the rules above. */
 @container (max-width: 470px) {
