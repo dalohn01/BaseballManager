@@ -64,6 +64,10 @@ export function BattersTab({ api }: { api: DraftApi }) {
   const [overBench, setOverBench] = useState(false);
   const [picking, setPicking] = useState<number | null>(null);
   const open = openSpot(draft);
+  // A bench player being dragged: the spots he plays naturally (or DH) light up, the rest fade
+  // (he can still take them, out of position).
+  const incoming = drag?.kind === 'bench' ? s.players[drag.id] : null;
+  const fit = (pos: LineupPosition) => (!incoming ? '' : natural(incoming, pos) ? 'can-drop' : 'off-drop');
 
   const endDrag = () => {
     setDrag(null);
@@ -160,7 +164,7 @@ export function BattersTab({ api }: { api: DraftApi }) {
             return (
               <li
                 key={`${i}-${slot.playerId}`}
-                className={`ps-row bat-row ${p ? '' : 'empty'} ${marked} ${drag?.kind === 'row' && drag.index === i ? 'dragging' : ''}`}
+                className={`ps-row bat-row ${p ? '' : 'empty'} ${marked} ${fit(slot.position)} ${drag?.kind === 'row' && drag.index === i ? 'dragging' : ''}`}
                 draggable={!!p}
                 onDragStart={(e) => {
                   e.dataTransfer.setData('text/plain', slot.playerId);
