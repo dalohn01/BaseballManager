@@ -279,6 +279,15 @@ export function migrate(input: AnyState): GameState {
     }
     s.schemaVersion = 16;
   }
+  if (s.schemaVersion === 16) {
+    // Position players are natural at two positions at most: the primary and the first secondary.
+    const trim = (p: Player) => {
+      if (p.positions.length > BALANCE.roster.maxPositions) p.positions = p.positions.slice(0, BALANCE.roster.maxPositions);
+    };
+    for (const p of Object.values(s.players)) trim(p);
+    for (const ev of [s.currentEvent, s.nextEvent]) for (const c of ev?.candidates ?? []) trim(c);
+    s.schemaVersion = 17;
+  }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;
 }

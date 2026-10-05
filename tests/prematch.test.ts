@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { execute } from '../src/application/engine';
+import { migrate } from '../src/application/migrations';
 import { pitcherPosition } from '../src/domain/pitching';
 import { autoLineup, defaultPitchingPlan, validateBatters, validateLineup } from '../src/domain/lineup';
 import { assignPitcher, benchBatter, draftFromClub, moveBatter, openSpot, pitcherSlot, setPosition, swapFromBench, swapPositions, type LineupDraft } from '../src/domain/lineupDraft';
@@ -180,5 +181,18 @@ describe('two-step lineup', () => {
     expect(validateLineup(s, 'hfx', noPitcher).some((i) => /starting pitcher/.test(i.text))).toBe(true);
     const open = benchBatter(d, 0).lineup;
     expect(validateBatters(s, 'hfx', open).some((i) => i.severity === 'error' && /is open/.test(i.text))).toBe(true);
+  });
+});
+
+describe('positions', () => {
+  it('position players are natural at two positions at most, in new games and old saves (v17)', () => {
+    const s = newGame(36);
+    for (const p of Object.values(s.players)) if (!p.isPitcher) expect(p.positions.length, p.id).toBeLessThanOrEqual(2);
+    const v16 = JSON.parse(JSON.stringify(s));
+    v16.schemaVersion = 16;
+    const id = v16.clubs.hfx.roster.find((x: string) => !v16.players[x].isPitcher);
+    v16.players[id].positions = ['CF', 'LF', 'RF'];
+    const m = migrate(v16);
+    expect(m.players[id].positions).toEqual(['CF', 'LF']);
   });
 });

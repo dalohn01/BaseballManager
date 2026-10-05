@@ -62,6 +62,8 @@ export const BALANCE = {
 
   roster: {
     max: 25,
+    /** A position player is natural at most at this many positions (primary first). */
+    maxPositions: 2,
     /** Four starters and three relievers. */
     minPitchers: 7,
     minHitters: 10,

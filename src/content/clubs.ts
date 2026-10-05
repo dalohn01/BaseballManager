@@ -65,8 +65,8 @@ export interface PlayerSeed {
  * payroll that leaves room for choices without an immediate crisis.
  */
 export const USER_ROSTER: PlayerSeed[] = [
-  { firstName: 'Jake', lastName: 'Miller', number: 14, age: 21, bats: 'R', throws: 'R', positions: ['CF', 'LF', 'RF'], contact: 72, power: 58, speed: 81, fielding: 76, pitching: 10, potential: 88, satisfaction: 76, popularity: 55, fitness: 89, priority: 'playingTime', role: 'starter', salary: 48_000, seasonsLeft: 2, bio: 'A promising all-round outfielder.' },
-  { firstName: 'Leo', lastName: 'Martinez', number: 7, age: 19, bats: 'L', throws: 'R', positions: ['SS', '2B', '3B'], contact: 58, power: 44, speed: 74, fielding: 66, pitching: 10, potential: 86, satisfaction: 58, popularity: 30, fitness: 95, priority: 'playingTime', role: 'prospect', salary: 14_000, seasonsLeft: 3, bio: 'Raw, quick and hungry for a bigger role.' },
+  { firstName: 'Jake', lastName: 'Miller', number: 14, age: 21, bats: 'R', throws: 'R', positions: ['CF', 'LF'], contact: 72, power: 58, speed: 81, fielding: 76, pitching: 10, potential: 88, satisfaction: 76, popularity: 55, fitness: 89, priority: 'playingTime', role: 'starter', salary: 48_000, seasonsLeft: 2, bio: 'A promising all-round outfielder.' },
+  { firstName: 'Leo', lastName: 'Martinez', number: 7, age: 19, bats: 'L', throws: 'R', positions: ['SS', '2B'], contact: 58, power: 44, speed: 74, fielding: 66, pitching: 10, potential: 86, satisfaction: 58, popularity: 30, fitness: 95, priority: 'playingTime', role: 'prospect', salary: 14_000, seasonsLeft: 3, bio: 'Raw, quick and hungry for a bigger role.' },
   { firstName: 'Sam', lastName: 'Brooks', number: 33, age: 34, bats: 'L', throws: 'L', positions: ['DH', '1B'], contact: 68, power: 78, speed: 34, fielding: 50, pitching: 10, potential: 78, satisfaction: 70, popularity: 88, fitness: 88, priority: 'loyalty', role: 'starter', salary: 92_000, seasonsLeft: 1, bio: 'Fan favourite slugger in the final year of his deal.' },
   { firstName: 'Alex', lastName: 'Ortega', number: 4, age: 27, bats: 'R', throws: 'R', positions: ['2B', 'SS'], contact: 70, power: 52, speed: 66, fielding: 72, pitching: 10, potential: 74, satisfaction: 68, popularity: 60, fitness: 90, priority: 'titles', role: 'starter', salary: 58_000, seasonsLeft: 2, bio: 'Steady middle infielder with a winning mindset.' },
   { firstName: 'Ryan', lastName: 'Walker', number: 22, age: 29, bats: 'L', throws: 'L', positions: ['RF', 'LF'], contact: 64, power: 66, speed: 55, fielding: 62, pitching: 10, potential: 67, satisfaction: 62, popularity: 52, fitness: 86, priority: 'money', role: 'starter', salary: 55_000, seasonsLeft: 1, bio: 'Reliable corner outfielder who knows his worth.' },
@@ -97,10 +97,10 @@ export const GENERATED_ROSTER_SHAPE: { positions: LineupPosition[]; pitcher?: bo
   { positions: ['3B', '1B'], role: 'starter' },
   { positions: ['SS', '2B'], role: 'starter' },
   { positions: ['LF', 'RF'], role: 'starter' },
-  { positions: ['CF', 'LF', 'RF'], role: 'starter' },
+  { positions: ['CF', 'LF'], role: 'starter' },
   { positions: ['RF', 'LF'], role: 'starter' },
   { positions: ['DH', '1B'], role: 'starter' },
-  { positions: ['2B', '3B', 'SS'], role: 'reserve' },
+  { positions: ['2B', '3B'], role: 'reserve' },
   { positions: [], pitcher: true, role: 'starter' },
   { positions: [], pitcher: true, role: 'starter' },
   { positions: [], pitcher: true, role: 'starter' },
