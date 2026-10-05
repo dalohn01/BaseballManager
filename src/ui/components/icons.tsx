@@ -25,7 +25,15 @@ type IconName =
   | 'mic'
   | 'pause'
   | 'list'
-  | 'swap';
+  | 'swap'
+  | 'crown'
+  | 'link'
+  | 'star'
+  | 'flame'
+  | 'snow'
+  | 'shoe'
+  | 'smile'
+  | 'grip';
 
 const PATHS: Record<IconName, string> = {
   cash: 'M3 7h18v10H3z M12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M6 9.5v5 M18 9.5v5',
@@ -53,9 +61,17 @@ const PATHS: Record<IconName, string> = {
   pause: 'M8 5v14 M16 5v14',
   list: 'M9 6h11 M9 12h11 M9 18h11 M4.5 6h.01 M4.5 12h.01 M4.5 18h.01',
   swap: 'M7 4L3 8l4 4 M3 8h14 M17 12l4 4-4 4 M21 16H7',
+  crown: 'M3 8l4.5 4L12 5l4.5 7L21 8l-2 10H5z',
+  link: 'M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1 M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1',
+  star: 'M12 3l2.7 5.6 6.1.8-4.4 4.3 1 6.1L12 17l-5.4 2.8 1-6.1L3.2 9.4l6.1-.8z',
+  flame: 'M12 2.5c.8 3.6 5.5 5.4 5.5 10.5a5.5 5.5 0 0 1-11 0c0-2.8 1.6-4 2.2-6.2 1 1.6 1.9 2.3 2.6 2.4C11.2 7 11 4.8 12 2.5z',
+  snow: 'M12 2v20 M3.3 7l17.4 10 M3.3 17L20.7 7 M9.5 3.5L12 6l2.5-2.5 M9.5 20.5L12 18l2.5 2.5',
+  shoe: 'M3 17v-5.5l4.5-1.5 2-4h3l1.5 4.5c2.5 1 5.5 1.2 7 3V17z M3 17h18v2H3z',
+  smile: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18 M8.5 14.5c1 1.4 2.2 2 3.5 2s2.5-.6 3.5-2 M9 9.5h.01 M15 9.5h.01',
+  grip: 'M12 5h.01 M12 12h.01 M12 19h.01',
 };
 
-const FILLED: Partial<Record<IconName, boolean>> = { influence: true, play: true, forward: true };
+const FILLED: Partial<Record<IconName, boolean>> = { influence: true, play: true, forward: true, crown: true, star: true, flame: true, shoe: true };
 
 export function Icon({ name, size = 20, ...rest }: { name: IconName; size?: number } & SVGProps<SVGSVGElement>) {
   const filled = FILLED[name];

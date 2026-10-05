@@ -1,7 +1,7 @@
 import { closeLineup } from '../match/MatchDay';
 import { useState } from 'react';
 import { optionBlocker } from '../../application/engine';
-import { bestLineup, draftErrors, draftFromClub, draftIssues, rotateTired, suggestOrder, suggestPitching, type LineupDraft } from '../../domain/lineupDraft';
+import { bestLineup, draftErrors, draftFromClub, draftIssues, suggestPitching, type LineupDraft } from '../../domain/lineupDraft';
 import { playerNotes, type StatsPeriod } from '../../domain/playerStats';
 import type { EventInstance, GameState } from '../../domain/state';
 import { clubName, userClub } from '../../domain/state';
@@ -9,16 +9,14 @@ import { describeLineupChange, forecastForLineup } from '../../events/templates/
 import { Crest } from '../components/art';
 import { Icon } from '../components/icons';
 import { useController, useGame, useNow, useSnapshot } from '../hooks';
-import { BattingTab } from './BattingTab';
-import { FieldTab } from './FieldTab';
+import { BattersTab } from './BattersTab';
 import { PitchersTab } from './PitchersTab';
 import { opponentReport } from '../../simulation/opponentReport';
 import { MatchPlanSummary, TacticsDialog } from '../tactics/TacticsControls';
-import type { DataMode } from './shared';
 import { RELIEF_SLOTS, SLOT_LABEL } from '../../domain/todayPitching';
 import { TeamStatusBar } from '../components/Modifiers';
 
-export type Tab = 'field' | 'order' | 'pitchers';
+export type Tab = 'batters' | 'pitchers';
 
 export interface DraftApi {
   state: GameState;
@@ -27,7 +25,6 @@ export interface DraftApi {
   update: (next: LineupDraft) => void;
   /** Quick actions show what changed and can be undone. */
   quick: (label: string, next: LineupDraft) => void;
-  mode: DataMode;
   period: StatsPeriod;
   /** Opens tactics (team, or one player's instructions) without leaving the lineup. */
   openTactics: (playerId: string | null) => void;
@@ -81,8 +78,9 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   const snap = useSnapshot();
   const now = useNow(5000);
   const [draft, setDraft] = useState<LineupDraft>(() => loadDraft(s, ev.id) ?? draftFromClub(s));
-  const [tab, setTab] = useState<Tab>(() => readPref('pmTab', ['field', 'order', 'pitchers'] as const, 'field'));
-  const [mode, setMode] = useState<DataMode>(() => readPref('pmMode', ['attributes', 'stats'] as const, 'attributes'));
+  // What the screen opened with: Reset on the Pitchers tab returns today's pitching to it.
+  const [opened] = useState(draft);
+  const [tab, setTab] = useState<Tab>(() => readPref('pmTab', ['batters', 'pitchers'] as const, 'batters'));
   const [period, setPeriod] = useState<StatsPeriod>(() => readPref('pmPeriod', ['season', 'last5'] as const, 'season'));
   const [notice, setNotice] = useState<{ label: string; changes: string[]; undo: LineupDraft } | null>(null);
   const [tactics, setTactics] = useState<{ playerId: string | null } | null>(null);
@@ -100,7 +98,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
     setNotice({ label, changes, undo: draft });
     update(next);
   };
-  const api: DraftApi = { state: s, draft, update, quick, mode, period, openTactics: (playerId) => setTactics({ playerId }) };
+  const api: DraftApi = { state: s, draft, update, quick, period, openTactics: (playerId) => setTactics({ playerId }) };
 
   const game = s.schedule.find((g) => g.id === String(ev.data.gameId))!;
   const isHome = game.homeId === s.userClubId;
@@ -112,7 +110,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   const blocker = optionBlocker(s, ev, option, null, now) ?? errors[0]?.text ?? null;
   const win = errors.length === 0 ? forecastForLineup(s, game.id, draft.lineup) : null;
 
-  const starters = draft.lineup.battingOrder.map((x) => s.players[x.playerId]);
+  const starters = draft.lineup.battingOrder.map((x) => s.players[x.playerId]).filter(Boolean);
   const bench = club.roster.map((id) => s.players[id]).filter((p) => !p.isPitcher && !starters.some((st) => st.id === p.id));
   const needRest = starters.filter((p) => playerNotes(s, p, { starting: true }).some((n) => n.text === 'Needs rest')).length;
   const wantStarts = bench.filter((p) => playerNotes(s, p, { starting: false }).some((n) => n.text === 'Wants playing time')).length;
@@ -152,17 +150,14 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
           <Crest club={opp} size={40} />
         </div>
         <div className="pm-toolbar">
-        <Segmented label="View" value={tab} onChange={setAndStore<Tab>('pmTab', setTab)} options={[['field', 'Field'], ['order', 'Batting order'], ['pitchers', 'Pitchers']]} role="tablist" />
-        <Segmented label="Data" value={mode} onChange={setAndStore<DataMode>('pmMode', setMode)} options={[['attributes', 'Attributes'], ['stats', 'Stats']]} />
-        {mode === 'stats' && (
-          <Segmented
-            label="Period"
-            value={period}
-            onChange={setAndStore<StatsPeriod>('pmPeriod', setPeriod)}
-            options={[['season', 'Season'], ['last5', 'Last 5 games']]}
-            hint="Season: this season through the last completed game. Last 5 games: your club's five latest games (a player who did not play shows no sample)."
-          />
-        )}
+        <Segmented label="View" value={tab} onChange={setAndStore<Tab>('pmTab', setTab)} options={[['batters', 'Batters / Fielders'], ['pitchers', 'Pitchers']]} role="tablist" />
+        <Segmented
+          label="Stats"
+          value={period}
+          onChange={setAndStore<StatsPeriod>('pmPeriod', setPeriod)}
+          options={[['season', 'Season'], ['last5', 'Last 5 games']]}
+          hint="Season: this season through the last completed game. Last 5 games: your club's five latest games (a player who did not play shows no sample)."
+        />
         </div>
       </header>
 
@@ -185,28 +180,22 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
       </div>
 
       <div className="pm-body">
-        {tab === 'field' && <FieldTab api={api} />}
-        {tab === 'order' && <BattingTab api={api} />}
+        {tab === 'batters' && <BattersTab api={api} />}
         {tab === 'pitchers' && <PitchersTab api={api} gameId={game.id} />}
       </div>
 
       <footer className="pm-footer">
         <div className="pm-quick">
-          {tab === 'field' && (
+          {tab === 'batters' && (
             <>
-              <QuickButton icon="trophy" label="Best lineup" onClick={() => quick('Best lineup', bestLineup(s, draft))} />
-              <QuickButton icon="rest" label="Rotate tired players" onClick={() => quick('Rotate tired players', rotateTired(s, draft))} />
-            </>
-          )}
-          {tab === 'order' && (
-            <>
-              <QuickButton icon="chart" label="Suggest order" onClick={() => quick('Suggest order', suggestOrder(s, draft))} />
-              <QuickButton icon="back" label="Reset" onClick={() => quick('Reset', { ...draft, lineup: { ...draft.lineup, battingOrder: resetOrder(s, draft) } })} />
+              <QuickButton icon="trophy" label="Suggest lineup" onClick={() => quick('Suggest lineup', { ...bestLineup(s, draft), lineup: { ...bestLineup(s, draft).lineup, pitcherId: draft.lineup.pitcherId } })} />
+              <QuickButton icon="back" label="Reset" onClick={() => quick('Reset', { ...draft, lineup: { ...draft.lineup, battingOrder: structuredClone(opened.lineup.battingOrder) } })} />
             </>
           )}
           {tab === 'pitchers' && (
             <>
-              <QuickButton icon="trophy" label="Strongest setup" onClick={() => quick('Strongest setup', suggestPitching(s, draft))} />
+              <QuickButton icon="trophy" label="Suggest setup" onClick={() => quick('Suggest setup', suggestPitching(s, draft))} />
+              <QuickButton icon="back" label="Reset" onClick={() => quick('Reset', { ...draft, lineup: { ...draft.lineup, pitcherId: opened.lineup.pitcherId }, plan: { ...draft.plan, bullpen: opened.plan.bullpen } })} />
             </>
           )}
         </div>
@@ -288,14 +277,4 @@ function Segmented<T extends string>({ label, value, onChange, options, role, hi
       ))}
     </div>
   );
-}
-
-/** Reset the batting order to the saved lineup's order for players who are still in the draft. */
-function resetOrder(s: GameState, d: LineupDraft) {
-  const saved = userClub(s).lineup.battingOrder.map((x) => x.playerId);
-  return [...d.lineup.battingOrder].sort((a, b) => {
-    const ia = saved.indexOf(a.playerId);
-    const ib = saved.indexOf(b.playerId);
-    return (ia < 0 ? 99 : ia) - (ib < 0 ? 99 : ib);
-  });
 }

@@ -1,16 +1,16 @@
 import { useEffect, useRef, useState, type DragEvent } from 'react';
 import { BALANCE } from '../../balance/config';
-import { effectiveValue, teamStatus, type TeamStatus } from '../../domain/effective';
+import { effectiveValue, MODIFIER_KEYS, MODIFIER_LABEL, teamStatus, type TeamStatus } from '../../domain/effective';
 import { assignPitcher, benchPitcher, pitcherSlot, setHook } from '../../domain/lineupDraft';
 import { pitcherPosition } from '../../domain/pitching';
-import { fmtEra, fmtIp, pitcherWorkload, pitchingStats } from '../../domain/playerStats';
+import { fmtEra, fmtIp, pitchingStats, type StatsPeriod } from '../../domain/playerStats';
 import { playerName, userClub } from '../../domain/state';
-import { emptyBullpen, PITCHING_SLOTS, SLOT_LABEL, type PitchingSlot } from '../../domain/todayPitching';
 import type { GameState } from '../../domain/state';
+import { canPitchIn, emptyBullpen, PITCHING_SLOTS, SLOT_LABEL, type PitchingSlot } from '../../domain/todayPitching';
 import type { PitchingHook, Player } from '../../domain/types';
-import { forecastForLineup } from '../../events/templates/leagueGame';
 import { Icon } from '../components/icons';
 import { EffValue, ModChips, modifierReasons } from '../components/Modifiers';
+import { ChangeButton, EffBlock, ModBox, ModColumns, modIcon, PlayerIdent, StatBlock } from './LineupParts';
 import { instructionSummary } from '../tactics/TacticsControls';
 import type { DraftApi } from './PreMatchScreen';
 import { Portrait } from './shared';
@@ -23,31 +23,40 @@ const HOOK_TEXT: Record<PitchingHook, string> = {
 
 const P = BALANCE.pitching;
 const SLOT_WHEN: Record<PitchingSlot, string> = {
-  starter: 'Starts the game and goes as far as the hook allows.',
-  long: `Early relief (to the ${P.longReliefUntilInning}th) when the starter is knocked out.`,
-  setup: `Takes over in the ${P.setupFromInning}th–8th.`,
-  closer: `Save situations from the 9th (lead of ${P.saveLead[0]}–${P.saveLead[1]}).`,
+  starter: 'Starts the game.',
+  long: `Early (before the ${P.longReliefUntilInning}th) if needed.`,
+  setup: `${P.setupFromInning}th–8th inning.`,
+  closer: 'Save situations from the 9th.',
 };
+const SLOT_ICON = { starter: 'crown', long: 'link', setup: 'star', closer: 'flame' } as const;
+const ROLE_NAME: Record<PitchingSlot, string> = { starter: 'Starting', long: 'Long relief', setup: 'Setup', closer: 'Closer' };
 
-function lastOuting(state: GameState, p: Player): { when: string; detail: string } | null {
-  const w = pitcherWorkload(state, p);
-  if (!w.last) return null;
-  const when = w.last.gamesAgo === 1 ? 'last game' : `${w.last.gamesAgo} games ago`;
-  return { when, detail: `${fmtIp(w.last.outs)} IP${w.last.started ? ' (start)' : ''}` };
-}
-
-/** A pitcher's value in a slot: as the starter (stamina counts) or in relief. */
+/** A pitcher's value in a slot: as the starter (stamina counts) or in relief; on the bench, at his own position. */
 const jobOf = (slot: PitchingSlot | null, p: Player) => (slot === 'starter' ? 'SP' : slot ? 'RP' : pitcherPosition(p));
+const positionWord = (p: Player) => (pitcherPosition(p) === 'SP' ? 'Starter' : 'Reliever');
+
+/** W-L, ERA, K and IP for the chosen period. */
+function statLine(state: GameState, p: Player, period: StatsPeriod) {
+  const st = pitchingStats(state, p, period);
+  return { wl: `${st.w}-${st.l}`, era: fmtEra(st.era), k: String(st.so), ip: fmtIp(st.outs) };
+}
+const statPairs = (st: ReturnType<typeof statLine>): [string, string][] => [
+  ['W-L', st.wl],
+  ['ERA', st.era],
+  ['K', st.k],
+  ['IP', st.ip],
+];
 
 /**
- * Set your pitching staff for today's game: four slots (Starting pitcher, Long
- * relief, Setup, Closer) with each pitcher's effective value (OVR plus Fitness,
- * Morale, Team and Form), and the pitchers not used today. The roles apply to
- * this game only; the strongest setup is preselected. Pitchers move by drag
- * and drop, by Change on a slot, or with "Use as" on the bench.
+ * Set your pitching staff for today's game: the starter and three relief
+ * slots (Long relief, Setup, Closer) as rows with each pitcher's effective
+ * value (OVR + Fitness, Morale, Team and Form), and the bench, who rest today.
+ * The roles apply to this game only; the strongest setup is preselected.
+ * Pitchers move by drag and drop, by the swap button on a row, or by the
+ * handle on a bench row.
  */
-export function PitchersTab({ api, gameId }: { api: DraftApi; gameId: string }) {
-  const { state: s, draft, update, mode, period } = api;
+export function PitchersTab({ api }: { api: DraftApi; gameId: string }) {
+  const { state: s, draft, update, period } = api;
   const club = userClub(s);
   const status = teamStatus(s, club.id);
   const pen = draft.plan.bullpen ?? emptyBullpen();
@@ -58,141 +67,199 @@ export function PitchersTab({ api, gameId }: { api: DraftApi; gameId: string }) 
   };
   const bench = all
     .filter((p) => !pitcherSlot(draft, p.id))
-    .map((p) => ({ p, v: effectiveValue(s, p, undefined, status) }))
+    .map((p) => ({ p, v: effectiveValue(s, p, jobOf(null, p), status) }))
     .sort((a, b) => b.v.effective - a.v.effective || a.p.id.localeCompare(b.p.id));
   const [picking, setPicking] = useState<PitchingSlot | null>(null);
   const [over, setOver] = useState<PitchingSlot | 'bench' | null>(null);
-  const win = forecastForLineup(s, gameId, draft.lineup);
-  const hook = BALANCE.match.hooks[draft.plan.hook];
+  // Who is being dragged: only roles he may take accept the drop (starters start, relievers relieve).
+  const [dragging, setDragging] = useState<Player | null>(null);
+  const accepts = (target: PitchingSlot | 'bench', p: Player | null) => !!p && (target === 'bench' ? !!pitcherSlot(draft, p.id) && pitcherSlot(draft, p.id) !== 'starter' : canPitchIn(p, target));
 
   const drop = (target: PitchingSlot | 'bench') => (e: DragEvent) => {
     e.preventDefault();
     setOver(null);
+    setDragging(null);
     const id = e.dataTransfer.getData('text/plain');
-    if (!id || !s.players[id]?.isPitcher) return;
+    const p = s.players[id];
+    if (!p?.isPitcher || !accepts(target, p)) return;
     if (target === 'bench') {
       const from = pitcherSlot(draft, id);
       if (from && from !== 'starter') update(benchPitcher(draft, from));
-    } else update(assignPitcher(draft, target, id));
+    } else update(assignPitcher(s, draft, target, id));
   };
   const dragOver = (target: PitchingSlot | 'bench') => (e: DragEvent) => {
+    if (dragging && !accepts(target, dragging)) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     if (over !== target) setOver(target);
   };
-  const dragStart = (id: string) => (e: DragEvent) => {
-    e.dataTransfer.setData('text/plain', id);
+  const dragStart = (p: Player) => (e: DragEvent) => {
+    e.dataTransfer.setData('text/plain', p.id);
     e.dataTransfer.effectAllowed = 'move';
+    setDragging(p);
   };
+  const dragEnd = () => {
+    setDragging(null);
+    setOver(null);
+  };
+  const dropState = (slot: PitchingSlot) => (!dragging ? '' : canPitchIn(dragging, slot) ? 'can-drop' : 'no-drop');
+  const reasons = (p: Player) => modifierReasons(s, p, status);
+  const hook = BALANCE.match.hooks[draft.plan.hook];
 
   return (
-    <div className="pitch-v3">
+    <div className="pitch-v4">
       <section className="panel ps-staff">
         <header className="panel-head">
-          <h2>Set your pitching staff</h2>
-          <small className="muted">For today's game only. Effective (EFF) = OVR + Fitness, Morale, Team and Form. Drag a pitcher onto a slot to swap.</small>
+          <h2>Pitching staff</h2>
+          <small className="muted">Drag and drop to change pitchers. The roles apply to today's game only.</small>
         </header>
-        <div className="ps-slots">
-          {PITCHING_SLOTS.map((slot) => {
+        <ol className="ps-rows">
+          {PITCHING_SLOTS.map((slot, i) => {
             const p = inSlot(slot);
             const v = p ? effectiveValue(s, p, jobOf(slot, p), status) : null;
-            const out = p ? lastOuting(s, p) : null;
+            const st = p ? statLine(s, p, period) : null;
+            const why = p ? reasons(p) : null;
             return (
-              <div
+              <li
                 key={slot}
-                className={`ps-slot slot-${slot} ${p ? '' : 'empty'} ${over === slot ? 'drop' : ''}`}
+                className={`ps-row slot-${slot} ${p ? '' : 'empty'} ${over === slot ? 'drop' : ''} ${dropState(slot)}`}
                 onDragOver={dragOver(slot)}
                 onDragLeave={() => setOver(null)}
                 onDrop={drop(slot)}
                 aria-label={`${SLOT_LABEL[slot]}${p ? `: ${playerName(p)}` : ': empty'}`}
-                role="group"
               >
-                <header>
-                  <h3>{SLOT_LABEL[slot]}</h3>
-                  <p className="ps-when">{SLOT_WHEN[slot]}</p>
-                </header>
-                {p && v ? (
+                <span className="pr-num">{i + 1}</span>
+                <span className="pr-role">
+                  <Icon name={SLOT_ICON[slot]} size={26} className={`role-icon role-${slot}`} />
+                  <span>
+                    <strong>{ROLE_NAME[slot]}</strong>
+                    <small>{SLOT_WHEN[slot]}</small>
+                  </span>
+                </span>
+                {p && v && st && why ? (
                   <>
-                    <div className="ps-player" draggable onDragStart={dragStart(p.id)} title="Drag to another slot to swap">
-                      <Portrait state={s} player={p} size={52} nested />
-                      <span className="ps-name">
-                        <strong>
-                          <span className={`pos-chip pos-${pitcherPosition(p).toLowerCase()}`}>{pitcherPosition(p)}</span>
-                          {p.lastName}
+                    <span className="pr-player" draggable onDragStart={dragStart(p)} onDragEnd={dragEnd} title={slot === 'starter' ? 'Drag a starter here from the bench to change' : 'Drag to another relief role or to the bench'}>
+                      <PlayerIdent
+                        state={s}
+                        player={p}
+                        sub={`#${p.number} · Throws ${p.throws}`}
+                        badge={<span className={`pos-word pos-${pitcherPosition(p).toLowerCase()}`}>{positionWord(p)}</span>}
+                        extra={
                           <button className="pr-instr" onClick={() => api.openTactics(p.id)} title={`Instructions: ${instructionSummary(s, p)}`} aria-label={`Instructions for ${p.lastName}`}>
                             <Icon name="clipboard" size={14} />
                           </button>
-                        </strong>
-                        <small>{out ? `Last outing: ${out.when}, ${out.detail}` : 'No outings yet'}</small>
-                      </span>
-                      <EffValue ovr={v.ovr} eff={v.effective} big />
-                    </div>
-                    <ModChips mods={v.mods} reasons={modifierReasons(s, p, status)} />
-                    <div className="ps-actions">
-                      <button className="btn btn-small btn-secondary" onClick={() => setPicking(slot)}>
-                        <Icon name="swap" size={16} /> Change
-                      </button>
-                    </div>
+                        }
+                      />
+                    </span>
+                    <EffBlock base={v.ovr} eff={v.effective} label />
+                    <ModColumns mods={v.mods} reasons={why} />
+                    <StatBlock stats={statPairs(st)} />
+                    <ChangeButton label={`Change ${SLOT_LABEL[slot].toLowerCase()} (${p.lastName})`} onClick={() => setPicking(slot)} />
                   </>
                 ) : (
-                  <button className="rc-assign" onClick={() => setPicking(slot)}>
+                  <button className="rc-assign pr-empty" onClick={() => setPicking(slot)}>
                     + Assign pitcher
                   </button>
                 )}
-              </div>
+              </li>
             );
           })}
+        </ol>
+        <div className="ps-hook">
+          <span className="ps-hook-label">Take out the starter</span>
+          <div className="segmented" role="group" aria-label="When to replace the starter">
+            {(Object.keys(HOOK_TEXT) as PitchingHook[]).map((h) => (
+              <button key={h} className={draft.plan.hook === h ? 'on' : ''} aria-pressed={draft.plan.hook === h} onClick={() => update(setHook(draft, h))}>
+                {HOOK_TEXT[h]}
+              </button>
+            ))}
+          </div>
+          <small className="muted">
+            After {hook.maxBatters} batters, or {hook.pullRuns} runs after {hook.minBatters}+ batters.
+          </small>
         </div>
-        <p className="tradeoff-line small">
-          <Icon name="influence" size={16} /> Forecast with this staff: <strong>{Math.round(win * 100)}%</strong>. Rest is counted in games: a start leaves a pitcher Exhausted (−25), then Tired (−10), Ready (0) and Fresh (+1) after three games off; a relief outing costs one stage.
-        </p>
       </section>
 
       <section className={`panel ps-bench ${over === 'bench' ? 'drop' : ''}`} onDragOver={dragOver('bench')} onDragLeave={() => setOver(null)} onDrop={drop('bench')}>
         <header className="panel-head">
-          <h2>Not used today</h2>
-          <small className="muted">{bench.length ? 'These pitchers sit out this game (and rest one stage).' : 'Every pitcher has a slot today.'}</small>
+          <h2>Rest today (bench)</h2>
+          <small className="muted">Drag a pitcher onto a role, or use the ⋮ handle. Pitchers here do not play today and rest one stage.</small>
         </header>
-        {bench.length > 0 && (
+        {bench.length === 0 ? (
+          <p className="small muted ps-none">Every pitcher has a role today.</p>
+        ) : (
           <div className="ps-table-wrap">
             <table className="ps-table">
               <thead>
                 <tr>
-                  <th scope="col">Pitcher</th>
-                  <th scope="col" title="Overall at his position">OVR</th>
-                  <th scope="col" title="Effective today">EFF</th>
-                  <th scope="col">Modifiers</th>
-                  <th scope="col" title={period === 'season' ? 'Season' : 'Last 5 games'}>{mode === 'stats' ? 'G · ERA · K · IP' : 'G · ERA'}</th>
                   <th scope="col">
-                    <span className="sr-only">Use</span>
+                    <span className="sr-only">Move</span>
                   </th>
+                  <th scope="col">
+                    <span className="sr-only">Pitcher</span>
+                  </th>
+                  <th scope="col" title="Overall at his position">
+                    PIT
+                  </th>
+                  <th scope="col" title="Effective today">
+                    EFF
+                  </th>
+                  {MODIFIER_KEYS.map((k) => (
+                    <th scope="col" key={k} className="mod-th">
+                      {modIcon(k, 1)}
+                      <small>{MODIFIER_LABEL[k]}</small>
+                    </th>
+                  ))}
+                  <th scope="col">W-L</th>
+                  <th scope="col">ERA</th>
+                  <th scope="col">K</th>
+                  <th scope="col">IP</th>
                 </tr>
               </thead>
               <tbody>
                 {bench.map(({ p, v }) => {
-                  const st = pitchingStats(s, p, period);
+                  const st = statLine(s, p, period);
+                  const why = reasons(p);
                   return (
-                    <tr key={p.id} draggable onDragStart={dragStart(p.id)}>
+                    <tr key={p.id} draggable onDragStart={dragStart(p)} onDragEnd={dragEnd}>
+                      <td className="ps-grip">
+                        <Icon name="grip" size={20} strokeWidth={3.5} />
+                        <UseAs state={s} player={p} inSlot={inSlot} status={status} onUse={(slot) => update(assignPitcher(s, draft, slot, p.id))} />
+                      </td>
                       <th scope="row">
                         <span className="ps-bench-name">
-                          <Portrait state={s} player={p} size={36} nested />
-                          <span>
-                            <span className={`pos-chip pos-${pitcherPosition(p).toLowerCase()}`}>{pitcherPosition(p)}</span>
-                            {playerName(p)}
+                          <Portrait state={s} player={p} size={40} nested />
+                          <span className="pr-id">
+                            <strong title={playerName(p)}>{playerName(p)}</strong>
+                            <small>
+                              #{p.number} · Throws {p.throws}
+                            </small>
+                            <span className={`pos-word pos-${pitcherPosition(p).toLowerCase()}`}>{positionWord(p)}</span>
                           </span>
                         </span>
                       </th>
-                      <td className="num" data-label="OVR">{v.ovr}</td>
-                      <td className="num eff" data-label="EFF">{v.effective}</td>
-                      <td>
-                        <ModChips mods={v.mods} reasons={modifierReasons(s, p, status)} compact />
+                      <td className="num" data-label="PIT">
+                        {v.ovr}
                       </td>
-                      <td className="num stats" data-label={mode === 'stats' ? 'G · ERA · K · IP' : 'G · ERA'}>
-                        {st.g} · {fmtEra(st.era)}
-                        {mode === 'stats' && ` · ${st.so} · ${fmtIp(st.outs)}`}
+                      <td className="num" data-label="EFF">
+                        <EffBlock base={v.ovr} eff={v.effective} />
                       </td>
-                      <td>
-                        <UseAs state={s} player={p} inSlot={inSlot} onUse={(slot) => update(assignPitcher(draft, slot, p.id))} />
+                      {MODIFIER_KEYS.map((k) => (
+                        <td key={k} className="mod-td" data-label={MODIFIER_LABEL[k]}>
+                          <ModBox value={v.mods[k]} title={`${MODIFIER_LABEL[k]}: ${why[k]}`} />
+                        </td>
+                      ))}
+                      <td className="num stat" data-label="W-L">
+                        {st.wl}
+                      </td>
+                      <td className="num stat" data-label="ERA">
+                        {st.era}
+                      </td>
+                      <td className="num stat" data-label="K">
+                        {st.k}
+                      </td>
+                      <td className="num stat" data-label="IP">
+                        {st.ip}
                       </td>
                     </tr>
                   );
@@ -201,20 +268,6 @@ export function PitchersTab({ api, gameId }: { api: DraftApi; gameId: string }) 
             </table>
           </div>
         )}
-
-        <div className="ps-hook">
-          <h3 className="subhead">When to take out the starter</h3>
-          <div className="segmented" role="group" aria-label="When to replace the starter">
-            {(Object.keys(HOOK_TEXT) as PitchingHook[]).map((h) => (
-              <button key={h} className={draft.plan.hook === h ? 'on' : ''} aria-pressed={draft.plan.hook === h} onClick={() => update(setHook(draft, h))}>
-                {HOOK_TEXT[h]}
-              </button>
-            ))}
-          </div>
-          <p className="small muted">
-            The starter comes out after {hook.maxBatters} batters, or once he has allowed {hook.pullRuns} runs after at least {hook.minBatters} batters. The hook setting stays for future games.
-          </p>
-        </div>
       </section>
 
       {picking && (
@@ -222,17 +275,21 @@ export function PitchersTab({ api, gameId }: { api: DraftApi; gameId: string }) 
           state={s}
           status={status}
           slot={picking}
-          pitchers={all}
+          pitchers={all.filter((p) => canPitchIn(p, picking))}
           slotOf={(id) => pitcherSlot(draft, id)}
           current={inSlot(picking)?.id ?? null}
           onPick={(id) => {
-            update(assignPitcher(draft, picking, id));
+            update(assignPitcher(s, draft, picking, id));
             setPicking(null);
           }}
-          onClear={picking === 'starter' ? undefined : () => {
-            update(benchPitcher(draft, picking as Exclude<PitchingSlot, 'starter'>));
-            setPicking(null);
-          }}
+          onClear={
+            picking === 'starter'
+              ? undefined
+              : () => {
+                  update(benchPitcher(draft, picking as Exclude<PitchingSlot, 'starter'>));
+                  setPicking(null);
+                }
+          }
           onClose={() => setPicking(null)}
         />
       )}
@@ -240,21 +297,24 @@ export function PitchersTab({ api, gameId }: { api: DraftApi; gameId: string }) 
   );
 }
 
-/** "Use as…" for a bench pitcher: the slot and who he replaces. */
-function UseAs({ state, player, inSlot, onUse }: { state: GameState; player: Player; inSlot: (slot: PitchingSlot) => Player | null; onUse: (slot: PitchingSlot) => void }) {
+/**
+ * The bench row's handle doubles as a menu: a native select over the grip,
+ * so the slot can be picked without dragging (touch, keyboard).
+ */
+function UseAs({ state, player, inSlot, status, onUse }: { state: GameState; player: Player; inSlot: (slot: PitchingSlot) => Player | null; status: TeamStatus; onUse: (slot: PitchingSlot) => void }) {
   return (
     <select
       className="ps-use"
-      aria-label={`Use ${player.lastName} as`}
+      aria-label={`Use ${player.lastName} today as`}
       value=""
       onChange={(e) => {
         if (e.target.value) onUse(e.target.value as PitchingSlot);
       }}
     >
-      <option value="">Use as…</option>
-      {PITCHING_SLOTS.map((slot) => {
+      <option value="">Use {player.lastName} as…</option>
+      {PITCHING_SLOTS.filter((slot) => canPitchIn(player, slot)).map((slot) => {
         const now = inSlot(slot);
-        const v = effectiveValue(state, player, jobOf(slot, player)).effective;
+        const v = effectiveValue(state, player, jobOf(slot, player), status).effective;
         return (
           <option key={slot} value={slot}>
             {SLOT_LABEL[slot]} (EFF {v}){now ? `, for ${now.lastName}` : ''}
@@ -265,7 +325,7 @@ function UseAs({ state, player, inSlot, onUse }: { state: GameState; player: Pla
   );
 }
 
-/** Choose a pitcher for one slot: everyone, by effective value in that job. Picking someone with another slot swaps the two. */
+/** Choose a pitcher for one role: everyone, by effective value in that job. Picking someone with another role swaps the two. */
 function SlotPicker({
   state,
   status,
@@ -307,18 +367,17 @@ function SlotPicker({
           </button>
         </header>
         <p className="small muted">
-          {SLOT_WHEN[slot]} Values are {slot === 'starter' ? 'as a starter (stamina counts)' : 'in relief'}. Picking someone with another slot today swaps the two{holder ? ` (${holder.lastName} takes his place)` : ''}.
+          {SLOT_WHEN[slot]} {slot === 'starter' ? 'Only starting pitchers (SP) can start.' : 'Only relievers (RP) can pitch in relief.'} Picking someone with another role today swaps the two{holder ? ` (${holder.lastName} takes his place)` : ''}.
         </p>
         <ul className="ps-pick-list">
           {rows.map(({ p, v, at }) => (
             <li key={p.id} className={p.id === current ? 'current' : ''}>
               <Portrait state={state} player={p} size={40} nested />
-              <span className="ps-name">
-                <strong>
-                  <span className={`pos-chip pos-${pitcherPosition(p).toLowerCase()}`}>{pitcherPosition(p)}</span>
-                  {playerName(p)}
-                </strong>
-                <small>{at ? `Today: ${SLOT_LABEL[at]}` : 'Not used today'}</small>
+              <span className="pr-id">
+                <strong>{playerName(p)}</strong>
+                <small>
+                  {positionWord(p)} · {at ? `Today: ${SLOT_LABEL[at]}` : 'On the bench'}
+                </small>
               </span>
               <EffValue ovr={v.ovr} eff={v.effective} />
               <ModChips mods={v.mods} reasons={modifierReasons(state, p, status)} compact />
@@ -336,7 +395,7 @@ function SlotPicker({
         </ul>
         {current && onClear && (
           <button className="link" onClick={onClear}>
-            Leave the slot empty
+            Leave the role empty
           </button>
         )}
       </div>

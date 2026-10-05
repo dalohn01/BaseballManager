@@ -1,6 +1,5 @@
-import { bestPitching, emptyBullpen, RELIEF_SLOTS, slotOf, type PitchingSlot } from './todayPitching';
-import { BALANCE } from '../balance/config';
-import { autoLineup, orderBatters, validateLineup, validatePitchingPlan, type LineupIssue } from './lineup';
+import { bestPitching, canPitchIn, emptyBullpen, RELIEF_SLOTS, slotOf, type PitchingSlot } from './todayPitching';
+import { autoLineup, validateLineup, validatePitchingPlan, type LineupIssue } from './lineup';
 import type { GameState } from './state';
 import { userClub } from './state';
 import type { Lineup, LineupPosition, PitchingPlan, PlayerId } from './types';
@@ -35,21 +34,35 @@ export function draftIssues(state: GameState, d: LineupDraft): LineupIssue[] {
 
 export const draftErrors = (state: GameState, d: LineupDraft) => draftIssues(state, d).filter((i) => i.severity === 'error');
 
-/** Why `playerId` cannot take a slot, or null. Out-of-position play is allowed (with a visible penalty). */
-export function benchSwapBlocker(state: GameState, d: LineupDraft, slotIndex: number, playerId: PlayerId): string | null {
-  const p = state.players[playerId];
-  if (!p || p.clubId !== state.userClubId) return 'He is not on the roster.';
-  if (p.isPitcher) return 'Pitchers do not bat in this model.';
-  if (d.lineup.battingOrder.some((s) => s.playerId === playerId)) return 'He is already in the lineup.';
-  if (!d.lineup.battingOrder[slotIndex]) return 'No such lineup spot.';
-  return null;
-}
-
 /** Bench player replaces a starter: same position, same batting spot; the starter goes to the bench. */
 export function swapFromBench(d: LineupDraft, slotIndex: number, playerId: PlayerId): LineupDraft {
   const next = clone(d);
   next.lineup.battingOrder[slotIndex] = { ...next.lineup.battingOrder[slotIndex], playerId };
   return next;
+}
+
+/** A starter goes to the bench: his batting spot and position stay, open until someone comes in. */
+export function benchBatter(d: LineupDraft, slotIndex: number): LineupDraft {
+  const next = clone(d);
+  if (next.lineup.battingOrder[slotIndex]) next.lineup.battingOrder[slotIndex] = { ...next.lineup.battingOrder[slotIndex], playerId: '' };
+  return next;
+}
+
+/** The first open batting spot, or -1. */
+export const openSpot = (d: LineupDraft) => d.lineup.battingOrder.findIndex((s) => !s.playerId);
+
+/**
+ * A starter takes another defensive position. Whoever had it takes his old
+ * one, so every position stays filled exactly once; batting spots do not move.
+ */
+export function setPosition(d: LineupDraft, slotIndex: number, pos: LineupPosition): LineupDraft {
+  const j = d.lineup.battingOrder.findIndex((s) => s.position === pos);
+  if (j < 0) {
+    const next = clone(d);
+    next.lineup.battingOrder[slotIndex].position = pos;
+    return next;
+  }
+  return j === slotIndex ? clone(d) : swapPositions(d, slotIndex, j);
 }
 
 /** Two starters exchange defensive positions (atomic); batting spots stay as they are. */
@@ -84,12 +97,22 @@ function put(d: LineupDraft, slot: PitchingSlot, id: PlayerId | null) {
   }
 }
 
+/** Why a pitcher cannot take a slot today (starters only start, relievers only relieve), or null. */
+export function slotBlocker(state: GameState, slot: PitchingSlot, id: PlayerId): string | null {
+  const p = state.players[id];
+  if (!p?.isPitcher) return 'Only pitchers can take a pitching role.';
+  if (canPitchIn(p, slot)) return null;
+  return slot === 'starter' ? `${p.lastName} is a reliever and cannot start.` : `${p.lastName} is a starter and cannot pitch in relief.`;
+}
+
 /**
  * Puts a pitcher in a slot for today. If he already has another slot, the two
  * swap; a pitcher coming from the bench sends the slot's pitcher to the bench
- * (the starting slot can never be left empty).
+ * (the starting slot can never be left empty). A starter can only take the
+ * starting slot and a reliever only a relief slot; anything else is ignored.
  */
-export function assignPitcher(d: LineupDraft, slot: PitchingSlot, id: PlayerId): LineupDraft {
+export function assignPitcher(state: GameState, d: LineupDraft, slot: PitchingSlot, id: PlayerId): LineupDraft {
+  if (slotBlocker(state, slot, id)) return d;
   const next = clone(d);
   next.plan.bullpen = { ...(next.plan.bullpen ?? emptyBullpen()) };
   const from = pitcherSlot(next, id);
@@ -98,15 +121,6 @@ export function assignPitcher(d: LineupDraft, slot: PitchingSlot, id: PlayerId):
   if (from) put(next, from, current);
   put(next, slot, id);
   return next;
-}
-
-/** Swaps the pitchers in two slots. */
-export function swapSlots(d: LineupDraft, a: PitchingSlot, b: PitchingSlot): LineupDraft {
-  const pa = pitcherIn(d, a);
-  const pb = pitcherIn(d, b);
-  if (pa) return assignPitcher(d, b, pa);
-  if (pb) return assignPitcher(d, a, pb);
-  return clone(d);
 }
 
 /** Takes a reliever out of today's staff (the starting slot is never empty). */
@@ -130,16 +144,6 @@ export function bestLineup(state: GameState, d: LineupDraft): LineupDraft {
   return { ...clone(d), lineup: autoLineup(state, state.userClubId) };
 }
 
-export function rotateTired(state: GameState, d: LineupDraft): LineupDraft {
-  return { ...clone(d), lineup: autoLineup(state, state.userClubId, { restBelow: BALANCE.fitness.restBelow }) };
-}
-
-export function suggestOrder(state: GameState, d: LineupDraft): LineupDraft {
-  const next = clone(d);
-  next.lineup.battingOrder = orderBatters(state, next.lineup.battingOrder);
-  return next;
-}
-
 /** The strongest pitching for today by effective value: starter and the three relief slots. */
 export function suggestPitching(state: GameState, d: LineupDraft): LineupDraft {
   const next = clone(d);
@@ -149,9 +153,3 @@ export function suggestPitching(state: GameState, d: LineupDraft): LineupDraft {
   return next;
 }
 
-/** Positions a player is suited to, for display. */
-export function suitability(state: GameState, playerId: PlayerId, pos: LineupPosition): 'natural' | 'dh' | 'out' {
-  const p = state.players[playerId];
-  if (pos === 'DH') return 'dh';
-  return p.positions.includes(pos) ? 'natural' : 'out';
-}

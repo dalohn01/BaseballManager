@@ -49,6 +49,10 @@ export interface SeasonStats {
   runsAllowed: number;
   walksAllowed: number;
   strikeouts: number;
+  /** Pitchers of record (wins, losses, saves). */
+  wins: number;
+  losses: number;
+  saves: number;
 }
 
 export interface ReasonEntry {
@@ -391,6 +395,8 @@ export interface MatchResult {
   hooks?: { home: MatchHook; away: MatchHook };
   /** Complete ordered sequence for the visual match view (absent in older saves). */
   sequence?: MatchSequence[];
+  /** Pitchers of record (absent in older saves). */
+  decisions?: { win: PlayerId | null; loss: PlayerId | null; save: PlayerId | null };
   /** Crowd at the user's home games (absent for road games and older saves). */
   gate?: { attendance: number; capacity: number };
 }

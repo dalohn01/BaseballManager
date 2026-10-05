@@ -55,7 +55,7 @@ export function restText(p: Player): string {
 
 export function fitnessModifier(p: Player): number {
   if (p.isPitcher) return M().restStages[restStage(p)].modifier;
-  return -Math.round((100 - p.fitness) * M().hitterFitnessPerPoint);
+  return M().hitterFitness.find((b) => p.fitness >= b.from)?.modifier ?? -3;
 }
 
 export function moraleModifier(p: Player): number {

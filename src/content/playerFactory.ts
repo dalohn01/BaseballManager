@@ -9,6 +9,7 @@ import { FIRST_NAMES, LAST_NAMES } from './names';
 export const emptyStats = (): SeasonStats => ({
   games: 0, starts: 0, pa: 0, ab: 0, h: 0, doubles: 0, triples: 0, hr: 0, rbi: 0, r: 0, bb: 0, so: 0, sb: 0,
   pitchingApps: 0, pitchingStarts: 0, outsPitched: 0, hitsAllowed: 0, runsAllowed: 0, walksAllowed: 0, strikeouts: 0,
+  wins: 0, losses: 0, saves: 0,
 });
 
 /** What the club's scouts believe about a potential; accuracy depends on the Scouting Department level. */

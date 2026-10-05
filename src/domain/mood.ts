@@ -28,8 +28,5 @@ export function moodThresholds(value: number): { below: number | null; above: nu
 
 /** Fitness in percent → readable label (shown next to the number, never colour alone). */
 export function fitnessLabel(value: number): string {
-  if (value >= 95) return 'Fresh';
-  if (value >= 88) return 'Ready';
-  if (value >= 78) return 'Tired';
-  return 'Exhausted';
+  return BALANCE.modifiers.hitterFitness.find((b) => value >= b.from)?.label ?? 'Exhausted';
 }

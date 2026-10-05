@@ -257,6 +257,20 @@ export function migrate(input: AnyState): GameState {
     }
     s.schemaVersion = 14;
   }
+  if (s.schemaVersion === 14) {
+    // Pitchers of record are counted from now on (earlier games have no decisions stored).
+    const add = (st: Player['stats']) => {
+      st.wins ??= 0;
+      st.losses ??= 0;
+      st.saves ??= 0;
+    };
+    const all = [...Object.values(s.players), ...[s.currentEvent, s.nextEvent].flatMap((ev) => ev?.candidates ?? [])];
+    for (const p of all) {
+      add(p.stats);
+      for (const past of p.pastSeasons ?? []) add(past.stats);
+    }
+    s.schemaVersion = 15;
+  }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;
 }

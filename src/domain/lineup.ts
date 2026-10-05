@@ -1,5 +1,5 @@
 import { personalModifier, restLabel, restStage } from './effective';
-import { bestPitching, emptyBullpen, RELIEF_SLOTS } from './todayPitching';
+import { bestPitching, canPitchIn, emptyBullpen, RELIEF_SLOTS } from './todayPitching';
 import { BALANCE } from '../balance/config';
 import type { GameState } from './state';
 import type {
@@ -42,7 +42,12 @@ export function validateLineup(state: GameState, clubId: ClubId, lineup: Lineup)
   const seenPositions = new Set<LineupPosition>();
 
   if (lineup.battingOrder.length !== 9) issues.push({ severity: 'error', text: 'The batting order needs exactly 9 players.' });
-  for (const slot of lineup.battingOrder) {
+  for (const [i, slot] of lineup.battingOrder.entries()) {
+    if (!slot.playerId) {
+      issues.push({ severity: 'error', text: `Batting spot ${i + 1} (${slot.position}) is open: bring a player in from the bench.` });
+      seenPositions.add(slot.position);
+      continue;
+    }
     const p = state.players[slot.playerId];
     if (!p || !roster.has(slot.playerId)) {
       issues.push({ severity: 'error', text: 'A batter is no longer on the roster.' });
@@ -82,12 +87,15 @@ export function validatePitchingPlan(state: GameState, clubId: ClubId, starterId
   const pitchers = new Set(club.roster.filter((id) => state.players[id]?.isPitcher));
   const seen = new Set<PlayerId>([starterId]);
   const pen = plan.bullpen ?? emptyBullpen();
+  const starter = state.players[starterId];
+  if (starter?.isPitcher && !canPitchIn(starter, 'starter')) issues.push({ severity: 'error', text: `${starter.lastName} is a reliever and cannot start.` });
   for (const slot of RELIEF_SLOTS) {
     const id = pen[slot];
     if (!id) continue;
     const p = state.players[id];
     if (!pitchers.has(id)) issues.push({ severity: 'error', text: 'A relief pitcher is no longer on the roster.' });
     else if (seen.has(id)) issues.push({ severity: 'error', text: `${p.lastName} has two roles today.` });
+    else if (!canPitchIn(p, slot)) issues.push({ severity: 'error', text: `${p.lastName} is a starter and cannot pitch in relief.` });
     else if (restStage(p) === 0) issues.push({ severity: 'warning', text: `${p.lastName} is exhausted and will pitch much worse in relief.` });
     seen.add(id);
   }

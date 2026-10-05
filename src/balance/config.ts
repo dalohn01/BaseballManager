@@ -219,8 +219,17 @@ export const BALANCE = {
       { label: 'Ready', from: 80, fitness: 88, modifier: 0 },
       { label: 'Fresh', from: 96, fitness: 100, modifier: 1 },
     ],
-    /** Hitters: rating points lost per fitness point below 100% (90% → −3). */
-    hitterFitnessPerPoint: 0.3,
+    /**
+     * Hitters: fitness in bands, so only the gameplay-relevant state shows (the
+     * first band the player reaches; below the last, −3). Playing costs fitness,
+     * rest days and the bench give it back.
+     */
+    hitterFitness: [
+      { label: 'Fresh', from: 95, modifier: 1 },
+      { label: 'Ready', from: 85, modifier: 0 },
+      { label: 'Tired', from: 75, modifier: -1 },
+      { label: 'Worn', from: 65, modifier: -2 },
+    ],
     /** Morale from satisfaction: the first band the player reaches (else −2). */
     morale: [
       { from: 85, modifier: 2 },
@@ -249,8 +258,6 @@ export const BALANCE = {
       fansNeutral: 75,
       fansPerStep: 15,
     },
-    /** Default pitching: a starter in a relief slot counts this much lower (he usually only starts). */
-    starterInReliefPenalty: 8,
   },
 
   training: {
@@ -315,7 +322,7 @@ export const BALANCE = {
     /** Players below this satisfaction refuse to re-sign. */
     renewalMinSatisfaction: 45,
     aiRenewMaxAge: 33,
-    minRosterSize: 18,
+    minRosterSize: 21,
     ageingFrom: 31,
     fitnessAfterBreak: [94, 100] as const,
     moodDriftToward: 62,

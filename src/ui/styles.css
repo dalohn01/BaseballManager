@@ -1506,32 +1506,124 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 
 /* ===== Pitching staff for today: four slots, effective value, modifiers, bench ===== */
 .club-tabs { flex-wrap: wrap; }
-.pitch-v3 { display: grid; gap: 14px; }
-.pitch-v3 .panel + .panel { margin-top: 0; }
-.ps-staff, .ps-bench { padding-bottom: 14px; }
-.ps-slots { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 10px; padding: 12px 12px 0; }
-.ps-slot { display: grid; align-content: start; gap: 8px; padding: 12px; border-radius: 12px; border: 1px solid var(--line); min-width: 0; background: #fff; transition: box-shadow 0.15s, border-color 0.15s; }
-.ps-slot header h3 { margin: 0; font-family: var(--display); font-weight: 800; text-transform: uppercase; color: var(--navy); font-size: 1.1rem; }
-.ps-when { margin: 2px 0 0; font-size: 0.82rem; color: var(--slate); min-height: 2.3em; }
-.ps-slot.slot-starter { background: #eef4fd; border-color: #c8d9f2; }
-.ps-slot.slot-long { background: #f3f7fc; border-color: #d8e3f1; }
-.ps-slot.slot-setup { background: #fdf6e7; border-color: #f1e0b8; }
-.ps-slot.slot-closer { background: #fdf0ef; border-color: #f3d3d0; }
-.ps-slot.empty { border-style: dashed; background: #fafbfd; }
-.ps-slot.drop, .ps-bench.drop { border-color: #3d7bd9; box-shadow: 0 0 0 3px rgba(61, 123, 217, 0.25); }
-.ps-player { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 10px; align-items: center; cursor: grab; }
-.ps-player:active { cursor: grabbing; }
-.ps-name { display: grid; min-width: 0; }
-.ps-name strong { font-family: var(--display); font-weight: 800; text-transform: uppercase; color: var(--navy); font-size: 1.05rem; display: flex; align-items: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.ps-name small { color: var(--slate); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 0.8rem; }
-.ps-actions { display: flex; justify-content: flex-end; }
-.ps-actions .btn { display: inline-flex; align-items: center; gap: 6px; }
+.pitch-v4 { display: grid; gap: 14px; grid-template-columns: minmax(0, 1fr); align-items: start; }
+.pitch-v4 .panel + .panel { margin-top: 0; }
+@media (min-width: 1280px) {
+  .pitch-v4 { grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); }
+}
+.pitch-v4 .panel-head { flex-wrap: wrap; align-items: baseline; justify-content: flex-start; gap: 4px 14px; }
+.pitch-v4 .panel-head > small { flex: 1 1 240px; }
+.ps-staff, .ps-bench { padding-bottom: 12px; }
+.ps-staff.drop, .ps-bench.drop { border-color: #3d7bd9; box-shadow: 0 0 0 3px rgba(61, 123, 217, 0.25); }
+
+/* Pitching staff rows: role · pitcher · effective · four modifiers · stats · swap */
+.ps-rows { list-style: none; margin: 0; padding: 10px 12px 0; display: grid; gap: 8px; container-type: inline-size; }
+.ps-row {
+  display: grid; align-items: center; gap: 6px 8px; min-height: 84px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 12px; background: #fff;
+  grid-template-columns: 16px 108px minmax(130px, 1fr) 58px auto 64px 38px;
+  grid-template-areas: 'num role player eff mods stats swap';
+  transition: box-shadow 0.15s, border-color 0.15s;
+}
+.ps-row.slot-starter { border: 2px solid #2aa65a; background: linear-gradient(90deg, #eaf8ef, #fff 45%); padding: 7px 9px; }
+.ps-row.drop { border-color: #3d7bd9; box-shadow: 0 0 0 3px rgba(61, 123, 217, 0.25); }
+.pr-num { grid-area: num; font-family: var(--display); font-weight: 800; font-size: 1.35rem; color: #9aa8bb; }
+.pr-role { grid-area: role; display: flex; gap: 8px; align-items: center; min-width: 0; }
+.pr-role > span { display: grid; min-width: 0; }
+.pr-role strong { font-family: var(--display); font-weight: 800; text-transform: uppercase; color: var(--navy); font-size: 1rem; line-height: 1.1; }
+.pr-role small { color: var(--slate); font-size: 0.74rem; line-height: 1.25; }
+.role-icon { flex: none; }
+.role-starter { color: #2aa65a; }
+.role-long { color: #2a56b8; }
+.role-setup { color: #d98a12; }
+.role-closer { color: #e0442e; }
+.pr-player { grid-area: player; display: flex; gap: 10px; align-items: center; min-width: 0; cursor: grab; }
+.pr-player:active { cursor: grabbing; }
+.pr-id { display: grid; min-width: 0; justify-items: start; }
+.pr-id strong { font-family: var(--display); font-weight: 800; text-transform: uppercase; color: var(--navy); font-size: 1rem; display: flex; align-items: center; max-width: 100%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pr-id small { color: var(--slate); font-size: 0.76rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 100%; }
+.pos-word { margin-top: 3px; font-size: 0.7rem; font-weight: 700; padding: 1px 8px; border-radius: 99px; border: 1px solid; }
+.pos-word.pos-sp { background: #e7f0fd; color: #0f2a5c; border-color: #b9cbe8; }
+.pos-word.pos-rp { background: #f1f4f8; color: #33445f; border-color: #dde4ee; }
 .pr-instr { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 2px; margin-left: 4px; border-radius: 6px; display: inline-grid; }
 .pr-instr:hover, .pr-instr:focus-visible { color: var(--navy); }
-.starting-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 10px; background: #2aa65a; color: #fff; font-family: var(--display); font-weight: 800; text-transform: uppercase; }
-.tradeoff-line { margin: 10px 14px 0; display: flex; gap: 6px; align-items: center; flex-wrap: wrap; color: var(--slate); }
+.ps-row .eff-block { grid-area: eff; }
+.eff-block { display: grid; justify-items: center; gap: 3px; line-height: 1; }
+.eff-block small { font-family: var(--display); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; text-transform: uppercase; color: var(--muted); }
+.eff-block strong { font-family: var(--display); font-weight: 900; font-size: 1.75rem; color: var(--navy); }
+.ps-table .eff-block strong { font-size: 1.3rem; }
+.mod-box { display: inline-grid; place-items: center; min-width: 34px; height: 26px; padding: 0 6px; border-radius: 7px; border: 1px solid; font-family: var(--display); font-weight: 800; font-size: 0.95rem; font-variant-numeric: tabular-nums; }
+.eff-block .mod-box { height: 22px; min-width: 32px; font-size: 0.85rem; }
+.pr-mods { grid-area: mods; display: flex; gap: 4px; }
+.pr-mod { display: grid; justify-items: center; gap: 2px; width: 44px; color: var(--slate); }
+.pr-mod small { font-size: 0.66rem; color: var(--muted); }
+.form-pos { color: #e0442e; }
+.form-neg { color: #3d8fe0; }
+.pr-stats { grid-area: stats; display: grid; margin: 0; font-size: 0.8rem; line-height: 1.35; }
+.pr-stat { display: flex; justify-content: space-between; gap: 8px; }
+.pr-stats dt { color: var(--muted); font-weight: 700; }
+.pr-stats dd { margin: 0; color: var(--navy); font-weight: 700; font-variant-numeric: tabular-nums; }
+.pr-swap { grid-area: swap; width: 38px; height: 38px; border-radius: 10px; border: 1px solid #b9cbe8; background: #fff; color: var(--navy); display: grid; place-items: center; cursor: pointer; }
+.pr-swap:hover, .pr-swap:focus-visible { background: #f0f4fa; }
+.ps-row .pr-empty { grid-column: 3 / -1; margin: 0; min-height: 52px; }
+.ps-hook { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; padding: 12px 14px 0; }
+.ps-hook-label { font-family: var(--display); font-weight: 800; text-transform: uppercase; color: var(--navy); font-size: 0.9rem; }
+.ps-hook .segmented { margin: 0; }
+.ps-none { padding: 12px 14px 0; }
+@container (max-width: 680px) {
+  .ps-row {
+    grid-template-columns: 18px minmax(0, 1fr) auto 40px;
+    grid-template-areas: 'num role role swap' 'num player eff swap' 'num mods stats stats';
+  }
+  .pr-stats { display: flex; flex-wrap: wrap; gap: 0 12px; justify-content: end; }
+  .pr-stat { gap: 4px; }
+  .ps-row .pr-empty { grid-column: 2 / -1; }
+}
+@container (max-width: 470px) {
+  .ps-row {
+    grid-template-columns: minmax(0, 1fr) auto 40px;
+    grid-template-areas: 'role role swap' 'player eff eff' 'mods mods mods' 'stats stats stats';
+  }
+  .pr-num { display: none; }
+  .pr-mods { justify-content: space-between; }
+  .pr-stats { justify-content: start; }
+  .ps-row .pr-empty { grid-column: 1 / -1; }
+}
 
-/* OVR → EFF */
+/* Rest today (bench) */
+.ps-table-wrap { padding: 8px 12px 0; container-type: inline-size; }
+.ps-table { width: 100%; border-collapse: separate; border-spacing: 0 4px; }
+.ps-table th, .ps-table td { padding: 5px 4px; text-align: center; vertical-align: middle; }
+.ps-table thead th { font-family: var(--display); font-weight: 700; font-size: 0.74rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); vertical-align: bottom; }
+.ps-table .mod-th { color: var(--slate); }
+.ps-table .mod-th svg { display: block; margin: 0 auto; }
+.ps-table .mod-th small { display: block; font-family: var(--body); text-transform: none; letter-spacing: 0; font-size: 0.66rem; font-weight: 500; }
+.ps-table tbody tr { background: #fff; cursor: grab; }
+.ps-table tbody tr > * { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
+.ps-table tbody tr > :first-child { border-left: 1px solid var(--line); border-radius: 10px 0 0 10px; }
+.ps-table tbody tr > :last-child { border-right: 1px solid var(--line); border-radius: 0 10px 10px 0; }
+.ps-table tbody th { text-align: left; }
+.ps-table .num { font-variant-numeric: tabular-nums; font-family: var(--display); font-weight: 700; color: var(--slate); }
+.ps-table .stat { font-family: var(--body); font-weight: 600; color: var(--ink-2); font-size: 0.84rem; white-space: nowrap; }
+.ps-table .pr-id small { max-width: 130px; }
+.ps-bench-name { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.ps-grip { position: relative; width: 22px; color: #9aa8bb; }
+.ps-grip svg { display: block; margin: 0 auto; }
+.ps-use { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; min-height: 0; padding: 0; }
+.ps-grip:focus-within { outline: 2px solid #3d7bd9; outline-offset: -2px; border-radius: 6px; }
+@container (max-width: 540px) {
+  .ps-table thead { display: none; }
+  .ps-table, .ps-table tbody { display: block; }
+  .ps-table tbody tr { display: grid; grid-template-columns: repeat(8, minmax(0, 1fr)); gap: 6px 4px; align-items: center; padding: 8px 8px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 6px; }
+  .ps-table tbody tr > * { border: 0 !important; border-radius: 0 !important; padding: 0; }
+  .ps-table .ps-grip { grid-column: 1; width: auto; height: 40px; }
+  .ps-table tbody th { grid-column: 2 / 7; }
+  .ps-table tbody tr > :nth-child(3) { grid-column: 7; }
+  .ps-table tbody tr > :nth-child(4) { grid-column: 8; }
+  .ps-table .mod-td, .ps-table .stat { grid-column: span 2; }
+  .ps-table td[data-label]::before { content: attr(data-label); display: block; font-family: var(--display); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); text-transform: uppercase; margin-bottom: 2px; }
+}
+
+/* OVR → EFF (pickers, player page) */
 .eff-value { display: inline-flex; gap: 8px; align-items: end; font-family: var(--display); line-height: 1; }
 .eff-value > span { display: grid; justify-items: center; gap: 2px; }
 .eff-value small { font-size: 0.62rem; font-weight: 700; color: var(--muted); letter-spacing: 0.04em; }
@@ -1550,35 +1642,8 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 .mod-chip.compact b { font-size: 0.82rem; }
 .mod-pos { background: #e6f6ec; border-color: #bfe5cc; color: #146c31; }
 .mod-neg { background: #fdeceb; border-color: #f3c5c2; color: #a52222; }
-.mod-zero { background: #f1f4f8; border-color: #dde4ee; color: #5e6d84; }
-
-/* Not used today */
-.ps-table-wrap { overflow-x: auto; padding: 8px 12px 0; }
-.ps-table { width: 100%; border-collapse: separate; border-spacing: 0 4px; }
-.ps-table th, .ps-table td { padding: 6px 8px; text-align: left; vertical-align: middle; }
-.ps-table thead th { font-family: var(--display); font-weight: 700; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
-.ps-table tbody tr { background: #fff; cursor: grab; }
-.ps-table tbody tr > * { border-top: 1px solid var(--line); border-bottom: 1px solid var(--line); }
-.ps-table tbody tr > :first-child { border-left: 1px solid var(--line); border-radius: 10px 0 0 10px; }
-.ps-table tbody tr > :last-child { border-right: 1px solid var(--line); border-radius: 0 10px 10px 0; }
-.ps-table .num { text-align: center; font-variant-numeric: tabular-nums; font-family: var(--display); font-weight: 700; color: var(--slate); }
-.ps-table .num.eff { font-weight: 900; color: var(--navy); font-size: 1.1rem; }
-.ps-table .stats { white-space: nowrap; font-family: var(--body); font-weight: 500; }
-.ps-bench-name { display: flex; align-items: center; gap: 8px; font-family: var(--display); font-weight: 800; text-transform: uppercase; color: var(--navy); white-space: nowrap; }
-.ps-use { min-height: 36px; max-width: 150px; }
-.ps-hook { padding: 4px 14px 0; }
-.ps-hook .segmented { margin: 6px 0; }
-@media (max-width: 640px) {
-  .ps-table thead { display: none; }
-  .ps-table, .ps-table tbody { display: block; }
-  .ps-table tbody tr { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; gap: 4px 8px; align-items: center; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; margin-bottom: 6px; }
-  .ps-table tbody tr > * { border: 0 !important; border-radius: 0 !important; padding: 0; }
-  .ps-table tbody tr > :nth-child(4) { grid-column: 1 / -1; }
-  .ps-table tbody tr > :nth-child(5) { grid-column: 1 / 3; text-align: left; }
-  .ps-table tbody tr > :nth-child(6) { grid-column: 3; }
-  .ps-bench-name { white-space: normal; }
-  .ps-table td[data-label]::before { content: attr(data-label); display: block; font-family: var(--display); font-size: 0.62rem; font-weight: 700; letter-spacing: 0.04em; color: var(--muted); }
-}
+.mod-zero { background: #eef3fa; border-color: #d3e0f2; color: #2a56b8; }
+.starting-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 36px; padding: 0 12px; border-radius: 10px; background: #2aa65a; color: #fff; font-family: var(--display); font-weight: 800; text-transform: uppercase; }
 
 /* Slot picker */
 .rc-assign { margin-top: 6px; min-height: 64px; border: 2px dashed #b7c4d8; border-radius: 10px; background: transparent; color: var(--navy); font-family: var(--display); font-weight: 800; text-transform: uppercase; cursor: pointer; }
@@ -1712,5 +1777,37 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 .pos-chip { display: inline-grid; place-items: center; min-width: 26px; height: 18px; padding: 0 5px; margin-right: 6px; border-radius: 5px; font-family: var(--display); font-weight: 800; font-size: 0.72rem; letter-spacing: 0.04em; font-style: normal; vertical-align: middle; }
 .pos-sp { background: #0f2a5c; color: #fff; }
 .pos-rp { background: #e3ecfa; color: #0f2a5c; border: 1px solid #b9cbe8; }
-.pitch-v3 .panel-head { flex-wrap: wrap; align-items: baseline; }
-.pitch-v3 .panel-head > small { flex: 1 1 260px; }
+.ps-row .pr-id strong, .ps-table .pr-id strong { white-space: normal; line-height: 1.05; }
+.ps-row.can-drop { border-style: dashed; border-color: #3d7bd9; }
+.ps-row.no-drop { opacity: 0.45; }
+
+/* Batters / Fielders: the same row with batting spot, handle and position */
+.bat-row { position: relative; grid-template-columns: 18px 16px 44px minmax(130px, 1fr) 58px auto 64px 38px; grid-template-areas: 'grip num pos player eff mods stats swap'; }
+.bat-row.dragging { opacity: 0.45; }
+.bat-row.mark-replace { border-color: #3d7bd9; box-shadow: 0 0 0 3px rgba(61, 123, 217, 0.25); }
+.bat-row.mark-before::before, .bat-row.mark-after::after { content: ''; position: absolute; left: 6px; right: 6px; height: 4px; border-radius: 2px; background: #3d7bd9; }
+.bat-row.mark-before::before { top: -6px; }
+.bat-row.mark-after::after { bottom: -6px; }
+.bat-row .pr-empty { grid-column: 4 / -1; }
+.br-grip { grid-area: grip; position: relative; display: grid; place-items: center; height: 40px; color: #9aa8bb; cursor: grab; }
+.br-grip:focus-within { outline: 2px solid #3d7bd9; border-radius: 6px; }
+.br-pos { grid-area: pos; position: relative; display: grid; place-items: center; min-width: 42px; height: 30px; padding: 0 4px; border-radius: 7px; background: var(--navy); color: #fff; font-family: var(--display); font-weight: 800; letter-spacing: 0.03em; }
+.br-pos.off { background: #fff4e5; color: #8a4b00; border: 1px dashed #e2a33a; }
+.br-pos select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; min-height: 0; padding: 0; }
+.br-pos:focus-within { outline: 2px solid #3d7bd9; outline-offset: 2px; }
+.pr-mod.pm-pos > svg:not(.form-icon) { color: #2aa65a; }
+.pr-mod.pm-neg > svg:not(.form-icon) { color: #d23b3b; }
+.pr-id .notes-row { margin-top: 2px; }
+@container (max-width: 680px) {
+  .bat-row { grid-template-columns: 18px 16px 44px minmax(0, 1fr) auto 38px; grid-template-areas: 'grip num pos player eff swap' 'grip num pos mods mods mods' 'grip num pos stats stats stats'; }
+}
+@container (max-width: 540px) {
+  .bat-table tbody tr > :nth-child(3) { grid-column: 7 / 9; }
+  .bat-table tbody tr > :nth-child(4) { grid-column: span 2; }
+}
+/* Narrowest last, so it wins over the rules above. */
+@container (max-width: 470px) {
+  .bat-row { grid-template-columns: 18px 16px 44px minmax(0, 1fr) 38px; grid-template-areas: 'grip num pos eff swap' 'player player player player player' 'mods mods mods mods mods' 'stats stats stats stats stats'; }
+  .bat-row .pr-num { display: block; }
+  .bat-row .pr-empty { grid-column: 1 / -1; }
+}

@@ -112,7 +112,7 @@ function Details({ row, players }: { row: RowKey; players: Player[] }) {
   return (
     <>
       <p className="small">
-        Hitters average {Math.round(avg(hitters.map((p) => p.fitness)))}%. 100% is fully ready; each point below costs {BALANCE.modifiers.hitterFitnessPerPoint} rating. Pitchers rest in games (see the lineup).
+        Hitters average {Math.round(avg(hitters.map((p) => p.fitness)))}%. Fresh (95%+) +1, Ready (85%+) 0, Tired −1, Worn −2, below 65% −3. Pitchers rest in games (see the lineup).
       </p>
       {tired.length ? (
         <ul className="cs-list">

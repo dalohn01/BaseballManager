@@ -18,6 +18,7 @@ import { applyReaction } from './reactions';
 import { expression, type Reaction } from '../domain/personality';
 import { recentClubMatches, startedIn } from '../domain/playerStats';
 import { absoluteRound } from '../domain/state';
+import { pitcherDecisions } from '../presentation/decisions';
 
 /** Items before the first one that matches. */
 const countUntil = <T>(list: T[], stop: (x: T) => boolean) => {
@@ -130,6 +131,12 @@ export function lossExpectation(state: GameState): { multiplier: number; reason:
 }
 
 function applyStats(state: GameState, m: MatchResult) {
+  // Pitchers of record, read from the sequence while it is still on the result.
+  const d = pitcherDecisions(m);
+  m.decisions = { win: d.win, loss: d.loss, save: d.save };
+  if (d.win) state.players[d.win].stats.wins += 1;
+  if (d.loss) state.players[d.loss].stats.losses += 1;
+  if (d.save) state.players[d.save].stats.saves += 1;
   const starters = new Set([...m.lineups.home.battingOrder, ...m.lineups.away.battingOrder].map((s) => s.playerId));
   for (const [id, line] of Object.entries(m.batting)) {
     const s = state.players[id].stats;

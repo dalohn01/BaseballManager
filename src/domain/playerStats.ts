@@ -36,6 +36,9 @@ export interface BattingPeriod {
 
 export interface PitchingPeriod {
   g: number;
+  w: number;
+  l: number;
+  sv: number;
   gs: number;
   outs: number;
   h: number;
@@ -120,13 +123,16 @@ export function battingBeforeMatch(state: GameState, player: Player, match: Matc
 export function pitchingStats(state: GameState, player: Player, period: StatsPeriod): PitchingPeriod {
   if (period === 'season') {
     const s = player.stats;
-    return finishPitching({ g: s.pitchingApps, gs: s.pitchingStarts, outs: s.outsPitched, h: s.hitsAllowed, r: s.runsAllowed, bb: s.walksAllowed, so: s.strikeouts });
+    return finishPitching({ g: s.pitchingApps, w: s.wins ?? 0, l: s.losses ?? 0, sv: s.saves ?? 0, gs: s.pitchingStarts, outs: s.outsPitched, h: s.hitsAllowed, r: s.runsAllowed, bb: s.walksAllowed, so: s.strikeouts });
   }
-  const sum = { g: 0, gs: 0, outs: 0, h: 0, r: 0, bb: 0, so: 0 };
+  const sum = { g: 0, w: 0, l: 0, sv: 0, gs: 0, outs: 0, h: 0, r: 0, bb: 0, so: 0 };
   for (const m of recentClubMatches(state).slice(0, 5)) {
     const l = m.pitching[player.id];
     if (!l) continue;
     sum.g++;
+    if (m.decisions?.win === player.id) sum.w++;
+    if (m.decisions?.loss === player.id) sum.l++;
+    if (m.decisions?.save === player.id) sum.sv++;
     if (m.lineups.home.pitcherId === player.id || m.lineups.away.pitcherId === player.id) sum.gs++;
     sum.outs += l.outs;
     sum.h += l.h;

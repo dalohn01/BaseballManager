@@ -14,8 +14,8 @@ describe('new game', () => {
     expect(s.clubOrder).toHaveLength(6);
     for (const id of s.clubOrder) {
       const players = clubPlayers(s, id);
-      expect(players).toHaveLength(18);
-      expect(players.filter((p) => p.isPitcher)).toHaveLength(7);
+      expect(players).toHaveLength(21);
+      expect(players.filter((p) => p.isPitcher)).toHaveLength(10);
       // A depth chart of four starters and three relievers; the strongest starter takes the first game.
       const staff = defaultStaff(s, id);
       expect(staff.rotation).toHaveLength(4);

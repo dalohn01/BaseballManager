@@ -1,5 +1,5 @@
-import { BALANCE } from '../balance/config';
 import { effectiveValue, teamStatus, type TeamStatus } from './effective';
+import { pitcherPosition } from './pitching';
 import type { GameState } from './state';
 import type { ClubId, PitchingBullpen, Player, PlayerId } from './types';
 
@@ -8,8 +8,8 @@ import type { ClubId, PitchingBullpen, Player, PlayerId } from './types';
  * (Long relief, Setup, Closer). Pitchers in none of them are not used today.
  * The strongest setup is chosen by effective value (OVR + Fitness, Morale,
  * Team and Form), as a starter for the start and as a reliever for the
- * bullpen; a starting pitcher in a relief slot counts a little lower, since he
- * usually only starts.
+ * bullpen. Only starting pitchers (SP) start and only relievers (RP) relieve;
+ * the default only bends that when a club is short of one kind.
  */
 
 export const RELIEF_SLOTS = ['long', 'setup', 'closer'] as const;
@@ -30,28 +30,26 @@ export const starterValue = (state: GameState, p: Player, status?: TeamStatus) =
 /** Effective value in relief. */
 export const relieverValue = (state: GameState, p: Player, status?: TeamStatus) => effectiveValue(state, p, 'RP', status).effective;
 
-/** The value used to rank a pitcher for a slot (relief slots prefer relievers). */
-function slotScore(state: GameState, p: Player, slot: PitchingSlot, status: TeamStatus): number {
-  if (slot === 'starter') return starterValue(state, p, status);
-  const sp = p.ratings.stamina >= BALANCE.pitching.starterStaminaFrom;
-  return relieverValue(state, p, status) - (sp ? BALANCE.modifiers.starterInReliefPenalty : 0);
-}
+/** Starters (SP) take the starting slot, relievers (RP) the relief slots. */
+export const canPitchIn = (p: Player, slot: PitchingSlot) => (slot === 'starter') === (pitcherPosition(p) === 'SP');
+
+const slotScore = (state: GameState, p: Player, slot: PitchingSlot, status: TeamStatus) => (slot === 'starter' ? starterValue(state, p, status) : relieverValue(state, p, status));
 
 /**
- * The strongest pitching for today: the best starter by effective value, then
- * the best three others for relief: the best of them closes, the next sets up,
- * the third is long relief. A given starter is kept.
+ * The strongest pitching for today: the best starting pitcher by effective
+ * value, then the best three relievers: the best of them closes, the next sets
+ * up, the third is long relief. A given starter is kept. Only a club short of
+ * one kind falls back to the other (so a game can always be played).
  */
 export function bestPitching(state: GameState, clubId: ClubId, starterId?: PlayerId): { starterId: PlayerId; bullpen: PitchingBullpen } {
   const status = teamStatus(state, clubId);
   const all = pitchersOf(state, clubId);
   const rank = (list: Player[], slot: PitchingSlot) => [...list].sort((a, b) => slotScore(state, b, slot, status) - slotScore(state, a, slot, status) || a.id.localeCompare(b.id));
-  const starter = (starterId && all.find((p) => p.id === starterId)) || rank(all, 'starter')[0];
+  const sp = all.filter((p) => canPitchIn(p, 'starter'));
+  const starter = (starterId && all.find((p) => p.id === starterId)) || rank(sp.length ? sp : all, 'starter')[0];
   if (!starter) return { starterId: '', bullpen: emptyBullpen() };
-  const pen = rank(
-    all.filter((p) => p.id !== starter.id),
-    'closer',
-  );
+  const others = all.filter((p) => p.id !== starter.id);
+  const pen = [...rank(others.filter((p) => canPitchIn(p, 'closer')), 'closer'), ...rank(others.filter((p) => !canPitchIn(p, 'closer')), 'closer')];
   return { starterId: starter.id, bullpen: { closer: pen[0]?.id ?? null, setup: pen[1]?.id ?? null, long: pen[2]?.id ?? null } };
 }
 

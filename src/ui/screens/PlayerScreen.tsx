@@ -241,7 +241,7 @@ export function PlayerScreen({ id }: { id: string }) {
           {p.isPitcher ? (
             <Meter label="Rest" value={p.fitness} display={restText(p)} caption="Counted in games: a start leaves him Exhausted (−25), then Tired (−10), Ready (0), Fresh (+1); relief costs one stage" tone={p.fitness < BALANCE.fitness.needsRestBelow ? 'warn' : 'slate'} />
           ) : (
-            <Meter label="Fitness" value={p.fitness} display={`${p.fitness}%`} caption={`${fitnessLabel(p.fitness)} · 100% = fully ready; each point below costs ${BALANCE.modifiers.hitterFitnessPerPoint} rating`} tone={p.fitness < BALANCE.fitness.warnBelow ? 'warn' : 'slate'} />
+            <Meter label="Fitness" value={p.fitness} display={`${p.fitness}%`} caption={`${fitnessLabel(p.fitness)} · Fresh (95%+) +1, Ready (85%+) 0, Tired −1, Worn −2, below 65% −3`} tone={p.fitness < BALANCE.fitness.warnBelow ? 'warn' : 'slate'} />
           )}
           {p.clubId && s.clubs[p.clubId] && <TodayValue id={p.id} />}
           <Meter label="Popularity" value={p.popularity} caption="How much the fans love him" />

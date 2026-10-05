@@ -83,9 +83,12 @@ export const USER_ROSTER: PlayerSeed[] = [
   { firstName: 'Ray', lastName: 'Okafor', number: 47, age: 31, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 38, fielding: 50, pitching: 64, stamina: 36, potential: 65, satisfaction: 68, popularity: 35, fitness: 94, priority: 'titles', role: 'reserve', salary: 26_000, seasonsLeft: 2, bio: 'Late-inning arm who wants the ball in big spots.' },
   { firstName: 'Marcus', lastName: 'Lee', number: 27, age: 28, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 40, fielding: 53, pitching: 61, stamina: 63, potential: 64, satisfaction: 67, popularity: 30, fitness: 95, priority: 'loyalty', role: 'reserve', salary: 24_000, seasonsLeft: 2, bio: 'Dependable swingman: starts or relieves.' },
   { firstName: 'Danny', lastName: 'Cho', number: 29, age: 25, bats: 'L', throws: 'L', positions: [], pitcher: true, contact: 10, power: 10, speed: 42, fielding: 51, pitching: 58, stamina: 52, potential: 68, satisfaction: 66, popularity: 24, fitness: 96, priority: 'playingTime', role: 'reserve', salary: 15_000, seasonsLeft: 2, bio: 'Lefty swingman who can pitch long.' },
+  { firstName: 'Eli', lastName: 'Ramirez', number: 39, age: 26, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 40, fielding: 50, pitching: 59, stamina: 34, potential: 66, satisfaction: 66, popularity: 26, fitness: 95, priority: 'playingTime', role: 'reserve', salary: 16_000, seasonsLeft: 2, bio: 'Hard-throwing setup arm.' },
+  { firstName: 'Nathan', lastName: 'Cole', number: 17, age: 30, bats: 'L', throws: 'L', positions: [], pitcher: true, contact: 10, power: 10, speed: 38, fielding: 52, pitching: 57, stamina: 40, potential: 60, satisfaction: 64, popularity: 30, fitness: 93, priority: 'money', role: 'reserve', salary: 18_000, seasonsLeft: 1, bio: 'Left-handed specialist, calm under pressure.' },
+  { firstName: 'Tyler', lastName: 'Keller', number: 54, age: 23, bats: 'R', throws: 'R', positions: [], pitcher: true, contact: 10, power: 10, speed: 44, fielding: 48, pitching: 52, stamina: 30, potential: 72, satisfaction: 62, popularity: 15, fitness: 97, priority: 'playingTime', role: 'prospect', salary: 10_000, seasonsLeft: 3, bio: 'Young reliever with a lively fastball.' },
 ];
 
-/** Position template for generated 18-man rosters: 11 hitters + 7 pitchers (four starters, three relievers). */
+/** Position template for generated 21-man rosters: 11 hitters + 10 pitchers (four starters, six relievers). */
 export const GENERATED_ROSTER_SHAPE: { positions: LineupPosition[]; pitcher?: boolean; role: SquadRole }[] = [
   { positions: ['C'], role: 'starter' },
   { positions: ['C', '1B'], role: 'reserve' },
@@ -102,6 +105,9 @@ export const GENERATED_ROSTER_SHAPE: { positions: LineupPosition[]; pitcher?: bo
   { positions: [], pitcher: true, role: 'starter' },
   { positions: [], pitcher: true, role: 'starter' },
   { positions: [], pitcher: true, role: 'starter' },
+  { positions: [], pitcher: true, role: 'reserve' },
+  { positions: [], pitcher: true, role: 'reserve' },
+  { positions: [], pitcher: true, role: 'reserve' },
   { positions: [], pitcher: true, role: 'reserve' },
   { positions: [], pitcher: true, role: 'reserve' },
   { positions: [], pitcher: true, role: 'reserve' },

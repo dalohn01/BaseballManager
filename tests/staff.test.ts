@@ -13,8 +13,9 @@ import {
   teamStatus,
   updateForm,
 } from '../src/domain/effective';
-import { autoLineup } from '../src/domain/lineup';
-import { assignPitcher, benchPitcher, draftFromClub, pitcherSlot } from '../src/domain/lineupDraft';
+import { autoLineup, validatePitchingPlan } from '../src/domain/lineup';
+import { assignPitcher, benchPitcher, draftFromClub, pitcherSlot, slotBlocker } from '../src/domain/lineupDraft';
+import { pitcherPosition } from '../src/domain/pitching';
 import { overallAs, overall } from '../src/domain/ratings';
 import { createRng } from '../src/domain/rng';
 import { SCHEMA_VERSION } from '../src/domain/state';
@@ -200,29 +201,33 @@ describe("today's pitching staff", () => {
     ace.fitness = M.restStages[0].fitness;
     const d = draftFromClub(s);
     expect(d.lineup.pitcherId).not.toBe(ace.id);
-    const best = Math.max(...pitchers.map((p) => starterValue(s, p)));
-    expect(starterValue(s, s.players[d.lineup.pitcherId])).toBe(best);
-    const pen = [d.plan.bullpen.closer, d.plan.bullpen.setup, d.plan.bullpen.long];
-    expect(pen.every(Boolean)).toBe(true);
-    expect(new Set([d.lineup.pitcherId, ...pen]).size).toBe(4);
-    // The closer is the strongest reliever.
-    expect(relieverValue(s, s.players[d.plan.bullpen.closer!])).toBeGreaterThanOrEqual(relieverValue(s, s.players[d.plan.bullpen.setup!]) - M.starterInReliefPenalty);
+    const starters = pitchers.filter((p) => pitcherPosition(p) === 'SP');
+    const relievers = pitchers.filter((p) => pitcherPosition(p) === 'RP');
+    expect(starterValue(s, s.players[d.lineup.pitcherId])).toBe(Math.max(...starters.map((p) => starterValue(s, p))));
+    const pen = [d.plan.bullpen.closer, d.plan.bullpen.setup, d.plan.bullpen.long].map((id) => s.players[id!]);
+    // Only relievers relieve: the three strongest, the best of them closing.
+    expect(pen.every((p) => pitcherPosition(p) === 'RP')).toBe(true);
+    const top3 = relievers.map((p) => relieverValue(s, p)).sort((a, b) => b - a).slice(0, 3);
+    expect(pen.map((p) => relieverValue(s, p))).toEqual(top3);
   });
 
   it('assigning swaps slots; a bench pitcher sends the slot holder to the bench', () => {
     const s = newGame(411);
     const d = draftFromClub(s);
     const { closer, setup } = d.plan.bullpen;
-    const sw = assignPitcher(d, 'setup', closer!);
+    const sw = assignPitcher(s, d, 'setup', closer!);
     expect(sw.plan.bullpen.setup).toBe(closer);
     expect(sw.plan.bullpen.closer).toBe(setup);
-    const benchId = s.clubs.hfx.roster.find((id) => s.players[id].isPitcher && !pitcherSlot(d, id))!;
-    const inn = assignPitcher(d, 'starter', benchId);
-    expect(inn.lineup.pitcherId).toBe(benchId);
+    const benchSp = s.clubs.hfx.roster.find((id) => s.players[id].isPitcher && pitcherPosition(s.players[id]) === 'SP' && !pitcherSlot(d, id))!;
+    const inn = assignPitcher(s, d, 'starter', benchSp);
+    expect(inn.lineup.pitcherId).toBe(benchSp);
     expect(pitcherSlot(inn, d.lineup.pitcherId)).toBeNull();
-    // A starter moved to relief swaps with the reliever.
-    const st = assignPitcher(d, 'long', d.lineup.pitcherId);
-    expect(st.lineup.pitcherId).toBe(d.plan.bullpen.long);
+    // A starter cannot relieve and a reliever cannot start: the draft is left as it was.
+    expect(assignPitcher(s, d, 'long', d.lineup.pitcherId)).toBe(d);
+    expect(assignPitcher(s, d, 'starter', closer!)).toBe(d);
+    const benchSpRelief = s.clubs.hfx.roster.find((id) => pitcherPosition(s.players[id]) === 'SP' && s.players[id].isPitcher && !pitcherSlot(d, id))!;
+    expect(assignPitcher(s, d, 'closer', benchSpRelief)).toBe(d);
+    expect(slotBlocker(s, 'closer', benchSpRelief)).toMatch(/starter and cannot pitch in relief/);
     expect(benchPitcher(d, 'closer').plan.bullpen.closer).toBeNull();
     expect(d.plan.bullpen.closer).toBe(closer); // pure
   });
@@ -272,5 +277,39 @@ describe('migration to per-game pitching (v14)', () => {
     }
     for (const p of Object.values(m.players)) if (p.isPitcher) expect(M.restStages.map((x) => x.fitness)).toContain(p.fitness);
     expect(JSON.stringify(migrate(JSON.parse(JSON.stringify(v13))))).toBe(JSON.stringify(m));
+  });
+});
+
+describe('pitchers of record', () => {
+  it('every decided game gives one win and one loss; saves go to relievers', () => {
+    let s = newGame(414);
+    for (let i = 0; i < 200 && s.cycle.matchesPlayed < 4; i++) s = step(s, 70 + i);
+    const pitchers = Object.values(s.players).filter((p) => p.isPitcher);
+    const games = s.schedule.filter((g) => g.result && g.result.decidedBy !== 'suddenDeath').length;
+    expect(pitchers.reduce((a, p) => a + p.stats.wins, 0)).toBe(games);
+    expect(pitchers.reduce((a, p) => a + p.stats.losses, 0)).toBe(games);
+    for (const p of pitchers) expect(p.stats.saves).toBeLessThanOrEqual(p.stats.pitchingApps - p.stats.pitchingStarts);
+  }, 60_000);
+});
+
+describe('roles by position', () => {
+  it('a selection with a reliever starting or a starter relieving is refused', () => {
+    const s = newGame(415);
+    const d = draftFromClub(s);
+    const rp = s.clubs.hfx.roster.find((id) => s.players[id].isPitcher && pitcherPosition(s.players[id]) === 'RP' && !pitcherSlot(d, id))!;
+    const sp = s.clubs.hfx.roster.find((id) => s.players[id].isPitcher && pitcherPosition(s.players[id]) === 'SP' && !pitcherSlot(d, id))!;
+    const errors = (starter: string, closer: string) => validatePitchingPlan(s, 'hfx', starter, { ...d.plan, bullpen: { ...d.plan.bullpen, closer } }).filter((i) => i.severity === 'error').map((i) => i.text);
+    expect(errors(d.lineup.pitcherId, d.plan.bullpen.closer!)).toEqual([]);
+    expect(errors(rp, d.plan.bullpen.closer!).join()).toMatch(/reliever and cannot start/);
+    expect(errors(d.lineup.pitcherId, sp).join()).toMatch(/starter and cannot pitch in relief/);
+  });
+
+  it('new clubs start with 21 players: four starters and six relievers', () => {
+    const s = newGame(416);
+    for (const id of s.clubOrder) {
+      const pitchers = s.clubs[id].roster.map((pid) => s.players[pid]).filter((p) => p.isPitcher);
+      expect(pitchers.filter((p) => pitcherPosition(p) === 'SP').length, id).toBe(4);
+      expect(pitchers.filter((p) => pitcherPosition(p) === 'RP').length, id).toBe(6);
+    }
   });
 });
