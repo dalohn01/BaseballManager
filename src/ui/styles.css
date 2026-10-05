@@ -1830,7 +1830,7 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .bat-row .eff-block small { display: none; }
   .bat-row .eff-block strong { font-size: 1.5rem; }
   .bat-row .mod-box { height: 26px; }
-  .bat-row .pr-stats { grid-template-columns: auto auto; column-gap: 12px; font-size: 0.8rem; line-height: 1.3; }
+  .bat-row .pr-stats { display: grid; grid-template-columns: auto auto; column-gap: 12px; font-size: 0.8rem; line-height: 1.3; }
   .bat-row .pr-id { line-height: 1.1; }
   .bat-row .pr-id strong { font-size: 0.95rem; }
   .bat-row .pr-id small { font-size: 0.72rem; }
@@ -1859,7 +1859,7 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .bench-row .eff-block small { display: none; }
   .bench-row .eff-block strong { font-size: 1.5rem; }
   .bench-row .mod-box { height: 26px; }
-  .bench-row .pr-stats { grid-template-columns: auto auto; column-gap: 12px; font-size: 0.8rem; line-height: 1.3; }
+  .bench-row .pr-stats { display: grid; grid-template-columns: auto auto; column-gap: 12px; font-size: 0.8rem; line-height: 1.3; }
   .bench-row .pr-id { line-height: 1.1; }
   .bench-row .pr-id strong { font-size: 0.95rem; }
   .bench-row .pr-id small { font-size: 0.72rem; }
@@ -1905,6 +1905,7 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 .role-badge svg { flex: none; }
 .role-badge.role-starter { background: #1f7a43; }
 .role-badge.role-long { background: #2a56b8; }
+.role-badge.role-middle { background: #6a4bb5; }
 .role-badge.role-setup { background: #b5700a; }
 .role-badge.role-closer { background: #c0392b; }
 .pitch-view .ps-row.no-drop { opacity: 0.45; }

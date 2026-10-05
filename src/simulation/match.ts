@@ -112,7 +112,7 @@ export function buildSimTeam(state: GameState, clubId: ClubId, lineup: Lineup): 
   const plan = club.pitchingPlan;
   const pen = bullpenToday(state, clubId, sp.id, plan.bullpen);
   const asSim = (p: Player | null): SimPitcher | null => (p ? simPitcher(p) : null);
-  const bullpen = { closer: asSim(pen.closer), setup: asSim(pen.setup), long: asSim(pen.long) };
+  const bullpen = { closer: asSim(pen.closer), setup: asSim(pen.setup), middle: asSim(pen.middle), long: asSim(pen.long) };
 
   return {
     clubId,
@@ -271,14 +271,22 @@ export function simulateMatch(input: MatchInput): MatchResult {
   /** Who comes in, by inning and score: long relief early, setup in the middle innings, the closer to save it. */
   const reliefFor = (team: SimTeam, used: PlayerId[], lead: number): { p: SimPitcher; role: BullpenRole } | null => {
     const order: BullpenRole[] =
-      inning <= P.longReliefUntilInning ? ['long', 'setup', 'closer'] : inning < cfg.innings ? ['setup', 'long', 'closer'] : isSave(lead) ? ['closer', 'setup', 'long'] : ['setup', 'long', 'closer'];
+      inning <= P.longReliefUntilInning
+        ? ['long', 'middle', 'setup', 'closer']
+        : inning < P.setupFromInning
+          ? ['middle', 'setup', 'long', 'closer']
+          : inning < cfg.innings
+            ? ['setup', 'middle', 'long', 'closer']
+            : isSave(lead)
+              ? ['closer', 'setup', 'middle', 'long']
+              : ['setup', 'middle', 'long', 'closer'];
     for (const role of order) {
       const p = team.bullpen[role];
       if (p && !used.includes(p.id)) return { p, role };
     }
     return null;
   };
-  const ROLE_WORD: Record<BullpenRole, string> = { closer: 'closer', setup: 'setup man', long: 'long relief' };
+  const ROLE_WORD: Record<BullpenRole, string> = { closer: 'closer', setup: 'setup man', middle: 'middle relief', long: 'long relief' };
 
   const side = {
     home: { team: home, idx: 0, pitcher: home.starter, pulled: false, used: [home.starter.id] as PlayerId[] },
@@ -352,7 +360,11 @@ export function simulateMatch(input: MatchInput): MatchResult {
       if (def.used.length < P.maxPitchersPerGame) {
         const isStarter = def.pitcher.id === def.team.starter.id;
         const closer = def.team.bullpen.closer;
+        const setup = def.team.bullpen.setup;
+        const bridge = [def.team.bullpen.middle?.id, def.team.bullpen.long?.id].includes(def.pitcher.id);
         if (halfStart && inning >= cfg.innings && isSave(lead) && closer && !def.used.includes(closer.id)) change = { p: closer, role: 'closer' };
+        // The 8th belongs to the setup man: he takes over from a middle or long reliever at its start.
+        else if (halfStart && inning === P.setupFromInning && bridge && setup && !def.used.includes(setup.id)) change = { p: setup, role: 'setup' };
         else if (isStarter && (pl.battersFaced >= def.team.hook.maxBatters || (pl.r >= def.team.hook.pullRuns && pl.battersFaced >= def.team.hook.minBatters))) change = reliefFor(def.team, def.used, lead);
         else if (!isStarter && pl.battersFaced >= P.relieverMaxBatters) change = reliefFor(def.team, def.used, lead);
       }

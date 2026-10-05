@@ -79,6 +79,8 @@ async function advance(): Promise<string> {
   if (lineup) {
     expect(screen.getByText(/win chance/)).toBeTruthy();
     await click(lineup);
+    // Two steps: batters / fielders first, then pitchers, where the lineup is confirmed.
+    await click(await screen.findByRole('button', { name: /^Next: Pitchers/ }));
     await waitFor(() => expect(screen.getByRole('button', { name: /^Confirm lineup/ })).toBeTruthy());
     return 'lineup';
   }

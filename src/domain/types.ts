@@ -137,6 +137,7 @@ export type PitchingHook = 'early' | 'balanced' | 'long';
 /** Today's three relief slots (null = left empty: the simulator picks the strongest). */
 export interface PitchingBullpen {
   long: PlayerId | null;
+  middle: PlayerId | null;
   setup: PlayerId | null;
   closer: PlayerId | null;
 }

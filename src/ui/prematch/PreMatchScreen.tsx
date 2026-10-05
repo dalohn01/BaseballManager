@@ -1,12 +1,12 @@
 import { closeLineup } from '../match/MatchDay';
 import { useState } from 'react';
 import { optionBlocker } from '../../application/engine';
-import { bestLineup, draftErrors, draftFromClub, draftIssues, suggestPitching, type LineupDraft } from '../../domain/lineupDraft';
+import { draftErrors, draftFromClub, draftIssues, suggestPitching, type LineupDraft } from '../../domain/lineupDraft';
 import { playerNotes, type StatsPeriod } from '../../domain/playerStats';
 import type { EventInstance, GameState } from '../../domain/state';
 import { clubName, userClub } from '../../domain/state';
 import { Crest } from '../components/art';
-import { describeLineupChange, forecastForLineup } from '../../events/templates/leagueGame';
+import { describeLineupChange } from '../../events/templates/leagueGame';
 import { validateBatters } from '../../domain/lineup';
 import { Icon } from '../components/icons';
 import { useController, useGame, useNow, useSnapshot } from '../hooks';
@@ -93,7 +93,6 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   const issues = draftIssues(s, draft);
   const errors = issues.filter((i) => i.severity === 'error');
   const blocker = optionBlocker(s, ev, option, null, now) ?? errors[0]?.text ?? null;
-  const win = errors.length === 0 ? forecastForLineup(s, game.id, draft.lineup) : null;
   const batterErrors = validateBatters(s, s.userClubId, draft.lineup).filter((i) => i.severity === 'error');
   const goTo = (step: Tab) => {
     if (step === 'pitchers' && batterErrors.length) return;
@@ -103,9 +102,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   };
 
   const starters = draft.lineup.battingOrder.map((x) => s.players[x.playerId]).filter(Boolean);
-  const bench = club.roster.map((id) => s.players[id]).filter((p) => !p.isPitcher && !starters.some((st) => st.id === p.id));
   const needRest = starters.filter((p) => playerNotes(s, p, { starting: true }).some((n) => n.text === 'Needs rest')).length;
-  const wantStarts = bench.filter((p) => playerNotes(s, p, { starting: false }).some((n) => n.text === 'Wants playing time')).length;
   const promisedOut = s.promises.filter((pr) => pr.status === 'active' && !starters.some((p) => p.id === pr.playerId)).length;
 
   const confirm = () => {
@@ -165,7 +162,6 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
         <div className="pm-quick">
           {tab === 'batters' && (
             <>
-              <QuickButton icon="trophy" label="Suggest lineup" onClick={() => quick('Suggest lineup', { ...bestLineup(s, draft), lineup: { ...bestLineup(s, draft).lineup, pitcherId: draft.lineup.pitcherId } })} />
               <QuickButton icon="back" label="Reset" onClick={() => quick('Reset', { ...draft, lineup: { ...draft.lineup, battingOrder: structuredClone(opened.lineup.battingOrder) } })} />
             </>
           )}
@@ -182,9 +178,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
           ) : (
             <>
               {needRest > 0 && <span className="note-chip note-warn">! {needRest} starter{needRest > 1 ? 's' : ''} need{needRest > 1 ? '' : 's'} rest</span>}
-              {wantStarts > 0 && <span className="note-chip note-warn">! {wantStarts} bench player{wantStarts > 1 ? 's' : ''} want{wantStarts > 1 ? '' : 's'} playing time</span>}
               {promisedOut > 0 && <span className="note-chip note-warn">! {promisedOut} promised player{promisedOut > 1 ? 's are' : ' is'} on the bench</span>}
-              {win !== null && <span className="note-chip note-info">Forecast: {Math.round(win * 100)}% win chance</span>}
             </>
           )}
         </div>

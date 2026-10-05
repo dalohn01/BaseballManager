@@ -70,6 +70,15 @@ export function BattersTab({ api }: { api: DraftApi }) {
     setMark(null);
     setOverBench(false);
   };
+  // A drag that ends anywhere (outside a target, or cancelled) clears the markers.
+  useEffect(() => {
+    window.addEventListener('dragend', endDrag);
+    window.addEventListener('drop', endDrag);
+    return () => {
+      window.removeEventListener('dragend', endDrag);
+      window.removeEventListener('drop', endDrag);
+    };
+  }, []);
   const rowDragOver = (index: number) => (e: DragEvent<HTMLLIElement>) => {
     if (!drag) return;
     e.preventDefault();
@@ -82,26 +91,34 @@ export function BattersTab({ api }: { api: DraftApi }) {
     const mode = e.clientY < r.top + r.height / 2 ? 'before' : 'after';
     if (mark?.index !== index || mark.mode !== mode) setMark({ index, mode });
   };
-  const rowDrop = (index: number) => (e: DragEvent) => {
+  // The drop reads who was dragged and where from the event itself (not from state set
+  // during the drag), so a quick drag still lands where the marker showed.
+  const rowDrop = (index: number) => (e: DragEvent<HTMLLIElement>) => {
     e.preventDefault();
     e.stopPropagation();
-    if (drag?.kind === 'bench') update(swapFromBench(draft, index, drag.id));
-    else if (drag?.kind === 'row' && mark) {
+    const id = e.dataTransfer.getData('text/plain');
+    const from = order.findIndex((x) => x.playerId === id);
+    if (from < 0 && id && s.players[id] && !s.players[id].isPitcher) update(swapFromBench(draft, index, id));
+    else if (from >= 0) {
       // Insert before or after the target row; the rows in between shift.
-      const insert = mark.mode === 'after' ? index + 1 : index;
-      const to = drag.index < insert ? insert - 1 : insert;
-      if (to !== drag.index) update(moveBatter(draft, drag.index, to));
+      const r = e.currentTarget.getBoundingClientRect();
+      const insert = e.clientY < r.top + r.height / 2 ? index : index + 1;
+      const to = from < insert ? insert - 1 : insert;
+      if (to !== from) update(moveBatter(draft, from, to));
     }
     endDrag();
   };
   const lineupDrop = (e: DragEvent) => {
     e.preventDefault();
-    if (drag?.kind === 'bench' && open >= 0) update(swapFromBench(draft, open, drag.id));
+    const id = e.dataTransfer.getData('text/plain');
+    const benchPlayer = !!id && !playing.has(id) && !!s.players[id] && !s.players[id].isPitcher;
+    if (benchPlayer && open >= 0) update(swapFromBench(draft, open, id));
     endDrag();
   };
   const benchDrop = (e: DragEvent) => {
     e.preventDefault();
-    if (drag?.kind === 'row') update(benchBatter(draft, drag.index));
+    const from = order.findIndex((x) => x.playerId === e.dataTransfer.getData('text/plain'));
+    if (from >= 0) update(benchBatter(draft, from));
     endDrag();
   };
   const reasons = (p: Player) => modifierReasons(s, p, status);

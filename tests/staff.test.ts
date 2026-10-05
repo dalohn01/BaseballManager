@@ -204,11 +204,11 @@ describe("today's pitching staff", () => {
     const starters = pitchers.filter((p) => pitcherPosition(p) === 'SP');
     const relievers = pitchers.filter((p) => pitcherPosition(p) === 'RP');
     expect(starterValue(s, s.players[d.lineup.pitcherId])).toBe(Math.max(...starters.map((p) => starterValue(s, p))));
-    const pen = [d.plan.bullpen.closer, d.plan.bullpen.setup, d.plan.bullpen.long].map((id) => s.players[id!]);
-    // Only relievers relieve: the three strongest, the best of them closing.
+    const pen = [d.plan.bullpen.closer, d.plan.bullpen.setup, d.plan.bullpen.middle, d.plan.bullpen.long].map((id) => s.players[id!]);
+    // Only relievers relieve: the four strongest, best closing, then setup, middle and long relief.
     expect(pen.every((p) => pitcherPosition(p) === 'RP')).toBe(true);
-    const top3 = relievers.map((p) => relieverValue(s, p)).sort((a, b) => b - a).slice(0, 3);
-    expect(pen.map((p) => relieverValue(s, p))).toEqual(top3);
+    const top4 = relievers.map((p) => relieverValue(s, p)).sort((a, b) => b - a).slice(0, 4);
+    expect(pen.map((p) => relieverValue(s, p))).toEqual(top4);
   });
 
   it('assigning swaps slots; a bench pitcher sends the slot holder to the bench', () => {
@@ -232,7 +232,7 @@ describe("today's pitching staff", () => {
     expect(d.plan.bullpen.closer).toBe(closer); // pure
   });
 
-  it('the simulator uses only today\'s slots: a pitcher on the bench never pitches; at most four per side', () => {
+  it('the simulator uses only today\'s slots: a pitcher on the bench never pitches; at most five per side', () => {
     const s = structuredClone(newGame(412));
     const [h, a] = [s.clubOrder[0], s.clubOrder[1]];
     const best = bestPitching(s, h);
@@ -272,7 +272,7 @@ describe('migration to per-game pitching (v14)', () => {
     expect(m.players[pid].fitness).toBe(M.restStages[1].fitness);
     for (const id of m.clubOrder) {
       expect(m.clubs[id].staff).toBeUndefined();
-      expect(m.clubs[id].pitchingPlan).toEqual({ relieverId: null, rest: [], bullpen: { long: null, setup: null, closer: null }, hook: 'early' });
+      expect(m.clubs[id].pitchingPlan).toEqual({ relieverId: null, rest: [], bullpen: { long: null, middle: null, setup: null, closer: null }, hook: 'early' });
       expect(m.players[m.clubs[id].lineup.pitcherId].isPitcher).toBe(true);
     }
     for (const p of Object.values(m.players)) if (p.isPitcher) expect(M.restStages.map((x) => x.fitness)).toContain(p.fitness);
@@ -311,5 +311,36 @@ describe('roles by position', () => {
       expect(pitchers.filter((p) => pitcherPosition(p) === 'SP').length, id).toBe(4);
       expect(pitchers.filter((p) => pitcherPosition(p) === 'RP').length, id).toBe(6);
     }
+  });
+});
+
+describe('middle relief', () => {
+  it('bridges the 6th–7th; the setup man takes the 8th from a middle or long reliever', () => {
+    const s = structuredClone(newGame(417));
+    const [h, a] = [s.clubOrder[0], s.clubOrder[1]];
+    const best = bestPitching(s, h);
+    s.clubs[h].pitchingPlan = { ...s.clubs[h].pitchingPlan, bullpen: best.bullpen };
+    let middleIn6to7 = 0;
+    let setupAt8 = 0;
+    for (let seed = 1; seed <= 150; seed++) {
+      const home = buildSimTeam(s, h, { ...autoLineup(s, h), pitcherId: best.starterId });
+      const m = simulateMatch({ id: `m${seed}`, season: 1, round: 1, home, away: buildSimTeam(s, a, autoLineup(s, a)), rng: createRng(seed) });
+      expect(m.pitchersUsed.home.length).toBeLessThanOrEqual(P.maxPitchersPerGame);
+      for (const ch of (m.sequence ?? []).filter((e) => e.kind === 'pitchingChange' && e.battingClubId === a)) {
+        if (ch.pitcherId === best.bullpen.middle && ch.inning >= P.middleFromInning && ch.inning < P.setupFromInning) middleIn6to7++;
+        if (ch.pitcherId === best.bullpen.setup && ch.inning === P.setupFromInning) setupAt8++;
+      }
+    }
+    expect(middleIn6to7).toBeGreaterThan(10);
+    expect(setupAt8).toBeGreaterThan(10);
+  });
+
+  it('old plans get the empty slot (v16)', () => {
+    const v15 = JSON.parse(JSON.stringify(newGame(418)));
+    v15.schemaVersion = 15;
+    for (const id of v15.clubOrder) v15.clubs[id].pitchingPlan.bullpen = { long: null, setup: null, closer: null };
+    const m = migrate(v15);
+    expect(m.schemaVersion).toBe(SCHEMA_VERSION);
+    for (const id of m.clubOrder) expect(m.clubs[id].pitchingPlan.bullpen.middle).toBeNull();
   });
 });

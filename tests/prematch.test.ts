@@ -61,7 +61,7 @@ describe('lineup draft', () => {
     for (const [slot, id] of [['closer', rp[4]], ['starter', sp[3]], ['setup', rp[0]], ['long', rp[5]], ['closer', rp[0]]] as const) x = assignPitcher(s, x, slot, id);
     const slots = pitchers.map((id) => pitcherSlot(x, id)).filter(Boolean);
     expect(new Set(slots).size).toBe(slots.length);
-    expect(slots.length).toBe(4);
+    expect(slots.length).toBe(5);
   });
 });
 

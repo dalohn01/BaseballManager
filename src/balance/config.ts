@@ -383,8 +383,8 @@ export const BALANCE = {
    * 9th (lead of 1–3 runs when the inning starts).
    */
   pitching: {
-    /** The starter plus today's three relief slots. */
-    maxPitchersPerGame: 4,
+    /** The starter plus today's four relief slots. */
+    maxPitchersPerGame: 5,
     /** Pitchers with at least this stamina are SP (starters), the rest RP (relievers). */
     starterStaminaFrom: 55,
     /** Batters before a pitcher tires = tiresBase + stamina × tiresPerStamina (stamina 70 → 20, 40 → 14). */
@@ -393,7 +393,9 @@ export const BALANCE = {
     /** Starters in a club's depth chart (Team OVR, old saves). */
     rotationSize: 4,
     longReliefUntilInning: 5,
-    setupFromInning: 6,
+    /** Middle relief bridges the 6th–7th; setup takes the 8th (and comes in at its start for a middle or long reliever). */
+    middleFromInning: 6,
+    setupFromInning: 8,
     saveLead: [1, 3] as const,
     /** A reliever is replaced (if another arm is left) after this many batters. */
     relieverMaxBatters: 12,

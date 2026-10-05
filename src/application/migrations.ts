@@ -271,6 +271,14 @@ export function migrate(input: AnyState): GameState {
     }
     s.schemaVersion = 15;
   }
+  if (s.schemaVersion === 15) {
+    // A fifth pitching role, Middle relief (6th–7th): today's plans get the empty slot.
+    for (const clubId of s.clubOrder) {
+      const plan = s.clubs[clubId].pitchingPlan;
+      plan.bullpen = { ...emptyBullpen(), ...plan.bullpen };
+    }
+    s.schemaVersion = 16;
+  }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;
 }

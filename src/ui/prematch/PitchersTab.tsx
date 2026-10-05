@@ -19,10 +19,11 @@ const P = BALANCE.pitching;
 const SLOT_WHEN: Record<PitchingSlot, string> = {
   starter: 'Starts the game.',
   long: `Early (before the ${P.longReliefUntilInning}th) if needed.`,
-  setup: `${P.setupFromInning}th–8th inning.`,
+  middle: `${P.middleFromInning}th–${P.setupFromInning - 1}th inning.`,
+  setup: `${P.setupFromInning}th inning.`,
   closer: 'Save situations from the 9th.',
 };
-const SLOT_ICON = { starter: 'crown', long: 'link', setup: 'star', closer: 'flame' } as const;
+const SLOT_ICON = { starter: 'crown', long: 'link', middle: 'forward', setup: 'star', closer: 'flame' } as const;
 
 /** A pitcher's value in a slot: as the starter (stamina counts) or in relief; on the bench, at his own position. */
 const jobOf = (slot: PitchingSlot | null, p: Player) => (slot === 'starter' ? 'SP' : slot ? 'RP' : pitcherPosition(p));
@@ -95,6 +96,15 @@ export function PitchersTab({ api }: { api: DraftApi; gameId: string }) {
     setDragging(null);
     setOver(null);
   };
+  // A drag that ends anywhere (outside a target, or cancelled) clears the highlight.
+  useEffect(() => {
+    window.addEventListener('dragend', dragEnd);
+    window.addEventListener('drop', dragEnd);
+    return () => {
+      window.removeEventListener('dragend', dragEnd);
+      window.removeEventListener('drop', dragEnd);
+    };
+  }, []);
   const dropState = (slot: PitchingSlot) => (!dragging ? '' : canPitchIn(dragging, slot) ? 'can-drop' : 'no-drop');
   const reasons = (p: Player) => modifierReasons(s, p, status);
 

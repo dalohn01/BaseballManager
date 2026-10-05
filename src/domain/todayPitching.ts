@@ -12,15 +12,15 @@ import type { ClubId, PitchingBullpen, Player, PlayerId } from './types';
  * the default only bends that when a club is short of one kind.
  */
 
-export const RELIEF_SLOTS = ['long', 'setup', 'closer'] as const;
+export const RELIEF_SLOTS = ['long', 'middle', 'setup', 'closer'] as const;
 export type ReliefSlot = (typeof RELIEF_SLOTS)[number];
 export type PitchingSlot = 'starter' | ReliefSlot;
-export const PITCHING_SLOTS: PitchingSlot[] = ['starter', 'long', 'setup', 'closer'];
+export const PITCHING_SLOTS: PitchingSlot[] = ['starter', 'long', 'middle', 'setup', 'closer'];
 
-export const SLOT_LABEL: Record<PitchingSlot, string> = { starter: 'Starting pitcher', long: 'Long relief', setup: 'Setup', closer: 'Closer' };
-export const SLOT_SHORT: Record<PitchingSlot, string> = { starter: 'SP', long: 'LR', setup: 'SU', closer: 'CL' };
+export const SLOT_LABEL: Record<PitchingSlot, string> = { starter: 'Starting pitcher', long: 'Long relief', middle: 'Middle relief', setup: 'Setup', closer: 'Closer' };
+export const SLOT_SHORT: Record<PitchingSlot, string> = { starter: 'SP', long: 'LR', middle: 'MR', setup: 'SU', closer: 'CL' };
 
-export const emptyBullpen = (): PitchingBullpen => ({ long: null, setup: null, closer: null });
+export const emptyBullpen = (): PitchingBullpen => ({ long: null, middle: null, setup: null, closer: null });
 
 const pitchersOf = (state: GameState, clubId: ClubId) => state.clubs[clubId].roster.map((id) => state.players[id]).filter((p) => p?.isPitcher);
 
@@ -53,7 +53,7 @@ export function bestPitching(state: GameState, clubId: ClubId, starterId?: Playe
   if (!starter) return { starterId: '', bullpen: emptyBullpen() };
   const others = all.filter((p) => p.id !== starter.id);
   const pen = [...rank(others.filter((p) => canPitchIn(p, 'closer')), 'closer'), ...rank(others.filter((p) => !canPitchIn(p, 'closer')), 'closer')];
-  return { starterId: starter.id, bullpen: { closer: pen[0]?.id ?? null, setup: pen[1]?.id ?? null, long: pen[2]?.id ?? null } };
+  return { starterId: starter.id, bullpen: { closer: pen[0]?.id ?? null, setup: pen[1]?.id ?? null, middle: pen[2]?.id ?? null, long: pen[3]?.id ?? null } };
 }
 
 /**
@@ -65,11 +65,11 @@ export function bullpenToday(state: GameState, clubId: ClubId, starterId: Player
   const own = new Set(pitchersOf(state, clubId).map((p) => p.id));
   const seen = new Set<PlayerId>([starterId]);
   const ok = (id: PlayerId | null) => (id && own.has(id) && !seen.has(id) ? (seen.add(id), state.players[id]) : null);
-  const given = plan ? { long: ok(plan.long), setup: ok(plan.setup), closer: ok(plan.closer) } : null;
-  if (given && (given.long || given.setup || given.closer)) return given;
+  const given = plan ? { long: ok(plan.long), middle: ok(plan.middle ?? null), setup: ok(plan.setup), closer: ok(plan.closer) } : null;
+  if (given && (given.long || given.middle || given.setup || given.closer)) return given;
   const best = bestPitching(state, clubId, starterId).bullpen;
   const get = (id: PlayerId | null) => (id ? state.players[id] : null);
-  return { long: get(best.long), setup: get(best.setup), closer: get(best.closer) };
+  return { long: get(best.long), middle: get(best.middle), setup: get(best.setup), closer: get(best.closer) };
 }
 
 /** Which slot a pitcher has today, or null (not used). */
