@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { execute } from '../src/application/engine';
 import { pitcherPosition } from '../src/domain/pitching';
-import { autoLineup, defaultPitchingPlan, validateLineup } from '../src/domain/lineup';
+import { autoLineup, defaultPitchingPlan, validateBatters, validateLineup } from '../src/domain/lineup';
 import { assignPitcher, benchBatter, draftFromClub, moveBatter, openSpot, pitcherSlot, setPosition, swapFromBench, swapPositions, type LineupDraft } from '../src/domain/lineupDraft';
 import { battingStats, fmtIp, pitchingStats, recentClubMatches } from '../src/domain/playerStats';
 import { createRng } from '../src/domain/rng';
@@ -168,5 +168,17 @@ describe('batters: batting order, positions and the bench', () => {
     expect(openSpot(back)).toBe(-1);
     expect(back.lineup.battingOrder[2]).toEqual({ playerId: bench[0], position: d.lineup.battingOrder[2].position });
     expect(errors(back)).toEqual([]);
+  });
+});
+
+describe('two-step lineup', () => {
+  it('step one checks the batters only; the starting pitcher belongs to step two', () => {
+    const s = newGame(35);
+    const d = draftFromClub(s);
+    const noPitcher = { ...d.lineup, pitcherId: '' };
+    expect(validateBatters(s, 'hfx', noPitcher).filter((i) => i.severity === 'error')).toEqual([]);
+    expect(validateLineup(s, 'hfx', noPitcher).some((i) => /starting pitcher/.test(i.text))).toBe(true);
+    const open = benchBatter(d, 0).lineup;
+    expect(validateBatters(s, 'hfx', open).some((i) => i.severity === 'error' && /is open/.test(i.text))).toBe(true);
   });
 });

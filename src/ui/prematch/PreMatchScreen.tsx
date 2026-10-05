@@ -6,6 +6,7 @@ import { playerNotes, type StatsPeriod } from '../../domain/playerStats';
 import type { EventInstance, GameState } from '../../domain/state';
 import { clubName, userClub } from '../../domain/state';
 import { describeLineupChange, forecastForLineup } from '../../events/templates/leagueGame';
+import { validateBatters } from '../../domain/lineup';
 import { Crest } from '../components/art';
 import { Icon } from '../components/icons';
 import { useController, useGame, useNow, useSnapshot } from '../hooks';
@@ -80,7 +81,8 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   const [draft, setDraft] = useState<LineupDraft>(() => loadDraft(s, ev.id) ?? draftFromClub(s));
   // What the screen opened with: Reset on the Pitchers tab returns today's pitching to it.
   const [opened] = useState(draft);
-  const [tab, setTab] = useState<Tab>(() => readPref('pmTab', ['batters', 'pitchers'] as const, 'batters'));
+  // Two steps: the nine batters first, then the pitchers; Confirm only on the second.
+  const [tab, setTab] = useState<Tab>('batters');
   const [showInfo, setShowInfo] = useState(() => readPref('pmInfo', ['shown', 'hidden'] as const, 'hidden') === 'shown');
   const [period, setPeriod] = useState<StatsPeriod>(() => readPref('pmPeriod', ['season', 'last5'] as const, 'season'));
   const [notice, setNotice] = useState<{ label: string; changes: string[]; undo: LineupDraft } | null>(null);
@@ -110,6 +112,13 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   const errors = issues.filter((i) => i.severity === 'error');
   const blocker = optionBlocker(s, ev, option, null, now) ?? errors[0]?.text ?? null;
   const win = errors.length === 0 ? forecastForLineup(s, game.id, draft.lineup) : null;
+  const batterErrors = validateBatters(s, s.userClubId, draft.lineup).filter((i) => i.severity === 'error');
+  const goTo = (step: Tab) => {
+    if (step === 'pitchers' && batterErrors.length) return;
+    setTab(step);
+    setNotice(null);
+    window.scrollTo({ top: 0 });
+  };
 
   const starters = draft.lineup.battingOrder.map((x) => s.players[x.playerId]).filter(Boolean);
   const bench = club.roster.map((id) => s.players[id]).filter((p) => !p.isPitcher && !starters.some((st) => st.id === p.id));
@@ -151,7 +160,25 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
           <Crest club={opp} size={40} />
         </div>
         <div className="pm-toolbar">
-        <Segmented label="View" value={tab} onChange={setAndStore<Tab>('pmTab', setTab)} options={[['batters', 'Batters / Fielders'], ['pitchers', 'Pitchers']]} role="tablist" />
+        <ol className="pm-steps" aria-label="Lineup steps">
+          {([['batters', 'Batters / Fielders'], ['pitchers', 'Pitchers']] as const).map(([step, label], i) => {
+            const done = step === 'batters' && batterErrors.length === 0 && tab === 'pitchers';
+            return (
+              <li key={step}>
+                <button
+                  className={`pm-step ${tab === step ? 'on' : ''} ${done ? 'done' : ''}`}
+                  aria-current={tab === step ? 'step' : undefined}
+                  disabled={step === 'pitchers' && batterErrors.length > 0}
+                  title={step === 'pitchers' && batterErrors.length ? batterErrors[0].text : undefined}
+                  onClick={() => goTo(step)}
+                >
+                  <span className="pm-step-num">{done ? <Icon name="check" size={14} /> : i + 1}</span>
+                  {label}
+                </button>
+              </li>
+            );
+          })}
+        </ol>
         <Segmented
           label="Stats"
           value={period}
@@ -210,8 +237,8 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
           )}
         </div>
         <div className="pm-status" aria-live="polite">
-          {errors.length ? (
-            <span className="note-chip note-warn">! {errors[0].text}</span>
+          {(tab === 'batters' ? batterErrors : errors).length ? (
+            <span className="note-chip note-warn">! {(tab === 'batters' ? batterErrors : errors)[0].text}</span>
           ) : (
             <>
               {needRest > 0 && <span className="note-chip note-warn">! {needRest} starter{needRest > 1 ? 's' : ''} need{needRest > 1 ? '' : 's'} rest</span>}
@@ -222,10 +249,21 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
           )}
         </div>
         <div className="pm-confirm-bar">
-          <button className="btn btn-primary pm-confirm" onClick={confirm} disabled={!!blocker || snap.busy} title={blocker ?? undefined}>
-            <Icon name="check" /> {snap.busy ? 'Saving…' : 'Confirm lineup'}
-          </button>
-          {blocker && !errors.length && <p className="pm-blocker small">{blocker}</p>}
+          {tab === 'batters' ? (
+            <button className="btn btn-primary pm-confirm" onClick={() => goTo('pitchers')} disabled={batterErrors.length > 0} title={batterErrors[0]?.text}>
+              Next: Pitchers <Icon name="chevron" />
+            </button>
+          ) : (
+            <>
+              <button className="btn btn-secondary pm-step-back" onClick={() => goTo('batters')} aria-label="Back to batters">
+                <Icon name="back" size={18} /> <span className="lbl">Batters</span>
+              </button>
+              <button className="btn btn-primary pm-confirm" onClick={confirm} disabled={!!blocker || snap.busy} title={blocker ?? undefined}>
+                <Icon name="check" /> {snap.busy ? 'Saving…' : 'Confirm lineup'}
+              </button>
+            </>
+          )}
+          {tab === 'pitchers' && blocker && !errors.length && <p className="pm-blocker small">{blocker}</p>}
           {snap.commandError && <p className="pm-blocker small" role="alert">{snap.commandError}</p>}
         </div>
       </footer>

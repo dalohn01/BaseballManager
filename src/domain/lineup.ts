@@ -34,7 +34,21 @@ export interface LineupIssue {
   text: string;
 }
 
+/** Problems with a whole lineup: the batters (see validateBatters) and the starting pitcher. */
 export function validateLineup(state: GameState, clubId: ClubId, lineup: Lineup): LineupIssue[] {
+  const issues = validateBatters(state, clubId, lineup);
+  const roster = new Set(state.clubs[clubId].roster);
+  const pitcher = state.players[lineup.pitcherId];
+  if (!pitcher || !roster.has(lineup.pitcherId) || !pitcher.isPitcher) {
+    issues.push({ severity: 'error', text: 'Choose a starting pitcher from the roster.' });
+  } else if (restStage(pitcher) < 2) {
+    issues.push({ severity: 'warning', text: `${pitcher.lastName} is ${restLabel(restStage(pitcher)).toLowerCase()} and will pitch much worse today.` });
+  }
+  return issues;
+}
+
+/** Problems with the nine batters and their positions only (the first step of the lineup). */
+export function validateBatters(state: GameState, clubId: ClubId, lineup: Lineup): LineupIssue[] {
   const club = state.clubs[clubId];
   const issues: LineupIssue[] = [];
   const roster = new Set(club.roster);
@@ -65,12 +79,6 @@ export function validateLineup(state: GameState, clubId: ClubId, lineup: Lineup)
   }
   for (const pos of LINEUP_POSITIONS) {
     if (!seenPositions.has(pos)) issues.push({ severity: 'error', text: `Nobody is playing ${pos}.` });
-  }
-  const pitcher = state.players[lineup.pitcherId];
-  if (!pitcher || !roster.has(lineup.pitcherId) || !pitcher.isPitcher) {
-    issues.push({ severity: 'error', text: 'Choose a starting pitcher from the roster.' });
-  } else if (restStage(pitcher) < 2) {
-    issues.push({ severity: 'warning', text: `${pitcher.lastName} is ${restLabel(restStage(pitcher)).toLowerCase()} and will pitch much worse today.` });
   }
   return issues;
 }

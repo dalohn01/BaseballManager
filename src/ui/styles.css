@@ -1912,3 +1912,20 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 .role-badge.role-closer { background: #c0392b; }
 .pitch-view .ps-row.no-drop { opacity: 0.45; }
 .pitch-view .ps-row.can-drop { border-style: dashed; border-color: #3d7bd9; }
+
+/* Lineup steps: batters first, then pitchers (Confirm only on the second). */
+.pm-steps { display: flex; gap: 4px; margin: 0; padding: 4px; list-style: none; background: #eef2f8; border-radius: 12px; }
+.pm-step { display: inline-flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 14px; border: 0; border-radius: 9px; background: transparent; color: var(--navy); font-family: var(--display); font-weight: 800; text-transform: uppercase; cursor: pointer; }
+.pm-step.on { background: var(--navy); color: #fff; }
+.pm-step:disabled { color: #9aa8bb; cursor: not-allowed; }
+.pm-step-num { display: inline-grid; place-items: center; width: 22px; height: 22px; border-radius: 50%; border: 2px solid currentColor; font-size: 0.8rem; }
+.pm-step.done .pm-step-num { background: #2aa65a; border-color: #2aa65a; color: #fff; }
+.pm-confirm-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; justify-content: flex-end; }
+.pm-step-back { display: inline-flex; align-items: center; gap: 6px; }
+.pm-confirm-bar > p { flex-basis: 100%; margin: 0; text-align: right; }
+@media (max-width: 720px) {
+  /* Back and Confirm side by side on phones, so the pinned bar stays one row. */
+  .pm-confirm-bar .pm-confirm { flex: 1 1 160px; width: auto; }
+  .pm-step-back { flex: none; padding-inline: 14px; }
+  .pm-step-back .lbl { display: none; }
+}
