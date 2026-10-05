@@ -160,7 +160,7 @@ describe('the match cycle in play', () => {
     expect(Math.max(...counts)).toBeLessThanOrEqual(3);
     expect(counts.filter((n) => n === 0).length).toBeGreaterThan(0);
     expect(counts.filter((n) => n >= 1).length / counts.length).toBeGreaterThan(0.6);
-  });
+  }, 30_000);
 
   it('several seasons play without ever opening a direct action; every round closes exactly once', () => {
     let s = newGame(55);

@@ -146,10 +146,10 @@ export const BALANCE = {
      * (see tests/calibration.test.ts). Ratings shift these per matchup.
      */
     odds: {
-      walk: 0.103,
-      strikeout: 0.19,
+      walk: 0.1,
+      strikeout: 0.2,
       /** Chance a ball in play (not a strikeout or walk) falls for a hit. */
-      hit: 0.37,
+      hit: 0.36,
       hitMax: 0.47,
       /** Shares of hits that go for extra bases (before power/speed shifts). */
       homeRunShare: 0.1,

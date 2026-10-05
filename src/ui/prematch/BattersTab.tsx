@@ -11,7 +11,7 @@ import { BALANCE } from '../../balance/config';
 import { Icon } from '../components/icons';
 import { ModChips, modifierReasons } from '../components/Modifiers';
 import { instructionSummary } from '../tactics/TacticsControls';
-import { ChangeButton, EffBlock, ModBox, ModColumns, modIcon, PlayerIdent, StatBlock } from './LineupParts';
+import { ChangeButton, EffBlock, ModColumns, modIcon, PlayerIdent, StatBlock } from './LineupParts';
 import type { DraftApi } from './PreMatchScreen';
 import { Notes, Portrait } from './shared';
 
@@ -119,7 +119,23 @@ export function BattersTab({ api }: { api: DraftApi }) {
           <h2>Starting lineup</h2>
           <small className="muted">Drag a row to change the batting order, or bring a player in from the bench. Click a position to change it.</small>
         </header>
-        <ol className="ps-rows">
+        <ol className="ps-rows bat-rows">
+          {/* Column labels for the compact rows (wide screens): the modifiers' icons live here once. */}
+          <li className="bat-head" aria-hidden="true">
+            <span className="bh-order">#</span>
+            <span className="bh-pos">Pos</span>
+            <span className="bh-player">Player</span>
+            <span className="bh-eff">Effective</span>
+            <span className="pr-mods">
+              {MODIFIER_KEYS.map((k) => (
+                <span key={k} className="pr-mod">
+                  {modIcon(k, 1)}
+                  <small>{MODIFIER_LABEL[k]}</small>
+                </span>
+              ))}
+            </span>
+            <span className="bh-stats">Stats</span>
+          </li>
           {order.map((slot, i) => {
             const p = slot.playerId ? s.players[slot.playerId] : null;
             const v = p ? valueAt(s, p, slot.position, status) : null;
@@ -152,6 +168,7 @@ export function BattersTab({ api }: { api: DraftApi }) {
                       <PlayerIdent
                         state={s}
                         player={p}
+                        size={34}
                         sub={`#${p.number} · Bats ${p.bats} · ${p.positions.join('/')}`}
                         badge={<Notes notes={playerNotes(s, p, { starting: true })} max={1} />}
                         extra={
@@ -194,82 +211,46 @@ export function BattersTab({ api }: { api: DraftApi }) {
         {bench.length === 0 ? (
           <p className="small muted ps-none">Everyone is in the lineup.</p>
         ) : (
-          <div className="ps-table-wrap">
-            <table className="ps-table bat-table">
-              <thead>
-                <tr>
-                  <th scope="col">
-                    <span className="sr-only">Move</span>
-                  </th>
-                  <th scope="col">
-                    <span className="sr-only">Player</span>
-                  </th>
-                  <th scope="col" title="Effective today at his main position">
-                    EFF
-                  </th>
-                  {MODIFIER_KEYS.map((k) => (
-                    <th scope="col" key={k} className="mod-th">
-                      {modIcon(k, 1)}
-                      <small>{MODIFIER_LABEL[k]}</small>
-                    </th>
-                  ))}
-                  <th scope="col">AVG</th>
-                  <th scope="col">OPS</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bench.map(({ p, v }) => {
-                  const why = reasons(p);
-                  const st = Object.fromEntries(batterStats(s, p, period));
-                  return (
-                    <tr
-                      key={p.id}
-                      draggable
-                      onDragStart={(e) => {
-                        e.dataTransfer.setData('text/plain', p.id);
-                        e.dataTransfer.effectAllowed = 'move';
-                        setDrag({ kind: 'bench', id: p.id });
-                      }}
-                      onDragEnd={endDrag}
-                    >
-                      <td className="ps-grip">
-                        <Icon name="grip" size={20} strokeWidth={3.5} />
-                        <PutIn state={s} player={p} order={order} onPut={(i) => update(swapFromBench(draft, i, p.id))} />
-                      </td>
-                      <th scope="row">
-                        <span className="ps-bench-name">
-                          <Portrait state={s} player={p} size={40} nested />
-                          <span className="pr-id">
-                            <strong title={playerName(p)}>
-                              {p.firstName} {p.lastName}
-                            </strong>
-                            <small>
-                              {p.positions.join('/')} · Bats {p.bats}
-                            </small>
-                            <Notes notes={playerNotes(s, p, { starting: false })} max={1} />
-                          </span>
-                        </span>
-                      </th>
-                      <td className="num" data-label="EFF">
-                        <EffBlock base={v.base} eff={v.effective} />
-                      </td>
-                      {MODIFIER_KEYS.map((k) => (
-                        <td key={k} className="mod-td" data-label={MODIFIER_LABEL[k]}>
-                          <ModBox value={v.mods[k]} title={`${MODIFIER_LABEL[k]}: ${why[k]}`} />
-                        </td>
-                      ))}
-                      <td className="num stat" data-label="AVG">
-                        {st.AVG}
-                      </td>
-                      <td className="num stat" data-label="OPS">
-                        {st.OPS}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <ol className="ps-rows bat-rows bench-rows">
+            <li className="bat-head bench-head" aria-hidden="true">
+              <span className="bh-player">Player</span>
+              <span className="bh-eff">Effective</span>
+              <span className="pr-mods">
+                {MODIFIER_KEYS.map((k) => (
+                  <span key={k} className="pr-mod">
+                    {modIcon(k, 1)}
+                    <small>{MODIFIER_LABEL[k]}</small>
+                  </span>
+                ))}
+              </span>
+              <span className="bh-stats">Stats</span>
+            </li>
+            {bench.map(({ p, v }) => (
+              <li
+                key={p.id}
+                className={`ps-row bat-row bench-row ${drag?.kind === 'bench' && drag.id === p.id ? 'dragging' : ''}`}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/plain', p.id);
+                  e.dataTransfer.effectAllowed = 'move';
+                  setDrag({ kind: 'bench', id: p.id });
+                }}
+                onDragEnd={endDrag}
+                aria-label={`Bench: ${playerName(p)}`}
+              >
+                <span className="br-grip" title="Drag onto a lineup spot">
+                  <Icon name="grip" size={20} strokeWidth={3.5} />
+                  <PutIn state={s} player={p} order={order} onPut={(i) => update(swapFromBench(draft, i, p.id))} />
+                </span>
+                <span className="pr-player">
+                  <PlayerIdent state={s} player={p} size={34} sub={`#${p.number} · Bats ${p.bats} · ${p.positions.join('/')}`} badge={<Notes notes={playerNotes(s, p, { starting: false })} max={1} />} />
+                </span>
+                <EffBlock base={v.base} eff={v.effective} label />
+                <ModColumns mods={v.mods} reasons={reasons(p)} />
+                <StatBlock stats={batterStats(s, p, period)} />
+              </li>
+            ))}
+          </ol>
         )}
       </section>
 

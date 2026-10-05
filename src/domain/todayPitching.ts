@@ -1,4 +1,4 @@
-import { effectiveValue, teamStatus, type TeamStatus } from './effective';
+import { effectiveValue, restStage, teamStatus, type TeamStatus } from './effective';
 import { pitcherPosition } from './pitching';
 import type { GameState } from './state';
 import type { ClubId, PitchingBullpen, Player, PlayerId } from './types';
@@ -36,8 +36,8 @@ export const canPitchIn = (p: Player, slot: PitchingSlot) => (slot === 'starter'
 const slotScore = (state: GameState, p: Player, slot: PitchingSlot, status: TeamStatus) => (slot === 'starter' ? starterValue(state, p, status) : relieverValue(state, p, status));
 
 /**
- * The strongest pitching for today: the best starting pitcher by effective
- * value, then the best three relievers: the best of them closes, the next sets
+ * The strongest pitching for today: the best rested (Ready or Fresh) starting
+ * pitcher by effective value, then the best three relievers: the best of them closes, the next sets
  * up, the third is long relief. A given starter is kept. Only a club short of
  * one kind falls back to the other (so a game can always be played).
  */
@@ -46,7 +46,10 @@ export function bestPitching(state: GameState, clubId: ClubId, starterId?: Playe
   const all = pitchersOf(state, clubId);
   const rank = (list: Player[], slot: PitchingSlot) => [...list].sort((a, b) => slotScore(state, b, slot, status) - slotScore(state, a, slot, status) || a.id.localeCompare(b.id));
   const sp = all.filter((p) => canPitchIn(p, 'starter'));
-  const starter = (starterId && all.find((p) => p.id === starterId)) || rank(sp.length ? sp : all, 'starter')[0];
+  // A starter on short rest (Tired or Exhausted) is only picked when no rested starter is left,
+  // so the rotation keeps turning instead of the ace going on one game's rest.
+  const rested = sp.filter((p) => restStage(p) >= 2);
+  const starter = (starterId && all.find((p) => p.id === starterId)) || rank(rested.length ? rested : sp.length ? sp : all, 'starter')[0];
   if (!starter) return { starterId: '', bullpen: emptyBullpen() };
   const others = all.filter((p) => p.id !== starter.id);
   const pen = [...rank(others.filter((p) => canPitchIn(p, 'closer')), 'closer'), ...rank(others.filter((p) => !canPitchIn(p, 'closer')), 'closer')];

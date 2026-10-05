@@ -1006,7 +1006,9 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .club-tagline { font-size: 1.1rem; }
 
   main { padding-bottom: 6px; }
-  .prematch { gap: 10px; --fit-offset: 410px; }
+  /* Scouting and Team status are folded away by default: the lineup gets their height. */
+  .prematch { gap: 10px; --fit-offset: 340px; }
+  .prematch.info-open { --fit-offset: 440px; }
   .pm-head { grid-template-columns: auto auto 1fr; gap: 18px; padding: 8px 14px; }
   .pm-title { font-size: clamp(1.5rem, 2.2vw, 2.1rem); }
   .pm-matchup { justify-self: start; }
@@ -1805,9 +1807,79 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .bat-table tbody tr > :nth-child(3) { grid-column: 7 / 9; }
   .bat-table tbody tr > :nth-child(4) { grid-column: span 2; }
 }
+/* Compact batter rows on wide screens: all nine fit on one screen. Modifier icons and
+   labels sit once in the header row; Effective and its sum side by side; stats 2 × 2. */
+.bat-head { display: none; }
+@media (min-width: 1100px) {
+  /* Both panels share one compact header height, so their rows line up. */
+  .bat-view .panel > .panel-head { padding: 6px 14px; min-height: 40px; }
+  .bat-view .panel > .panel-head h2 { font-size: 1.15rem; }
+  .bat-view .panel { padding-bottom: 6px; }
+  .bat-view .bat-rows { gap: 4px; padding-top: 4px; }
+}
+@container (min-width: 681px) {
+  .bat-head .pr-mod { display: flex; align-items: center; justify-content: center; gap: 2px; }
+  .bat-head .pr-mod, .bat-row .pr-mod { width: 52px; }
+  .bat-head .pr-mod svg { width: 15px; height: 15px; }
+  .bat-row, .bat-head { grid-template-columns: 18px 16px 40px minmax(130px, 1fr) 76px auto 118px 32px; grid-template-areas: 'grip num pos player eff mods stats swap'; column-gap: 8px; }
+  .bat-row { min-height: 0; padding: 5px 8px; }
+  .bat-head { display: grid; align-items: end; padding: 0 9px; font-family: var(--display); font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .bh-order { grid-area: num; } .bh-pos { grid-area: pos; text-align: center; } .bh-player { grid-area: player; } .bh-eff { grid-area: eff; } .bh-stats { grid-area: stats; }
+  .bat-head .pr-mods { grid-area: mods; }
+  .bat-head .pr-mod small { text-transform: none; letter-spacing: 0; font-family: var(--body); font-weight: 500; }
+  .bat-row .pr-mod > svg, .bat-row .pr-mod > small { display: none; }
+  .bat-row .eff-block { grid-auto-flow: column; align-items: center; justify-content: start; gap: 6px; }
+  .bat-row .eff-block small { display: none; }
+  .bat-row .eff-block strong { font-size: 1.5rem; }
+  .bat-row .mod-box { height: 26px; }
+  .bat-row .pr-stats { grid-template-columns: auto auto; column-gap: 12px; font-size: 0.8rem; line-height: 1.3; }
+  .bat-row .pr-id { line-height: 1.1; }
+  .bat-row .pr-id strong { font-size: 0.95rem; }
+  .bat-row .pr-id small { font-size: 0.72rem; }
+  .bat-row .pr-id .notes-row { display: none; }
+  .bat-row .br-pos { height: 26px; min-width: 38px; }
+  .bat-row .br-grip { height: 32px; }
+  .bat-row .pr-swap { width: 32px; height: 32px; }
+  .bat-row .pr-swap svg { width: 16px; height: 16px; }
+  .bat-row .pr-num { font-size: 1.1rem; }
+}
+/* Bench rows: the same row as a selected player, without batting spot, position and change. */
+.bench-row { grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-areas: 'grip player eff' 'grip mods mods' 'grip stats stats'; }
+
+/* Bench rows in the same compact form, from a narrower panel width. */
+@container (min-width: 600px) {
+  .bench-head .pr-mod { display: flex; align-items: center; justify-content: center; gap: 2px; }
+  .bench-head .pr-mod, .bench-row .pr-mod { width: 52px; }
+  .bench-head .pr-mod svg { width: 15px; height: 15px; }
+  .bench-row { min-height: 0; padding: 5px 8px; }
+  .bench-head { display: grid; align-items: end; padding: 0 9px; font-family: var(--display); font-weight: 700; font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--muted); }
+  .bh-order { grid-area: num; } .bh-pos { grid-area: pos; text-align: center; } .bh-player { grid-area: player; } .bh-eff { grid-area: eff; } .bh-stats { grid-area: stats; }
+  .bench-head .pr-mods { grid-area: mods; }
+  .bench-head .pr-mod small { text-transform: none; letter-spacing: 0; font-family: var(--body); font-weight: 500; }
+  .bench-row .pr-mod > svg, .bench-row .pr-mod > small { display: none; }
+  .bench-row .eff-block { grid-auto-flow: column; align-items: center; justify-content: start; gap: 6px; }
+  .bench-row .eff-block small { display: none; }
+  .bench-row .eff-block strong { font-size: 1.5rem; }
+  .bench-row .mod-box { height: 26px; }
+  .bench-row .pr-stats { grid-template-columns: auto auto; column-gap: 12px; font-size: 0.8rem; line-height: 1.3; }
+  .bench-row .pr-id { line-height: 1.1; }
+  .bench-row .pr-id strong { font-size: 0.95rem; }
+  .bench-row .pr-id small { font-size: 0.72rem; }
+  .bench-row .pr-id .notes-row { display: none; }
+  .bench-row .br-pos { height: 26px; min-width: 38px; }
+  .bench-row .br-grip { height: 32px; }
+  .bench-row .pr-swap { width: 32px; height: 32px; }
+  .bench-row .pr-swap svg { width: 16px; height: 16px; }
+  .bench-row .pr-num { font-size: 1.1rem; }
+}
+@container (min-width: 600px) {
+  .bench-row, .bench-head { grid-template-columns: 18px minmax(120px, 1fr) 76px auto 118px; grid-template-areas: 'grip player eff mods stats'; column-gap: 8px; }
+}
 /* Narrowest last, so it wins over the rules above. */
 @container (max-width: 470px) {
   .bat-row { grid-template-columns: 18px 16px 44px minmax(0, 1fr) 38px; grid-template-areas: 'grip num pos eff swap' 'player player player player player' 'mods mods mods mods mods' 'stats stats stats stats stats'; }
   .bat-row .pr-num { display: block; }
   .bat-row .pr-empty { grid-column: 1 / -1; }
+  .bench-row { grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-areas: 'grip player eff' 'grip mods mods' 'grip stats stats'; }
 }
+.pm-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }

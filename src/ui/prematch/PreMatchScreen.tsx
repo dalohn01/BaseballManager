@@ -81,6 +81,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   // What the screen opened with: Reset on the Pitchers tab returns today's pitching to it.
   const [opened] = useState(draft);
   const [tab, setTab] = useState<Tab>(() => readPref('pmTab', ['batters', 'pitchers'] as const, 'batters'));
+  const [showInfo, setShowInfo] = useState(() => readPref('pmInfo', ['shown', 'hidden'] as const, 'hidden') === 'shown');
   const [period, setPeriod] = useState<StatsPeriod>(() => readPref('pmPeriod', ['season', 'last5'] as const, 'season'));
   const [notice, setNotice] = useState<{ label: string; changes: string[]; undo: LineupDraft } | null>(null);
   const [tactics, setTactics] = useState<{ playerId: string | null } | null>(null);
@@ -127,7 +128,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   };
 
   return (
-    <div className="prematch">
+    <div className={`prematch ${showInfo ? "info-open" : ""}`}>
       {/* One compact bar: title, matchup and the view controls, so the field gets the height. */}
       <header className="pm-head">
         <div className="pm-titles">
@@ -158,6 +159,14 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
           options={[['season', 'Season'], ['last5', 'Last 5 games']]}
           hint="Season: this season through the last completed game. Last 5 games: your club's five latest games (a player who did not play shows no sample)."
         />
+        <span className="pm-tools">
+          <button className="btn btn-small btn-secondary" aria-expanded={showInfo} onClick={() => setAndStore<'shown' | 'hidden'>('pmInfo', (v) => setShowInfo(v === 'shown'))(showInfo ? 'hidden' : 'shown')}>
+            {showInfo ? 'Hide' : 'Show'} scouting &amp; team status
+          </button>
+          <button className="btn btn-small btn-secondary" onClick={() => setTactics({ playerId: null })}>
+            Adjust tactics
+          </button>
+        </span>
         </div>
       </header>
 
@@ -173,10 +182,11 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
         </div>
       )}
 
+      {/* Scouting and Team status are folded away by default so the lineup gets the room. */}
       <div className="pm-info">
-        <OpponentReport gameId={String(ev.data.gameId)} onAdjust={() => setTactics({ playerId: null })} />
+        {showInfo && <OpponentReport gameId={String(ev.data.gameId)} onAdjust={() => setTactics({ playerId: null })} />}
         <MatchPlanSummary />
-        <TeamStatusBar state={s} />
+        {showInfo && <TeamStatusBar state={s} />}
       </div>
 
       <div className="pm-body">
