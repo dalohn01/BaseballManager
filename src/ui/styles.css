@@ -1526,7 +1526,6 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   grid-template-areas: 'num role player eff mods stats swap';
   transition: box-shadow 0.15s, border-color 0.15s;
 }
-.ps-row.slot-starter { border: 2px solid #2aa65a; background: linear-gradient(90deg, #eaf8ef, #fff 45%); padding: 7px 9px; }
 .ps-row.drop { border-color: #3d7bd9; box-shadow: 0 0 0 3px rgba(61, 123, 217, 0.25); }
 .pr-num { grid-area: num; font-family: var(--display); font-weight: 800; font-size: 1.35rem; color: #9aa8bb; }
 .pr-role { grid-area: role; display: flex; gap: 8px; align-items: center; min-width: 0; }
@@ -1814,6 +1813,8 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   /* Both panels share one compact header height, so their rows line up. */
   .bat-view .panel > .panel-head { padding: 6px 14px; min-height: 40px; }
   .bat-view .panel > .panel-head h2 { font-size: 1.15rem; }
+  .bat-view .panel > .panel-head { flex-wrap: nowrap; }
+  .bat-view .panel > .panel-head > small { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
   .bat-view .panel { padding-bottom: 6px; }
   .bat-view .bat-rows { gap: 4px; padding-top: 4px; }
 }
@@ -1901,3 +1902,13 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
   .bench-row { grid-template-columns: 18px minmax(0, 1fr) auto; grid-template-areas: 'grip player eff' 'grip mods mods' 'grip stats stats'; }
 }
 .pm-tools { display: flex; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+
+/* Pitchers in the batters' row system: the role badge takes the position badge's place. */
+.role-badge { display: inline-flex; gap: 2px; align-items: center; justify-content: center; }
+.role-badge svg { flex: none; }
+.role-badge.role-starter { background: #1f7a43; }
+.role-badge.role-long { background: #2a56b8; }
+.role-badge.role-setup { background: #b5700a; }
+.role-badge.role-closer { background: #c0392b; }
+.pitch-view .ps-row.no-drop { opacity: 0.45; }
+.pitch-view .ps-row.can-drop { border-style: dashed; border-color: #3d7bd9; }

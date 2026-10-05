@@ -3,17 +3,17 @@ import { BALANCE } from '../../balance/config';
 import { effectiveValue, MODIFIER_KEYS, MODIFIER_LABEL, teamStatus, type TeamStatus } from '../../domain/effective';
 import { assignPitcher, benchPitcher, pitcherSlot, setHook } from '../../domain/lineupDraft';
 import { pitcherPosition } from '../../domain/pitching';
-import { fmtEra, fmtIp, pitchingStats, type StatsPeriod } from '../../domain/playerStats';
+import { fmtEra, fmtIp, pitchingStats, playerNotes, type StatsPeriod } from '../../domain/playerStats';
 import { playerName, userClub } from '../../domain/state';
 import type { GameState } from '../../domain/state';
-import { canPitchIn, emptyBullpen, PITCHING_SLOTS, SLOT_LABEL, type PitchingSlot } from '../../domain/todayPitching';
+import { canPitchIn, emptyBullpen, PITCHING_SLOTS, SLOT_LABEL, SLOT_SHORT, type PitchingSlot } from '../../domain/todayPitching';
 import type { PitchingHook, Player } from '../../domain/types';
 import { Icon } from '../components/icons';
 import { EffValue, ModChips, modifierReasons } from '../components/Modifiers';
-import { ChangeButton, EffBlock, ModBox, ModColumns, modIcon, PlayerIdent, StatBlock } from './LineupParts';
+import { ChangeButton, EffBlock, ModColumns, modIcon, PlayerIdent, StatBlock } from './LineupParts';
 import { instructionSummary } from '../tactics/TacticsControls';
 import type { DraftApi } from './PreMatchScreen';
-import { Portrait } from './shared';
+import { Notes, Portrait } from './shared';
 
 const HOOK_TEXT: Record<PitchingHook, string> = {
   early: 'Early',
@@ -29,7 +29,6 @@ const SLOT_WHEN: Record<PitchingSlot, string> = {
   closer: 'Save situations from the 9th.',
 };
 const SLOT_ICON = { starter: 'crown', long: 'link', setup: 'star', closer: 'flame' } as const;
-const ROLE_NAME: Record<PitchingSlot, string> = { starter: 'Starting', long: 'Long relief', setup: 'Setup', closer: 'Closer' };
 
 /** A pitcher's value in a slot: as the starter (stamina counts) or in relief; on the bench, at his own position. */
 const jobOf = (slot: PitchingSlot | null, p: Player) => (slot === 'starter' ? 'SP' : slot ? 'RP' : pitcherPosition(p));
@@ -107,43 +106,61 @@ export function PitchersTab({ api }: { api: DraftApi; gameId: string }) {
   const hook = BALANCE.match.hooks[draft.plan.hook];
 
   return (
-    <div className="pitch-v4">
+    <div className="pitch-v4 bat-view pitch-view">
       <section className="panel ps-staff">
         <header className="panel-head">
           <h2>Pitching staff</h2>
-          <small className="muted">Drag and drop to change pitchers. The roles apply to today's game only.</small>
+          <small className="muted">Drag onto a role or in from the bench. Roles apply to today's game only.</small>
         </header>
-        <ol className="ps-rows">
+        <ol className="ps-rows bat-rows">
+          {/* Column labels for the compact rows (wide screens): the modifiers' icons live here once. */}
+          <li className="bat-head" aria-hidden="true">
+            <span className="bh-order">#</span>
+            <span className="bh-pos">Role</span>
+            <span className="bh-player">Pitcher</span>
+            <span className="bh-eff">Effective</span>
+            <span className="pr-mods">
+              {MODIFIER_KEYS.map((k) => (
+                <span key={k} className="pr-mod">
+                  {modIcon(k, 1)}
+                  <small>{MODIFIER_LABEL[k]}</small>
+                </span>
+              ))}
+            </span>
+            <span className="bh-stats">Stats</span>
+          </li>
           {PITCHING_SLOTS.map((slot, i) => {
             const p = inSlot(slot);
             const v = p ? effectiveValue(s, p, jobOf(slot, p), status) : null;
-            const st = p ? statLine(s, p, period) : null;
-            const why = p ? reasons(p) : null;
             return (
               <li
                 key={slot}
-                className={`ps-row slot-${slot} ${p ? '' : 'empty'} ${over === slot ? 'drop' : ''} ${dropState(slot)}`}
+                className={`ps-row bat-row slot-${slot} ${p ? '' : 'empty'} ${over === slot ? 'mark-replace' : ''} ${dropState(slot)} ${dragging && p && dragging.id === p.id ? 'dragging' : ''}`}
+                draggable={!!p}
+                onDragStart={p ? dragStart(p) : undefined}
+                onDragEnd={dragEnd}
                 onDragOver={dragOver(slot)}
                 onDragLeave={() => setOver(null)}
                 onDrop={drop(slot)}
                 aria-label={`${SLOT_LABEL[slot]}${p ? `: ${playerName(p)}` : ': empty'}`}
               >
-                <span className="pr-num">{i + 1}</span>
-                <span className="pr-role">
-                  <Icon name={SLOT_ICON[slot]} size={26} className={`role-icon role-${slot}`} />
-                  <span>
-                    <strong>{ROLE_NAME[slot]}</strong>
-                    <small>{SLOT_WHEN[slot]}</small>
-                  </span>
+                <span className="br-grip" title="Drag to another role or to the bench">
+                  <Icon name="grip" size={20} strokeWidth={3.5} />
                 </span>
-                {p && v && st && why ? (
+                <span className="pr-num">{i + 1}</span>
+                <span className={`br-pos role-badge role-${slot}`} title={`${SLOT_LABEL[slot]}: ${SLOT_WHEN[slot]}`}>
+                  <Icon name={SLOT_ICON[slot]} size={12} />
+                  <span aria-hidden="true">{SLOT_SHORT[slot]}</span>
+                  <span className="sr-only">{SLOT_LABEL[slot]}</span>
+                </span>
+                {p && v ? (
                   <>
-                    <span className="pr-player" draggable onDragStart={dragStart(p)} onDragEnd={dragEnd} title={slot === 'starter' ? 'Drag a starter here from the bench to change' : 'Drag to another relief role or to the bench'}>
+                    <span className="pr-player">
                       <PlayerIdent
                         state={s}
                         player={p}
-                        sub={`#${p.number} · Throws ${p.throws}`}
-                        badge={<span className={`pos-word pos-${pitcherPosition(p).toLowerCase()}`}>{positionWord(p)}</span>}
+                        size={34}
+                        sub={`#${p.number} · Throws ${p.throws} · ${positionWord(p)}`}
                         extra={
                           <button className="pr-instr" onClick={() => api.openTactics(p.id)} title={`Instructions: ${instructionSummary(s, p)}`} aria-label={`Instructions for ${p.lastName}`}>
                             <Icon name="clipboard" size={14} />
@@ -152,8 +169,8 @@ export function PitchersTab({ api }: { api: DraftApi; gameId: string }) {
                       />
                     </span>
                     <EffBlock base={v.ovr} eff={v.effective} label />
-                    <ModColumns mods={v.mods} reasons={why} />
-                    <StatBlock stats={statPairs(st)} />
+                    <ModColumns mods={v.mods} reasons={reasons(p)} />
+                    <StatBlock stats={statPairs(statLine(s, p, period))} />
                     <ChangeButton label={`Change ${SLOT_LABEL[slot].toLowerCase()} (${p.lastName})`} onClick={() => setPicking(slot)} />
                   </>
                 ) : (
@@ -183,90 +200,47 @@ export function PitchersTab({ api }: { api: DraftApi; gameId: string }) {
       <section className={`panel ps-bench ${over === 'bench' ? 'drop' : ''}`} onDragOver={dragOver('bench')} onDragLeave={() => setOver(null)} onDrop={drop('bench')}>
         <header className="panel-head">
           <h2>Rest today (bench)</h2>
-          <small className="muted">Drag a pitcher onto a role, or use the ⋮ handle. Pitchers here do not play today and rest one stage.</small>
+          <small className="muted">Drag onto a role, or use the ⋮ handle. Pitchers here rest one stage today.</small>
         </header>
         {bench.length === 0 ? (
           <p className="small muted ps-none">Every pitcher has a role today.</p>
         ) : (
-          <div className="ps-table-wrap">
-            <table className="ps-table">
-              <thead>
-                <tr>
-                  <th scope="col">
-                    <span className="sr-only">Move</span>
-                  </th>
-                  <th scope="col">
-                    <span className="sr-only">Pitcher</span>
-                  </th>
-                  <th scope="col" title="Overall at his position">
-                    PIT
-                  </th>
-                  <th scope="col" title="Effective today">
-                    EFF
-                  </th>
-                  {MODIFIER_KEYS.map((k) => (
-                    <th scope="col" key={k} className="mod-th">
-                      {modIcon(k, 1)}
-                      <small>{MODIFIER_LABEL[k]}</small>
-                    </th>
-                  ))}
-                  <th scope="col">W-L</th>
-                  <th scope="col">ERA</th>
-                  <th scope="col">K</th>
-                  <th scope="col">IP</th>
-                </tr>
-              </thead>
-              <tbody>
-                {bench.map(({ p, v }) => {
-                  const st = statLine(s, p, period);
-                  const why = reasons(p);
-                  return (
-                    <tr key={p.id} draggable onDragStart={dragStart(p)} onDragEnd={dragEnd}>
-                      <td className="ps-grip">
-                        <Icon name="grip" size={20} strokeWidth={3.5} />
-                        <UseAs state={s} player={p} inSlot={inSlot} status={status} onUse={(slot) => update(assignPitcher(s, draft, slot, p.id))} />
-                      </td>
-                      <th scope="row">
-                        <span className="ps-bench-name">
-                          <Portrait state={s} player={p} size={40} nested />
-                          <span className="pr-id">
-                            <strong title={playerName(p)}>{playerName(p)}</strong>
-                            <small>
-                              #{p.number} · Throws {p.throws}
-                            </small>
-                            <span className={`pos-word pos-${pitcherPosition(p).toLowerCase()}`}>{positionWord(p)}</span>
-                          </span>
-                        </span>
-                      </th>
-                      <td className="num" data-label="PIT">
-                        {v.ovr}
-                      </td>
-                      <td className="num" data-label="EFF">
-                        <EffBlock base={v.ovr} eff={v.effective} />
-                      </td>
-                      {MODIFIER_KEYS.map((k) => (
-                        <td key={k} className="mod-td" data-label={MODIFIER_LABEL[k]}>
-                          <ModBox value={v.mods[k]} title={`${MODIFIER_LABEL[k]}: ${why[k]}`} />
-                        </td>
-                      ))}
-                      <td className="num stat" data-label="W-L">
-                        {st.wl}
-                      </td>
-                      <td className="num stat" data-label="ERA">
-                        {st.era}
-                      </td>
-                      <td className="num stat" data-label="K">
-                        {st.k}
-                      </td>
-                      <td className="num stat" data-label="IP">
-                        {st.ip}
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+          <ol className="ps-rows bat-rows bench-rows">
+            <li className="bat-head bench-head" aria-hidden="true">
+              <span className="bh-player">Pitcher</span>
+              <span className="bh-eff">Effective</span>
+              <span className="pr-mods">
+                {MODIFIER_KEYS.map((k) => (
+                  <span key={k} className="pr-mod">
+                    {modIcon(k, 1)}
+                    <small>{MODIFIER_LABEL[k]}</small>
+                  </span>
+                ))}
+              </span>
+              <span className="bh-stats">Stats</span>
+            </li>
+            {bench.map(({ p, v }) => (
+              <li
+                key={p.id}
+                className={`ps-row bat-row bench-row ${dragging?.id === p.id ? 'dragging' : ''}`}
+                draggable
+                onDragStart={dragStart(p)}
+                onDragEnd={dragEnd}
+                aria-label={`Bench: ${playerName(p)}`}
+              >
+                <span className="br-grip" title="Drag onto a role">
+                  <Icon name="grip" size={20} strokeWidth={3.5} />
+                  <UseAs state={s} player={p} inSlot={inSlot} status={status} onUse={(slot) => update(assignPitcher(s, draft, slot, p.id))} />
+                </span>
+                <span className="pr-player">
+                  <PlayerIdent state={s} player={p} size={34} sub={`#${p.number} · Throws ${p.throws} · ${positionWord(p)}`} badge={<Notes notes={playerNotes(s, p, { starting: false })} max={1} />} />
+                </span>
+                <EffBlock base={v.ovr} eff={v.effective} label />
+                <ModColumns mods={v.mods} reasons={reasons(p)} />
+                <StatBlock stats={statPairs(statLine(s, p, period))} />
+              </li>
+            ))}
+          </ol>
         )}
       </section>
 
