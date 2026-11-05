@@ -1,5 +1,5 @@
 import { bestPitching, canPitchIn, emptyBullpen, RELIEF_SLOTS, slotOf, type PitchingSlot } from './todayPitching';
-import { autoLineup, validateLineup, validatePitchingPlan, type LineupIssue } from './lineup';
+import { autoLineup, isLineupValid, validateLineup, validatePitchingPlan, type LineupIssue } from './lineup';
 import type { GameState } from './state';
 import { userClub } from './state';
 import type { Lineup, LineupPosition, PitchingPlan, PlayerId } from './types';
@@ -17,13 +17,13 @@ export interface LineupDraft {
 const clone = (d: LineupDraft): LineupDraft => structuredClone(d);
 
 /**
- * A new game's draft starts from the strongest setup by effective value (OVR
- * plus Fitness, Morale, Team and Form): the best nine and today's pitching.
- * Only the hook is carried over from the last game.
+ * The draft starts from the club's fixed squad: its saved batting order and
+ * places, and its pitchers in their roles (a lineup that is not valid any
+ * more is rebuilt from the same squad).
  */
 export function draftFromClub(state: GameState): LineupDraft {
   const club = userClub(state);
-  const lineup = autoLineup(state, club.id);
+  const lineup = isLineupValid(state, club.id, club.lineup) ? structuredClone(club.lineup) : autoLineup(state, club.id);
   const best = bestPitching(state, club.id, lineup.pitcherId);
   return { lineup, plan: { relieverId: null, rest: [], bullpen: best.bullpen, hook: club.pitchingPlan.hook } };
 }

@@ -7,7 +7,8 @@ import { applyUpgrade, FACILITY_IDS, upgradeBlocker } from '../simulation/facili
 import { EffectSink } from '../domain/effects';
 import { autoLineup, validateLineup, validatePitchingPlan } from '../domain/lineup';
 import { createRng } from '../domain/rng';
-import { releasePlayer, remainingSeasonSalary, repairLineup, squadProblem } from '../domain/roster';
+import { remainingSeasonSalary } from '../domain/roster';
+import { release } from '../domain/squad';
 import type { BoostOption, Cost, EventInstance, EventOption, GameState } from '../domain/state';
 import { absoluteRound, userClub } from '../domain/state';
 import { canAffordTime, regenerate, spendTime } from '../domain/time';
@@ -156,8 +157,7 @@ export function execute(state: GameState, cmd: Command, now: number): CommandRes
       const buyout = releaseCost(next, cmd.playerId);
       const sink = new EffectSink(next, null);
       if (buyout > 0) sink.cash(next.userClubId, -buyout, 'salaries', `Released ${p.firstName} ${p.lastName} (buyout)`);
-      releasePlayer(next, p.id);
-      repairLineup(next, next.userClubId);
+      release(next, p.id);
       next.revision += 1;
       return { ok: true, state: next };
     }
@@ -272,8 +272,8 @@ export function releaseBlocker(state: GameState, playerId: string): string | nul
   const club = userClub(state);
   if (!p || p.clubId !== club.id) return 'He is not on your roster.';
   if (state.currentEvent?.status === 'resolved') return 'Continue past the current result first.';
-  const problem = squadProblem(state, club.roster.filter((id) => id !== playerId));
-  if (problem) return problem;
+  // The squad is fixed: only a player on the transfer list can be let go (a newcomer replaces squad players).
+  if (!(club.transferList ?? []).some((t) => t.playerId === playerId)) return 'He has a place in the squad. Sign or trade for someone to replace him.';
   const cost = releaseCost(state, playerId);
   if (cost > 0 && club.cash < cost) return `The buyout costs $${cost.toLocaleString('en-US')}.`;
   return null;

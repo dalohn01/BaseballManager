@@ -1,7 +1,7 @@
 import { BALANCE } from '../../balance/config';
 import { trainingModifier } from '../../simulation/economy';
 import { offenseScore } from '../../domain/lineup';
-import { repairLineup, squadProblem, transferPlayer } from '../../domain/roster';
+import { swapPlayers, tradeable } from '../../domain/squad';
 import type { GameState } from '../../domain/state';
 import { clubPlayers, playerName, userClub } from '../../domain/state';
 import type { Player } from '../../domain/types';
@@ -234,11 +234,8 @@ function requestDeal(s: GameState, p: Player) {
     const options = clubPlayers(s, partnerId)
       .filter((x) => x.isPitcher === p.isPitcher)
       .sort((a, b) => Math.abs(offenseScore(a) - offenseScore(p)) - Math.abs(offenseScore(b) - offenseScore(p)) || a.id.localeCompare(b.id));
-    for (const x of options) {
-      const mine = [...userClub(s).roster.filter((id) => id !== p.id), x.id];
-      const theirs = [...s.clubs[partnerId].roster.filter((id) => id !== x.id), p.id];
-      if (!squadProblem(s, mine) && !squadProblem(s, theirs)) return { partnerId, inId: x.id };
-    }
+    // In the fixed squad they swap places: only someone for the same kind of place fits.
+    for (const x of options) if (s.clubs[partnerId].roster.includes(x.id) && userClub(s).roster.includes(p.id) && tradeable(s, p.id, x.id)) return { partnerId, inId: x.id };
   }
   return null;
 }
@@ -257,20 +254,12 @@ export const tradeRequest: EventTemplate = {
     return {
       kicker: 'Trade Offer',
       title: `${p.lastName} Requests a Trade`,
-      context: `${playerName(p)} (satisfaction ${p.satisfaction}) wants out. His reasons: ${p.moodLog.slice(0, 2).map((r) => r.text.toLowerCase()).join('; ') || 'not enough playing time'}.${inc ? ` ${state.clubs[deal!.partnerId].name} would send ${playerName(inc)}.` : ''}`,
+      context: `${playerName(p)} (satisfaction ${p.satisfaction}) wants out. His reasons: ${p.moodLog.slice(0, 2).map((r) => r.text.toLowerCase()).join('; ') || 'he is not happy at the club'}.${inc ? ` ${state.clubs[deal!.partnerId].name} would send ${playerName(inc)}.` : ''}`,
       prompt: 'What do you do?',
       subjects: { playerIds: [p.id, ...(inc ? [inc.id] : [])], clubIds: [] },
       data: { playerId: p.id, partnerId: deal?.partnerId ?? '', inId: deal?.inId ?? '' },
       options: [
         { id: 'talk', label: 'Sit down and talk', summary: 'Hear him out.', certain: [pos(`${p.lastName} satisfaction +6`)], uncertain: [], cost: cost(), primary: true },
-        {
-          id: 'promise',
-          label: 'Promise him starts',
-          summary: `${BALANCE.promises.startsThreshold} starts in the next ${BALANCE.promises.windowGames} games.`,
-          certain: [pos(`${p.lastName} satisfaction +${BALANCE.promises.madeProspect}`)],
-          uncertain: [neutral('Checked against actual lineups')],
-          cost: cost(),
-        },
         {
           id: 'grant',
           label: 'Grant the request',
@@ -290,7 +279,7 @@ export const tradeRequest: EventTemplate = {
     if (id === 'grant') {
       if (!ev.data.inId) return 'No club has a fitting offer.';
       const inc = s.players[String(ev.data.inId)];
-      if (inc.clubId !== ev.data.partnerId) return 'The offer is gone.';
+      if (inc.clubId !== ev.data.partnerId || !tradeable(s, p.id, inc.id)) return 'The offer is gone.';
     }
     if (id === 'promise') {
       if (!canPromiseStarts(s)) return 'Too few games left this season.';
@@ -320,11 +309,8 @@ export const tradeRequest: EventTemplate = {
     if (option.id === 'grant') {
       const inc = state.players[String(event.data.inId)];
       const partner = String(event.data.partnerId);
-      transferPlayer(state, p.id, partner);
-      transferPlayer(state, inc.id, c.id);
+      swapPlayers(state, p.id, inc.id);
       if (p.popularity >= 60) sink.clubMood(c.id, 'fanSupport', -Math.round(p.popularity / 15), `${p.lastName} forced a trade`);
-      repairLineup(state, c.id);
-      repairLineup(state, partner);
       return { headline: `${p.lastName} gets his wish.`, narrative: [`${playerName(inc)} arrives from ${state.clubs[partner].name}.`], reactions: [{ playerId: inc.id, text: 'Happy to be here.' }] };
     }
     sink.playerMood(p.id, 'satisfaction', -4, 'Trade request refused');

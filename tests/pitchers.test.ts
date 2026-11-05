@@ -1,3 +1,5 @@
+import { playerAt } from '../src/domain/squad';
+import { RELIEF_SLOTS } from '../src/domain/todayPitching';
 import { describe, expect, it } from 'vitest';
 import { migrate } from '../src/application/migrations';
 import { BALANCE } from '../src/balance/config';
@@ -12,19 +14,17 @@ import { newGame } from './helpers';
 import { defaultStaff } from '../src/domain/staff';
 
 describe('pitcher values: velocity, control, stamina, fielding', () => {
-  it('every pitcher has four values; pitching is their derived quality; the rotation is SP and the bullpen mostly RP', () => {
+  it('every pitcher has four values; pitching is their derived quality; the starter is SP and the relievers RP', () => {
     const s = newGame(601);
     for (const id of s.clubOrder) {
-      const staff = defaultStaff(s, id);
       for (const pid of s.clubs[id].roster) {
         const p = s.players[pid];
         if (!p.isPitcher) continue;
         expect(p.ratings.pitching).toBe(Math.round((p.ratings.velocity + p.ratings.control) / 2));
         expect(p.ratings.stamina).toBeGreaterThan(0);
       }
-      for (const pid of staff.rotation) expect(pitcherPosition(s.players[pid]), `${id} ${pid}`).toBe('SP');
-      const pen = [staff.closer, staff.setup, staff.long].filter(Boolean).map((x) => s.players[x!]);
-      expect(pen.filter((p) => pitcherPosition(p) === 'RP').length).toBeGreaterThanOrEqual(2);
+      expect(pitcherPosition(s.players[playerAt(s, id, 'starter')!])).toBe('SP');
+      for (const slot of RELIEF_SLOTS) expect(pitcherPosition(s.players[playerAt(s, id, slot)!]), `${id} ${slot}`).toBe('RP');
     }
   });
 
@@ -92,7 +92,8 @@ describe('migration to four pitcher values (v13)', () => {
     v12.schemaVersion = 12;
     for (const id of v12.clubOrder) v12.clubs[id].staff = JSON.parse(JSON.stringify(defaultStaff(newGame(605), id)));
     const old: Record<string, number> = {};
-    for (const p of Object.values(v12.players) as { id: string; isPitcher: boolean; ratings: Record<string, number>; progress: Record<string, number> }[]) {
+    for (const p of Object.values(v12.players) as { id: string; isPitcher: boolean; pitcherRole?: string; ratings: Record<string, number>; progress: Record<string, number> }[]) {
+      delete p.pitcherRole;
       for (const k of ['velocity', 'control', 'stamina']) {
         delete p.ratings[k];
         delete p.progress[k];
@@ -103,7 +104,7 @@ describe('migration to four pitcher values (v13)', () => {
     expect(m.schemaVersion).toBe(SCHEMA_VERSION);
     for (const p of Object.values(m.players)) {
       expect(p.ratings.velocity).toBeDefined();
-      if (!p.isPitcher) continue;
+      if (!p.isPitcher || !(p.id in old)) continue;
       expect(Math.abs((p.ratings.velocity + p.ratings.control) / 2 - old[p.id])).toBeLessThanOrEqual(0.5);
     }
     for (const id of m.clubOrder) for (const pid of v12.clubs[id].staff.rotation) expect(pitcherPosition(m.players[pid])).toBe('SP');

@@ -2,9 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { optionBlocker } from '../src/application/engine';
 import { validateLineup } from '../src/domain/lineup';
 import { createRng } from '../src/domain/rng';
-import { squadProblem } from '../src/domain/roster';
 import type { GameState } from '../src/domain/state';
-import { newGame, run, T0, toNextEvent } from './helpers';
+import { newGame, run, T0, toNextEvent, expectValidSquads } from './helpers';
 
 /**
  * Stability, not balance: long random careers must never reach a state with
@@ -39,8 +38,8 @@ describe('long careers', () => {
         }
       }
       expect(s.calendar.season, `seed ${seed} did not reach season 5`).toBe(5);
+      expectValidSquads(s);
       for (const id of s.clubOrder) {
-        expect(squadProblem(s, s.clubs[id].roster)).toBeNull();
         expect(validateLineup(s, id, s.clubs[id].lineup).filter((x) => x.severity === 'error')).toEqual([]);
       }
       // Save size stays reasonable over many seasons.

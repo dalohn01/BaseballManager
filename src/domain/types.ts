@@ -100,6 +100,8 @@ export interface Player {
   reactions: ReactionEntry[];
   /** Day number (absDay) of his last appearance as a pitcher. */
   pitchedOn?: number;
+  /** A pitcher's kind, fixed once set: SP starts, RP relieves (absent = from stamina). */
+  pitcherRole?: 'SP' | 'RP';
   /** Running form score from recent games (shown as −2..+2, Very cold … Very hot); absent = neutral. */
   form?: number;
 }
@@ -213,6 +215,15 @@ export interface ClubTactics {
   matchInstructions: Record<PlayerId, Instruction>;
 }
 
+/** A player the club has replaced and offers to others; still under contract until sold or released. */
+export interface TransferListing {
+  playerId: PlayerId;
+  /** Absolute round he was listed. */
+  listed: number;
+  /** He is released after this absolute round unless sold first. */
+  until: number;
+}
+
 export interface Club {
   id: ClubId;
   city: string;
@@ -223,6 +234,8 @@ export interface Club {
   roster: PlayerId[];
   lineup: Lineup;
   pitchingPlan: PitchingPlan;
+  /** Replaced players offered to other clubs (absent = none). */
+  transferList?: TransferListing[];
   /** Legacy (saves up to v13): the old standing pitching staff. Pitching is now set per game. */
   staff?: PitchingStaff;
   cash: number;

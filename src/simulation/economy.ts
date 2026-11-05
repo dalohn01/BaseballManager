@@ -1,3 +1,4 @@
+import { contracted } from '../domain/squad';
 import { BALANCE } from '../balance/config';
 import type { EffectSink } from '../domain/effects';
 import type { GameState } from '../domain/state';
@@ -51,7 +52,7 @@ export function projectedTicketRevenue(club: Club, priceLevel = club.ticketPrice
 }
 
 export function payrollPerSeason(state: GameState, clubId: ClubId): number {
-  return state.clubs[clubId].roster.reduce((sum, id) => sum + state.players[id].contract.salary, 0);
+  return contracted(state, clubId).reduce((sum, id) => sum + state.players[id].contract.salary, 0);
 }
 
 export function upkeepPerRound(club: Club): number {
@@ -81,7 +82,7 @@ export interface DayCosts {
 export function dayCosts(state: GameState, clubId: ClubId, season: number, round: number, day: number): DayCosts {
   const club = state.clubs[clubId];
   return {
-    salaries: club.roster.reduce((sum, id) => sum + dayShare(salaryDue(state, id, season, round), day), 0),
+    salaries: contracted(state, clubId).reduce((sum, id) => sum + dayShare(salaryDue(state, id, season, round), day), 0),
     upkeep: dayShare(upkeepPerRound(club), day),
   };
 }

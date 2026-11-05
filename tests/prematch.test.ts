@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest';
 import { execute } from '../src/application/engine';
 import { migrate } from '../src/application/migrations';
-import { pitcherPosition } from '../src/domain/pitching';
+import { RELIEF_SLOTS } from '../src/domain/todayPitching';
 import { autoLineup, defaultPitchingPlan, validateBatters, validateLineup } from '../src/domain/lineup';
-import { assignPitcher, benchBatter, draftFromClub, moveBatter, openSpot, pitcherSlot, setPosition, swapFromBench, swapPositions, type LineupDraft } from '../src/domain/lineupDraft';
+import { assignPitcher, draftFromClub, moveBatter, pitcherSlot, setPosition, swapPositions, type LineupDraft } from '../src/domain/lineupDraft';
 import { battingStats, fmtIp, pitchingStats, recentClubMatches } from '../src/domain/playerStats';
 import { createRng } from '../src/domain/rng';
 import type { GameState } from '../src/domain/state';
@@ -26,18 +26,12 @@ const confirm = (s: GameState, d: LineupDraft) =>
 describe('lineup draft', () => {
   const s = newGame(31);
   const d = draftFromClub(s);
-  const bench = s.clubs.hfx.roster.filter((id) => !s.players[id].isPitcher && !d.lineup.battingOrder.some((x) => x.playerId === id));
 
-  it('a bench swap takes over position and batting spot; the starter goes to the bench', () => {
-    const slot = 3;
-    const out = d.lineup.battingOrder[slot];
-    const next = swapFromBench(d, slot, bench[0]);
-    expect(next.lineup.battingOrder[slot]).toEqual({ playerId: bench[0], position: out.position });
-    expect(next.lineup.battingOrder.some((x) => x.playerId === out.playerId)).toBe(false);
-    const ids = next.lineup.battingOrder.map((x) => x.playerId);
-    expect(new Set(ids).size).toBe(9);
-    expect(validateLineup(s, 'hfx', next.lineup).filter((i) => i.severity === 'error')).toEqual([]);
-    expect(d.lineup.battingOrder[slot].playerId).toBe(out.playerId); // pure
+  it('there is no bench: the nine hitters of the squad are the lineup', () => {
+    const hitters = s.clubs.hfx.roster.filter((id) => !s.players[id].isPitcher);
+    expect(hitters).toHaveLength(9);
+    expect(new Set(d.lineup.battingOrder.map((x) => x.playerId))).toEqual(new Set(hitters));
+    expect(validateLineup(s, 'hfx', d.lineup).filter((i) => i.severity === 'error')).toEqual([]);
   });
 
   it('position swaps are atomic and keep the batting order', () => {
@@ -54,15 +48,14 @@ describe('lineup draft', () => {
     expect(pos(next)).toEqual(pos(d));
   });
 
-  it("today's pitching slots stay exclusive: every pitcher has at most one slot", () => {
-    const pitchers = s.clubs.hfx.roster.filter((id) => s.players[id].isPitcher);
-    const sp = pitchers.filter((id) => pitcherPosition(s.players[id]) === 'SP');
-    const rp = pitchers.filter((id) => pitcherPosition(s.players[id]) === 'RP');
+  it("today's pitching roles stay exclusive: relievers swap among the relief roles", () => {
+    const rp = RELIEF_SLOTS.map((slot) => d.plan.bullpen[slot]!);
     let x = d;
-    for (const [slot, id] of [['closer', rp[4]], ['starter', sp[3]], ['setup', rp[0]], ['long', rp[5]], ['closer', rp[0]]] as const) x = assignPitcher(s, x, slot, id);
+    for (const [slot, id] of [['closer', rp[0]], ['setup', rp[3]], ['long', rp[1]], ['middle', rp[2]]] as const) x = assignPitcher(s, x, slot, id);
+    const pitchers = s.clubs.hfx.roster.filter((id) => s.players[id].isPitcher);
     const slots = pitchers.map((id) => pitcherSlot(x, id)).filter(Boolean);
-    expect(new Set(slots).size).toBe(slots.length);
-    expect(slots.length).toBe(5);
+    expect(new Set(slots).size).toBe(5);
+    expect(x.lineup.pitcherId).toBe(d.lineup.pitcherId);
   });
 });
 
@@ -70,12 +63,10 @@ describe('confirmed selection reaches the simulator', () => {
   it('uses the confirmed lineup and never uses a pitcher without a slot today', () => {
     let s = toLeagueGame(newGame(32));
     let d = draftFromClub(s);
-    const bench = s.clubs.hfx.roster.filter((id) => !s.players[id].isPitcher && !d.lineup.battingOrder.some((x) => x.playerId === id));
-    d = moveBatter(swapFromBench(d, 2, bench[0]), 0, 8);
-    // Take today's closer out: a bench pitcher closes instead.
-    const rested = d.plan.bullpen.closer!;
-    const benchArm = s.clubs.hfx.roster.find((id) => s.players[id].isPitcher && pitcherPosition(s.players[id]) === 'RP' && !pitcherSlot(d, id))!;
-    d = assignPitcher(s, d, 'closer', benchArm);
+    d = moveBatter(d, 0, 8);
+    // Swap the closer and the setup man for today: the roles the simulator uses.
+    const { closer, setup } = d.plan.bullpen;
+    d = assignPitcher(s, d, 'closer', setup!);
     const r = confirm(s, d);
     expect(r.ok).toBe(true);
     if (!r.ok) return;
@@ -84,10 +75,11 @@ describe('confirmed selection reaches the simulator', () => {
     const side = m.homeId === 'hfx' ? 'home' : 'away';
     expect(m.lineups[side].battingOrder).toEqual(d.lineup.battingOrder);
     expect(m.lineups[side].pitcherId).toBe(d.lineup.pitcherId);
-    expect(m.pitchersUsed[side]).not.toContain(rested);
-    expect(m.pitchersUsed[side].length).toBeLessThanOrEqual(4);
-    // Today's slots are cleared after the game; the hook preference stays.
-    expect(s.clubs.hfx.pitchingPlan).toEqual({ ...defaultPitchingPlan(), hook: d.plan.hook });
+    expect(m.pitchersUsed[side].length).toBeLessThanOrEqual(5);
+    for (const id of m.pitchersUsed[side]) expect(s.clubs.hfx.roster).toContain(id);
+    // The squad is fixed: the confirmed roles stay for the next game.
+    expect(s.clubs.hfx.pitchingPlan.bullpen.closer).toBe(setup);
+    expect(s.clubs.hfx.pitchingPlan.bullpen.setup).toBe(closer);
     // Confirming twice is a no-op.
     expect(confirm(s, d).ok).toBe(false);
   });
@@ -146,11 +138,9 @@ describe('period stats', () => {
   }, 60_000);
 });
 
-describe('batters: batting order, positions and the bench', () => {
+describe('batters: batting order and positions', () => {
   const s = newGame(34);
   const d = draftFromClub(s);
-  const bench = s.clubs.hfx.roster.filter((id) => !s.players[id].isPitcher && !d.lineup.battingOrder.some((x) => x.playerId === id));
-  const errors = (x: LineupDraft) => validateLineup(s, 'hfx', x.lineup).filter((i) => i.severity === 'error').map((i) => i.text);
 
   it('changing a position swaps with whoever had it, so every position stays filled once', () => {
     const target = d.lineup.battingOrder[4].position;
@@ -161,15 +151,6 @@ describe('batters: batting order, positions and the bench', () => {
     expect(next.lineup.battingOrder.map((x) => x.playerId)).toEqual(d.lineup.battingOrder.map((x) => x.playerId));
   });
 
-  it('a starter to the bench opens his spot (confirm is blocked) until someone comes in', () => {
-    const out = benchBatter(d, 2);
-    expect(openSpot(out)).toBe(2);
-    expect(errors(out).join()).toMatch(/Batting spot 3 .* is open/);
-    const back = swapFromBench(out, 2, bench[0]);
-    expect(openSpot(back)).toBe(-1);
-    expect(back.lineup.battingOrder[2]).toEqual({ playerId: bench[0], position: d.lineup.battingOrder[2].position });
-    expect(errors(back)).toEqual([]);
-  });
 });
 
 describe('two-step lineup', () => {
@@ -179,8 +160,6 @@ describe('two-step lineup', () => {
     const noPitcher = { ...d.lineup, pitcherId: '' };
     expect(validateBatters(s, 'hfx', noPitcher).filter((i) => i.severity === 'error')).toEqual([]);
     expect(validateLineup(s, 'hfx', noPitcher).some((i) => /starting pitcher/.test(i.text))).toBe(true);
-    const open = benchBatter(d, 0).lineup;
-    expect(validateBatters(s, 'hfx', open).some((i) => i.severity === 'error' && /is open/.test(i.text))).toBe(true);
   });
 });
 

@@ -15,7 +15,7 @@ import type { ActionKind, GameState } from '../domain/state';
 import { absoluteRound, playerName, userClub } from '../domain/state';
 import type { Player } from '../domain/types';
 import { growthKeys } from './programs';
-import { restLabel, restStage, teamStatus, type RestStage } from '../domain/effective';
+import { teamStatus } from '../domain/effective';
 import { goalProgress } from './goals';
 import { boardFundingLeft, communityBlocker, grantBoardFunding, markCommunity, programBlocker, startProgram } from './locks';
 
@@ -132,15 +132,15 @@ export function actionPreview(s: GameState, kind: ActionKind, target: string | n
       break;
     }
     case 'extraTraining': {
-      r = { ...base, title: 'Extra training', cost: { influence: A.extraTraining.influence, cash: 0 }, effect: p ? `Development progress in ${growthKeys(p).join(' and ')} (same session as an individual program), fitness ${A.extraTraining.fitness}, happiness ${fmtDelta(reactionPreview(p, 'development_opportunity', A.extraTraining.satisfaction))}.` : 'Individual development session.', duration: 'Now; program slot until after the next game', cooldown: 'One program per player' };
+      r = { ...base, title: 'Extra training', cost: { influence: A.extraTraining.influence, cash: 0 }, effect: p ? `Development progress in ${growthKeys(p).join(' and ')} (same session as an individual program) and happiness ${fmtDelta(reactionPreview(p, 'development_opportunity', A.extraTraining.satisfaction))}.` : 'Individual development session.', duration: 'Now; program slot until after the next game', cooldown: 'One program per player' };
       if (!mine) r.blocker = 'Choose a player from your squad.';
       else r.blocker = programBlocker(s, p!.id);
       break;
     }
     case 'recovery': {
-      r = { ...base, title: 'Recovery program', cost: { influence: A.recovery.influence, cash: A.recovery.cash }, effect: p?.isPitcher ? `One rest stage now (${restLabel(restStage(p))} → ${restLabel(Math.min(3, restStage(p) + 1) as RestStage)}).` : p ? `Fitness +${A.recovery.fitnessNow} now (${p.fitness}% → ${Math.min(100, p.fitness + A.recovery.fitnessNow)}%).` : 'Extra recovery.', duration: 'Now; program slot until after the next game', cooldown: 'One program per player' };
-      if (!mine) r.blocker = 'Choose a player from your squad.';
-      else r.blocker = programBlocker(s, p!.id) ?? ((p!.isPitcher ? restStage(p!) === 3 : p!.fitness >= 100) ? `${p!.lastName} is already fully fit.` : spendingBlocker(s, A.recovery.cash));
+      // Fitness is not carried between games any more: every player is ready for each match.
+      r = { ...base, title: 'Recovery program', cost: { influence: A.recovery.influence, cash: A.recovery.cash }, effect: 'Not needed: players are fully ready for every match.', duration: '—', cooldown: '—' };
+      r.blocker = 'Players are fully ready for every match; recovery is not needed.';
       break;
     }
     case 'boardMeeting': {
@@ -204,9 +204,7 @@ export function applyAction(s: GameState, kind: ActionKind, target: string | nul
       break;
     }
     case 'recovery':
-      // A pitcher's rest is a stage: the program moves him one stage up.
-      if (p!.isPitcher) sink.playerMood(p!.id, 'fitness', BALANCE.modifiers.restStages[Math.min(3, restStage(p!) + 1)].fitness - p!.fitness, 'Recovery program');
-      else sink.playerMood(p!.id, 'fitness', A.recovery.fitnessNow, 'Recovery program');
+      // Unreachable (the preview always blocks it); kept for older action logs.
       startProgram(s, p!.id, 'recovery', 'recovery');
       summary = `Recovery program for ${playerName(p!)}.`;
       break;

@@ -37,6 +37,8 @@ export class EffectSink {
     opts: { record?: boolean } = {},
   ): number {
     const p = this.state.players[playerId];
+    // Fitness is not carried between games any more: older effects that would change it do nothing.
+    if (stat === 'fitness') return p.fitness;
     const before = p[stat];
     // Happiness keeps one decimal so personality-sized reactions stay smooth; the rest are whole points.
     const step = stat === 'satisfaction' ? Math.round(delta * 10) / 10 : Math.round(delta);

@@ -1,3 +1,5 @@
+import { createRng } from '../src/domain/rng';
+import { putInSlot, replacementPlayer, slotOf } from '../src/domain/squad';
 import { describe, expect, it } from 'vitest';
 import { migrate } from '../src/application/migrations';
 import { BALANCE } from '../src/balance/config';
@@ -76,15 +78,17 @@ describe('Team OVR', () => {
     expect(teamOvr(t, t.userClubId)!.overall).toBe(before);
   });
 
-  it('6. a regular leaving is replaced by the same rules and the value updates', () => {
+  it('6. a regular replaced in his place changes the value by the same rules', () => {
     const s = newGame(205);
     const before = teamOvr(s, s.userClubId)!;
     const t = fresh(s);
     const leaving = before.lineup.find((x) => x.position === 'SS')!.playerId;
-    t.clubs[t.userClubId].roster = t.clubs[t.userClubId].roster.filter((id) => id !== leaving);
+    const slot = slotOf(t, t.userClubId, leaving)!;
+    const newcomer = replacementPlayer(t, t.userClubId, slot, createRng(2));
+    putInSlot(t, t.userClubId, slot, newcomer.id);
     const after = teamOvr(t, t.userClubId)!;
     expect(after.lineup.some((x) => x.playerId === leaving)).toBe(false);
-    expect(after.lineup.find((x) => x.position === 'SS')).toBeTruthy();
+    expect(after.lineup.some((x) => x.playerId === newcomer.id)).toBe(true);
     expect(after.overall).not.toBe(before.overall);
   });
 

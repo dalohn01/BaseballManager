@@ -1,5 +1,4 @@
 import { roleAmbition } from './personality';
-import { BALANCE } from '../balance/config';
 import type { GameState } from './state';
 import { absoluteRound } from './state';
 import type { MatchResult, Player, PlayerId } from './types';
@@ -198,11 +197,8 @@ export interface StatusNote {
 /** Factual notes for a player, based on current state and history only. */
 export function playerNotes(state: GameState, player: Player, opts: { starting: boolean }): StatusNote[] {
   const notes: StatusNote[] = [];
-  const f = BALANCE.fitness;
   const promise = state.promises.find((p) => p.status === 'active' && p.playerId === player.id);
   if (promise) notes.push({ text: `Promised starts (${promise.progress}/${promise.threshold})`, tone: 'info' });
-  if (player.fitness < f.needsRestBelow) notes.push({ text: 'Needs rest', tone: 'warn' });
-  else if (player.fitness < f.warnBelow) notes.push({ text: 'Tiring', tone: 'warn' });
   if (!player.isPitcher) {
     const idle = gamesWithoutStart(state, player);
     if (!opts.starting && idle >= 3) notes.push({ text: `No starts in ${idle} games`, tone: 'info' });
@@ -210,7 +206,6 @@ export function playerNotes(state: GameState, player: Player, opts: { starting: 
   } else {
     const w = pitcherWorkload(state, player);
     if (w.straight >= 2) notes.push({ text: `Pitched in ${w.straight} straight games`, tone: 'warn' });
-    else if (w.last && w.last.gamesAgo >= 3 && player.fitness >= f.warnBelow) notes.push({ text: 'Recovered and ready', tone: 'good' });
   }
   return notes;
 }

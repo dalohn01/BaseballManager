@@ -5,10 +5,9 @@ import type { GameState } from './state';
 import type { BattingLine, ClubId, PitchingLine, Player } from './types';
 
 /*
- * Effective value: what a player is worth today. OVR plus four modifiers,
- * and the simulator adds the same four numbers to every rating he uses:
+ * Effective value: what a player is worth today. OVR plus three modifiers,
+ * and the simulator adds the same numbers to every rating he uses:
  *
- *   Fitness  pitchers by rest stage (Exhausted −25 … Fresh +1), hitters by fitness %
  *   Morale   his satisfaction, −2..+2
  *   Team     the squad's shared state, −2..+2, plus temporary boosts
  *   Form     his recent games, −2..+2 (Very cold … Very hot)
@@ -16,47 +15,13 @@ import type { BattingLine, ClubId, PitchingLine, Player } from './types';
 
 const M = () => BALANCE.modifiers;
 
-export type ModifierKey = 'fitness' | 'morale' | 'team' | 'form';
-export const MODIFIER_KEYS: ModifierKey[] = ['fitness', 'morale', 'team', 'form'];
-export const MODIFIER_LABEL: Record<ModifierKey, string> = { fitness: 'Fitness', morale: 'Morale', team: 'Team', form: 'Form' };
+export type ModifierKey = 'morale' | 'team' | 'form';
+export const MODIFIER_KEYS: ModifierKey[] = ['morale', 'team', 'form'];
+export const MODIFIER_LABEL: Record<ModifierKey, string> = { morale: 'Morale', team: 'Team', form: 'Form' };
 export type Modifiers = Record<ModifierKey, number>;
 
-// ---------------------------------------------------------------- Rest (pitchers)
-
-export type RestStage = 0 | 1 | 2 | 3;
-
-/** Exhausted (0), Tired (1), Ready (2), Fresh (3), from the pitcher's fitness band. */
-export function restStage(p: Player): RestStage {
-  const stages = M().restStages;
-  for (let i = stages.length - 1; i > 0; i--) if (p.fitness >= stages[i].from) return i as RestStage;
-  return 0;
-}
-
-export const restLabel = (stage: RestStage) => M().restStages[stage].label;
-
-/** After one of his club's games: a start → Exhausted, relief → one stage down, no outing → one stage up. */
-export function restAfterGame(p: Player, outing: 'start' | 'relief' | 'none') {
-  const now = restStage(p);
-  const next = outing === 'start' ? 0 : outing === 'relief' ? Math.max(0, now - 1) : Math.min(3, now + 1);
-  p.fitness = M().restStages[next].fitness;
-}
-
-/** Games without pitching until he is Ready (0 = ready now). */
-export const gamesUntilReady = (p: Player) => Math.max(0, 2 - restStage(p));
-
-/** "Fresh", "Ready", "Tired · ready in 1 game", "Exhausted · ready in 2 games". */
-export function restText(p: Player): string {
-  const label = restLabel(restStage(p));
-  const n = gamesUntilReady(p);
-  return n === 0 ? label : `${label} · ready in ${n} game${n === 1 ? '' : 's'}`;
-}
-
-// ---------------------------------------------------------------- Personal modifiers
-
-export function fitnessModifier(p: Player): number {
-  if (p.isPitcher) return M().restStages[restStage(p)].modifier;
-  return M().hitterFitness.find((b) => p.fitness >= b.from)?.modifier ?? -3;
-}
+// Fitness is not carried between games: every player is fully ready for each match, and
+// pitchers tire only within a game (stamina decides how long they last).
 
 export function moraleModifier(p: Player): number {
   return M().morale.find((b) => p.satisfaction >= b.from)?.modifier ?? -2;
@@ -67,8 +32,8 @@ export const FORM_LABEL: Record<number, string> = { [-2]: 'Very cold', [-1]: 'Co
 /** Form level −2..+2 from the running score. */
 export const formModifier = (p: Player): number => clamp(Math.round(p.form ?? 0), -2, 2);
 
-/** Rating points from fitness, morale and form (everything but Team, which needs the club). */
-export const personalModifier = (p: Player) => fitnessModifier(p) + moraleModifier(p) + formModifier(p);
+/** Rating points from morale and form (everything but Team, which needs the club). */
+export const personalModifier = (p: Player) => moraleModifier(p) + formModifier(p);
 
 // ---------------------------------------------------------------- Form
 
@@ -137,10 +102,10 @@ export const teamModifier = (state: GameState, p: Player, status = teamStatus(st
 // ---------------------------------------------------------------- Effective
 
 export function modifiers(state: GameState, p: Player, status?: TeamStatus): Modifiers {
-  return { fitness: fitnessModifier(p), morale: moraleModifier(p), team: teamModifier(state, p, status), form: formModifier(p) };
+  return { morale: moraleModifier(p), team: teamModifier(state, p, status), form: formModifier(p) };
 }
 
-export const modifierTotal = (m: Modifiers) => m.fitness + m.morale + m.team + m.form;
+export const modifierTotal = (m: Modifiers) => m.morale + m.team + m.form;
 
 /** Effective = OVR (as starter or reliever for pitchers, when given) + the four modifiers. */
 export function effectiveValue(state: GameState, p: Player, job?: 'SP' | 'RP', status?: TeamStatus): { ovr: number; mods: Modifiers; effective: number } {

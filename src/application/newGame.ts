@@ -7,6 +7,7 @@ import { AI_CLUBS, GENERATED_ROSTER_SHAPE, USER_CLUB, USER_ROSTER, type ClubSeed
 import { FIRST_NAMES, LAST_NAMES } from '../content/names';
 import { emptyStats, PRIORITIES, scoutEstimate } from '../content/playerFactory';
 import { autoLineup, defaultPitchingPlan } from '../domain/lineup';
+import { buildSquad } from '../domain/squad';
 import { clamp, createRng, type Rng } from '../domain/rng';
 import type { GameState } from '../domain/state';
 import { SCHEMA_VERSION } from '../domain/state';
@@ -38,12 +39,13 @@ function playerFromSeed(seed: PlayerSeed, id: string, clubId: string, rng: Rng):
     throws: seed.throws,
     clubId,
     isPitcher: !!seed.pitcher,
+    pitcherRole: seed.pitcher ? (ratings.stamina >= BALANCE.pitching.starterStaminaFrom ? 'SP' : 'RP') : undefined,
     positions: seed.positions.slice(0, BALANCE.roster.maxPositions),
     ratings,
     progress: { contact: 0, power: 0, speed: 0, fielding: 0, pitching: 0, velocity: 0, control: 0, stamina: 0 },
     potential: seed.potential,
     potentialEstimate: scoutEstimate(seed.potential, main, 1, rng),
-    fitness: seed.fitness,
+    fitness: 100,
     satisfaction: seed.satisfaction,
     popularity: seed.popularity,
     personality: generatePersonality(personalitySeed(id, `${seed.firstName} ${seed.lastName}`), PRIORITY_HINT[seed.priority]),
@@ -95,7 +97,7 @@ function generatePlayer(shape: (typeof GENERATED_ROSTER_SHAPE)[number], club: Cl
     potential: clamp(best + youth, best, 95),
     satisfaction: rng.int(55, 75),
     popularity: rng.int(20, 70),
-    fitness: rng.int(88, 98),
+    fitness: 100,
     priority: rng.pick(PRIORITIES),
     role: shape.role,
     salary: Math.round((pitcher ? pitching : (contact + power) / 2) * (shape.role === 'starter' ? 900 : 450) / 1000) * 1000,
@@ -184,7 +186,9 @@ export function createNewGame(opts: NewGameOptions): GameState {
       state.players[id] = playerFromSeed(ps, id, club.id, rng);
       club.roster.push(id);
     }
+    // The fixed squad: nine hitters in their places and five pitchers in their roles; the rest are not created.
     club.lineup = autoLineup(state, club.id);
+    buildSquad(state, club.id, rng, 'drop');
   }
   state.schedule = generateSchedule(state.clubOrder, 1, rng);
   // The career starts in preseason with the owners' season plan.

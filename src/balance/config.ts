@@ -60,7 +60,14 @@ export const BALANCE = {
     fundraiser: { influence: 100, cooldown: 3, duration: 3, amountPerSupport: 200 },
   },
 
+  /** The fixed squad (see domain/squad.ts): nine hitters and five pitchers, no bench. */
+  squad: { hitters: 9, pitchers: 5 },
+
+  /** Replaced players: listed for a few rounds; AI clubs may buy them, else they are released. */
+  transfer: { listRounds: 3, saleChancePerRound: 0.35, feeShare: 0.6 },
+
   roster: {
+    /** Legacy limits (older saves and their migrations). */
     max: 25,
     /** A position player is natural at most at this many positions (primary first). */
     maxPositions: 2,

@@ -124,9 +124,6 @@ function PlayerNotes() {
   const s = useGame();
   const players = clubPlayers(s, s.userClubId);
   const notes: { id: string; text: string; icon: 'person' | 'rest' | 'warning' }[] = [];
-  for (const p of [...players].sort((a, b) => a.fitness - b.fitness)) {
-    if (p.fitness < BALANCE.fitness.needsRestBelow && notes.length < 4) notes.push({ id: p.id, text: `Needs rest (${p.fitness}%)`, icon: 'rest' });
-  }
   for (const p of [...players].sort((a, b) => a.satisfaction - b.satisfaction)) {
     if (p.satisfaction < 50 && notes.length < 4) notes.push({ id: p.id, text: `${moodLabel('player', p.satisfaction)}: ${p.moodLog[0]?.text ?? 'wants more'}`, icon: 'warning' });
   }

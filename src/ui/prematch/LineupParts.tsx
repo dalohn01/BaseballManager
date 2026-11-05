@@ -17,7 +17,6 @@ import { Portrait } from './shared';
 export const tone = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 
 export function modIcon(k: ModifierKey, value: number) {
-  if (k === 'fitness') return <Icon name="shoe" size={18} />;
   if (k === 'morale') return <Icon name="smile" size={18} />;
   if (k === 'team') return <Icon name="fans" size={18} />;
   return <Icon name={value > 0 ? 'flame' : value < 0 ? 'snow' : 'smile'} size={18} className={`form-icon form-${tone(value)}`} />;

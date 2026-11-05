@@ -1,10 +1,9 @@
 import { BALANCE } from '../../balance/config';
 import { userClub, clubPlayers, shortName } from '../../domain/state';
-import { runTeamTraining, type TeamTrainingFocus, avg } from '../../simulation/training';
+import { runTeamTraining, type TeamTrainingFocus } from '../../simulation/training';
 import type { EventTemplate } from '../types';
 
 const cost = (cash = 0) => ({ time: BALANCE.time.costPerEvent, cash, influence: 0 });
-const t = BALANCE.training;
 
 export const teamTraining: EventTemplate = {
   id: 'team_training',
@@ -13,31 +12,24 @@ export const teamTraining: EventTemplate = {
   slot: 'management',
   cooldownRounds: 0,
   weight: () => 5,
-  build: ({ state, followUp }) => {
-    const players = clubPlayers(state, state.userClubId);
-    const fitness = Math.round(avg(players.map((p) => p.fitness)));
-    const tired = players.filter((p) => p.fitness < BALANCE.fitness.warnBelow).sort((a, b) => a.fitness - b.fitness);
+  build: ({ followUp }) => {
     const facility = followUp?.data.facilityLevel
       ? `First session in the upgraded Training Center (level ${followUp.data.facilityLevel}, finished after round ${followUp.data.completedRound}). `
       : '';
-    const context =
-      facility +
-      (tired.length > 0
-        ? `Average squad fitness is ${fitness}%. ${tired.slice(0, 2).map(shortName).join(' and ')} ${tired.length > 1 ? 'are' : 'is'} running low.`
-        : `Average squad fitness is ${fitness}%. The group is ready to work.`);
+    const context = facility + 'The group is ready to work.';
     return {
       kicker: 'Team Training',
       title: facility ? 'Training in the New Center' : 'Team Training',
       context,
       prompt: 'Where should we focus today?',
-      subjects: { playerIds: tired.slice(0, 2).map((p) => p.id), clubIds: [] },
+      subjects: { playerIds: [], clubIds: [] },
       data: { newFacility: !!facility },
       options: [
         {
           id: 'batting',
           label: 'Batting',
           summary: 'Cage work for every hitter.',
-          certain: [{ text: `Fitness ${t.battingFitness}%`, tone: 'negative' }],
+          certain: [],
           uncertain: [{ text: 'Contact & Power progress', tone: 'positive' }],
           cost: cost(),
           primary: true,
@@ -46,15 +38,15 @@ export const teamTraining: EventTemplate = {
           id: 'defense',
           label: 'Defense',
           summary: 'Fielding drills and bullpen sessions.',
-          certain: [{ text: `Fitness ${t.defenseFitness}%`, tone: 'negative' }],
+          certain: [],
           uncertain: [{ text: 'Fielding & Pitching progress', tone: 'positive' }],
           cost: cost(),
         },
         {
           id: 'recovery',
-          label: 'Recovery',
-          summary: 'Light session, physio and rest.',
-          certain: [{ text: `Fitness +${t.recoveryFitness}%`, tone: 'positive' }],
+          label: 'Team bonding',
+          summary: 'A light session and a team dinner.',
+          certain: [{ text: 'Squad happiness +1', tone: 'positive' }],
           uncertain: [],
           cost: cost(),
         },
@@ -79,7 +71,8 @@ export const teamTraining: EventTemplate = {
     const reactions: { playerId: string; text: string }[] = [];
 
     if (focus === 'recovery') {
-      narrative.push(`Squad fitness up from ${Math.round(summary.fitnessBefore)}% to ${Math.round(summary.fitnessAfter)}%.`);
+      for (const p of clubPlayers(state, club.id)) sink.playerMood(p.id, 'satisfaction', 1, 'Team bonding');
+      narrative.push('The squad spent the evening together.');
     } else {
       narrative.push(`${summary.totalProgress} development points across the squad${boost ? ' (extra coaching +50%)' : ''}.`);
       if (summary.group) narrative.push(summary.group.text);
@@ -101,7 +94,7 @@ export const teamTraining: EventTemplate = {
     }
     const headline =
       focus === 'recovery'
-        ? 'A lighter day. The legs feel fresher.'
+        ? 'A lighter day, closer as a group.'
         : summary.pointsGained.length > 0
           ? 'Hard work pays off.'
           : 'Progress made.';

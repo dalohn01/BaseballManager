@@ -1,18 +1,16 @@
 import { syncPitching } from '../domain/pitching';
-import { overall } from '../domain/ratings';
 import { clamp } from '../domain/rng';
 import { nd, type Personality } from '../domain/personality';
 
 /** 0 … 1: how much personal terms weigh in a renewal (self-interest, need for recognition). */
 export const contractWeight = (p: Personality) => clamp(0.6 * -nd(p.teamOrientation) + 0.4 * nd(p.recognitionNeed), 0, 1);
 import { BALANCE } from '../balance/config';
-import { createPlayer, emptyStats, marketSalary } from '../content/playerFactory';
-import { autoLineup } from '../domain/lineup';
+import { emptyStats } from '../content/playerFactory';
+import { contracted, fillEmptySlots, release, slotOf } from '../domain/squad';
 import type { Rng } from '../domain/rng';
-import { positionNeeds, releasePlayer, squadProblem } from '../domain/roster';
 import type { GameState } from '../domain/state';
-import { absoluteRound, clubPlayers, nextId, playerName } from '../domain/state';
-import type { ClubId, LineupPosition, Player } from '../domain/types';
+import { absoluteRound, clubPlayers, playerName } from '../domain/state';
+import type { ClubId, Player } from '../domain/types';
 import { generateSchedule } from './schedule';
 
 const O = BALANCE.offseason;
@@ -64,7 +62,8 @@ export function startNextSeason(state: GameState, rng: Rng): TransitionReport {
   const user = state.userClubId;
 
   for (const clubId of state.clubOrder) {
-    for (const p of clubPlayers(state, clubId)) {
+    // The squad and the transfer list: everyone the club still has under contract.
+    for (const p of contracted(state, clubId).map((id) => state.players[id])) {
       // Archive and reset season stats.
       p.pastSeasons.unshift({ season, clubId, stats: p.stats });
       p.pastSeasons.length = Math.min(p.pastSeasons.length, O.pastSeasonsKept);
@@ -77,7 +76,7 @@ export function startNextSeason(state: GameState, rng: Rng): TransitionReport {
           if (clubId !== user && p.age < O.aiRenewMaxAge) {
             p.contract.seasonsLeft = O.renewalSeasons;
           } else {
-            releasePlayer(state, p.id);
+            release(state, p.id);
             if (clubId === user) report.departures.push(`${playerName(p)} (contract ended)`);
             continue;
           }
@@ -104,55 +103,16 @@ export function startNextSeason(state: GameState, rng: Rng): TransitionReport {
         if (clubId === user && total >= 3) report.declines.push(`${playerName(p)} (age ${p.age}) −${total} rating points`);
       }
 
-      // A break between seasons: rested, moods settle toward a neutral level.
-      p.fitness = rng.int(O.fitnessAfterBreak[0], O.fitnessAfterBreak[1]);
+      // A break between seasons: moods settle toward a neutral level.
       p.satisfaction = Math.round(p.satisfaction + (O.moodDriftToward - p.satisfaction) * O.moodDriftShare);
     }
   }
 
   for (const clubId of state.clubOrder) {
     const club = state.clubs[clubId];
-    // Complete the squad with cheap replacements. Every contract can expire at once,
-    // so the loop may need to build a whole minimum squad; the cap only guards against bugs.
-    for (let guard = 0; guard <= BALANCE.roster.max; guard++) {
-      const problem = squadProblem(state, club.roster);
-      if (!problem && club.roster.length >= O.minRosterSize) break;
-      const need = neededPosition(state, clubId, problem);
-      if (club.roster.length >= BALANCE.roster.max) {
-        // A full roster that still misses a requirement (e.g. seven pitchers) lets its
-        // weakest player of the other kind go, so the squad can be completed.
-        if (!problem) break;
-        const surplus = club.roster
-          .map((id) => state.players[id])
-          .filter((p) => (need === 'P' ? !p.isPitcher && !p.positions.includes('C') : p.isPitcher))
-          .sort((a, b) => overall(a) - overall(b) || a.id.localeCompare(b.id))[0];
-        if (!surplus) break;
-        if (clubId === user) report.departures.push(`${playerName(surplus)} (released to make room)`);
-        releasePlayer(state, surplus.id);
-      }
-      const level = rng.int(48, 56);
-      const age = rng.int(22, 30);
-      const p = createPlayer(
-        {
-          id: nextId(state, 'p'),
-          clubId,
-          primary: need,
-          age,
-          level,
-          upside: rng.int(0, 6),
-          role: 'reserve',
-          salary: Math.max(10_000, Math.round((marketSalary(level, age) * 0.7) / 1000) * 1000),
-          seasonsLeft: 1,
-          startRound: nextStart,
-          joinedSeason: season + 1,
-          scoutingLevel: club.facilities.scouting,
-          bio: 'Signed as a low-cost replacement in the off-season.',
-        },
-        rng,
-      );
-      state.players[p.id] = p;
-      club.roster.push(p.id);
-      if (clubId === user) report.replacements.push(`${playerName(p)} (${need}, $${p.contract.salary.toLocaleString('en-US')})`);
+    // Every place left empty by an ended contract gets a cheap replacement for next season.
+    for (const p of fillEmptySlots(state, clubId, rng, { startRound: nextStart, joinedSeason: season + 1 })) {
+      if (clubId === user) report.replacements.push(`${playerName(p)} (${slotOf(state, clubId, p.id) ?? '?'}, $${p.contract.salary.toLocaleString('en-US')})`);
     }
 
     // Sponsor deals run down; AI clubs renew automatically.
@@ -179,7 +139,7 @@ export function startNextSeason(state: GameState, rng: Rng): TransitionReport {
   state.schedule.push(...generateSchedule(state.clubOrder, season + 1, rng));
   // Keep only the finished season's full match results.
   for (const [id, m] of Object.entries(state.matches)) if (m.season < season) delete state.matches[id];
-  for (const clubId of state.clubOrder) state.clubs[clubId].lineup = autoLineup(state, clubId);
+  // The squads are fixed: each lineup keeps its places (newcomers took the empty ones).
   for (const pr of state.promises) {
     if (pr.status === 'active') {
       pr.status = 'void';
@@ -187,11 +147,4 @@ export function startNextSeason(state: GameState, rng: Rng): TransitionReport {
     }
   }
   return report;
-}
-
-function neededPosition(state: GameState, clubId: ClubId, problem: string | null): LineupPosition | 'P' {
-  if (problem?.includes('pitchers')) return 'P';
-  if (problem?.includes('catcher')) return 'C';
-  const needs = positionNeeds(state, clubId);
-  return needs.find((n) => n !== 'P') ?? 'CF';
 }

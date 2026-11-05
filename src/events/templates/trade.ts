@@ -1,6 +1,7 @@
 import { applyReaction } from '../../simulation/reactions';
-import { effectiveRating, offenseScore } from '../../domain/lineup';
-import { repairLineup, squadProblem, transferPlayer } from '../../domain/roster';
+import { effectiveRating } from '../../domain/lineup';
+import { swapPlayers, tradeable } from '../../domain/squad';
+import { pitcherPosition } from '../../domain/pitching';
 import type { EventInstance, GameState } from '../../domain/state';
 import { clubName, clubPlayers, playerName, userClub } from '../../domain/state';
 import type { ClubId, Player, PlayerId } from '../../domain/types';
@@ -14,18 +15,13 @@ interface TradeDeal {
   partnerId: ClubId;
 }
 
-/** Squad problem for either club after swapping the two players, or null. */
+/** Why the two cannot be swapped (gone, or not the same kind of place), or null. In a trade they swap places. */
 export function tradeProblem(state: GameState, deal: TradeDeal): string | null {
   const out = state.players[deal.outId];
   const inc = state.players[deal.inId];
-  if (!out || out.clubId !== state.userClubId) return `${out?.lastName ?? 'The player'} is no longer on your roster.`;
-  if (!inc || inc.clubId !== deal.partnerId) return `${inc?.lastName ?? 'Their player'} is no longer available.`;
-  const mine = [...userClub(state).roster.filter((id) => id !== deal.outId), deal.inId];
-  const theirs = [...state.clubs[deal.partnerId].roster.filter((id) => id !== deal.inId), deal.outId];
-  const a = squadProblem(state, mine);
-  if (a) return `Your squad: ${a}`;
-  const b = squadProblem(state, theirs);
-  if (b) return `${state.clubs[deal.partnerId].name}: ${b}`;
+  if (!out || out.clubId !== state.userClubId || !userClub(state).roster.includes(out.id)) return `${out?.lastName ?? 'The player'} is no longer in your squad.`;
+  if (!inc || inc.clubId !== deal.partnerId || !state.clubs[deal.partnerId].roster.includes(inc.id)) return `${inc?.lastName ?? 'Their player'} is no longer available.`;
+  if (!tradeable(state, out.id, inc.id)) return `${inc.lastName} cannot take ${out.lastName}'s place.`;
   return null;
 }
 
@@ -53,12 +49,13 @@ const veteranDeal = (s: GameState) =>
     (p) => p.potential,
   );
 
+/** A reliever (not the best arm) for a younger reliever with more upside. */
 const pitchingDeal = (s: GameState) =>
   findDeal(
     s,
-    (p) => p.isPitcher && p.id !== bestPitcher(s),
-    (p) => !p.isPitcher && p.role !== 'prospect',
-    (p) => offenseScore(p),
+    (p) => p.isPitcher && pitcherPosition(p) === 'RP' && p.id !== bestPitcher(s),
+    (p) => p.isPitcher && pitcherPosition(p) === 'RP' && p.age <= 26,
+    (p) => p.potential,
   );
 
 function bestPitcher(s: GameState) {
@@ -128,8 +125,8 @@ function resolveTrade({ state, rng, sink, event, option }: ResolveContext) {
   }
   const club = userClub(state);
   const payrollBefore = payrollPerSeason(state, club.id);
-  transferPlayer(state, out.id, partner.id);
-  transferPlayer(state, inc.id, club.id);
+  // They swap places: each takes the other's role in his new squad.
+  swapPlayers(state, out.id, inc.id);
   sink.record({ targetKind: 'club', targetId: club.id, targetLabel: 'Payroll', stat: 'payroll', statLabel: '$ per season', before: payrollBefore, after: payrollPerSeason(state, club.id), format: 'cash' });
   if (option.id === 'counter') sink.cash(club.id, 20_000, 'event', `Cash from ${partner.name} in trade`);
   const fanHit = Number(event.data.fanHit);
@@ -142,14 +139,12 @@ function resolveTrade({ state, rng, sink, event, option }: ResolveContext) {
       if (p.id !== inc.id && p.joinedSeason < state.calendar.season) applyReaction(state, sink, p.id, 'teammate_traded', -1, `Teammate ${out.lastName} was traded`, `${event.id}:traded:${p.id}`);
     }
   }
-  repairLineup(state, club.id);
-  repairLineup(state, partner.id);
   return {
     headline: `Trade done: ${inc.lastName} in, ${out.lastName} out.`,
     narrative: [
       `${playerName(inc)} joins from ${partner.name}. His contract (${fmt(inc.contract.salary)}/season) moves with him; salary already paid stays paid.`,
       option.id === 'counter' ? `${partner.name} added $20,000.` : '',
-      'Check the Team page: the lineup was updated if needed.',
+      `He takes ${out.lastName}'s place in the squad.`,
     ].filter(Boolean),
     reactions: [{ playerId: inc.id, text: 'New club, fresh start. Let’s go.' }],
   };
@@ -180,7 +175,7 @@ export const tradePitching: EventTemplate = {
   build: ({ state }) => {
     const deal = pitchingDeal(state)!;
     const out = state.players[deal.outId];
-    return tradeDraft(state, deal, 'A Bat for an Arm', `Losing ${out.lastName} (PIT ${Math.round(effectiveRating(out, 'pitching'))}) thins the rotation.`);
+    return tradeDraft(state, deal, 'A Bullpen Swap', `${out.lastName} (PIT ${Math.round(effectiveRating(out, 'pitching'))}) for a younger arm with more upside.`);
   },
   optionBlocker: (state, ev, optionId) => (optionId === 'decline' ? null : tradeProblem(state, dealOf(ev))),
   resolve: resolveTrade,

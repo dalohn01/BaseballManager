@@ -1,4 +1,3 @@
-import { defaultStaff } from '../src/domain/staff';
 import { describe, expect, it } from 'vitest';
 import { BALANCE } from '../src/balance/config';
 import { execute, optionBlocker } from '../src/application/engine';
@@ -6,7 +5,7 @@ import { validateLineup } from '../src/domain/lineup';
 import { clubPlayers } from '../src/domain/state';
 import { computeStandings } from '../src/simulation/standings';
 import { roundShare } from '../src/simulation/economy';
-import { newGame, playSeason, run, step, T0, advanceDay, toNextEvent } from './helpers';
+import { newGame, playSeason, run, step, T0, advanceDay, toNextEvent, expectValidSquads } from './helpers';
 
 describe('new game', () => {
   it('starts with valid rosters, lineups and a feasible first event', () => {
@@ -14,16 +13,13 @@ describe('new game', () => {
     expect(s.clubOrder).toHaveLength(6);
     for (const id of s.clubOrder) {
       const players = clubPlayers(s, id);
-      expect(players).toHaveLength(21);
-      expect(players.filter((p) => p.isPitcher)).toHaveLength(10);
-      // A depth chart of four starters and three relievers; the strongest starter takes the first game.
-      const staff = defaultStaff(s, id);
-      expect(staff.rotation).toHaveLength(4);
-      expect([staff.closer, staff.setup, staff.long].every(Boolean)).toBe(true);
-      expect(staff.rotation).toContain(s.clubs[id].lineup.pitcherId);
+      // The fixed squad: nine hitters and five pitchers (a starter and four relievers), each in a place.
+      expect(players).toHaveLength(14);
+      expect(players.filter((p) => p.isPitcher)).toHaveLength(5);
       const errors = validateLineup(s, id, s.clubs[id].lineup).filter((i) => i.severity === 'error');
       expect(errors).toEqual([]);
     }
+    expectValidSquads(s);
     const ev = s.currentEvent!;
     expect(ev.status).toBe('pending');
     expect(ev.options.some((o) => optionBlocker(s, ev, o, null, T0) === null)).toBe(true);

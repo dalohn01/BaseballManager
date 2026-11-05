@@ -140,7 +140,6 @@ export const fansCommunityDay: EventTemplate = {
           certain: [
             { text: 'Fan support +4', tone: 'positive' },
             { text: 'Local roots +3', tone: 'positive' },
-            { text: `${star.lastName} fitness −2%`, tone: 'negative' },
             communityMood(star),
           ],
           uncertain: [],
@@ -177,7 +176,6 @@ export const fansCommunityDay: EventTemplate = {
     if (option.id === 'star' && star) {
       sink.clubMood(c.id, 'fanSupport', 4, `${star.lastName} visited local schools`);
       sink.brand(c.id, 'local', 3);
-      sink.playerMood(star.id, 'fitness', -2, 'Community day');
       // Two parts, each sized by his personality: the attention, and the lost off-day.
       const a = applyReaction(state, sink, star.id, 'community_attention', 2, 'Proud to represent the community', `${event.id}:attention`);
       const b = applyReaction(state, sink, star.id, 'community_off_day', -2, 'Asked to give up an off-day', `${event.id}:offday`);
@@ -230,7 +228,6 @@ export const fansAfterLoss: EventTemplate = {
           summary: 'Show the fans the team cares.',
           certain: [
             { text: 'Fan support +3', tone: 'positive' },
-            { text: 'Starters fitness −1%', tone: 'negative' },
           ],
           uncertain: [],
           cost: { time: T, cash: 0, influence: 0 },
@@ -263,7 +260,6 @@ export const fansAfterLoss: EventTemplate = {
     const c = userClub(state);
     if (option.id === 'autographs') {
       sink.clubMood(c.id, 'fanSupport', 3, 'Players signed autographs after a loss');
-      for (const slot of c.lineup.battingOrder) sink.playerMood(slot.playerId, 'fitness', -1, 'Autograph session', { record: false });
       return { headline: 'A long line, a better mood.', narrative: ['The starters stayed an hour. Fans noticed.'] };
     }
     if (option.id === 'statement') {

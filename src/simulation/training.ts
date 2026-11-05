@@ -202,18 +202,6 @@ export function runTeamTraining(
   }
 
   summary.facilityContribution = summary.totalProgress - Math.round(summary.totalProgress / trainingFacilityFactor(level));
-  const fitnessDelta = focus === 'batting' ? t.battingFitness : focus === 'defense' ? t.defenseFitness : t.recoveryFitness;
-  for (const p of players) sink.playerMood(p.id, 'fitness', fitnessDelta, 'Team training', { record: false });
-  summary.fitnessAfter = avg(players.map((p) => p.fitness));
-  sink.record({
-    targetKind: 'team',
-    targetId: clubId,
-    targetLabel: 'Squad average',
-    stat: 'fitness',
-    statLabel: 'Fitness',
-    before: Math.round(fitnessBefore),
-    after: Math.round(summary.fitnessAfter),
-  });
   return summary;
 }
 

@@ -1,5 +1,5 @@
 import { BALANCE } from '../../balance/config';
-import { FORM_LABEL, formModifier, MODIFIER_KEYS, MODIFIER_LABEL, pepTalkBoost, restText, teamStatus, type ModifierKey, type Modifiers, type TeamStatus } from '../../domain/effective';
+import { FORM_LABEL, formModifier, MODIFIER_KEYS, MODIFIER_LABEL, pepTalkBoost, teamStatus, type ModifierKey, type Modifiers, type TeamStatus } from '../../domain/effective';
 import type { GameState } from '../../domain/state';
 import { userClub } from '../../domain/state';
 import type { Player } from '../../domain/types';
@@ -14,13 +14,12 @@ import { ActionConfirm } from './ActionConfirm';
 export const signed = (v: number) => (v > 0 ? `+${v}` : v < 0 ? `−${Math.abs(v)}` : '0');
 const tone = (v: number) => (v > 0 ? 'pos' : v < 0 ? 'neg' : 'zero');
 
-const SHORT: Record<ModifierKey, string> = { fitness: 'FIT', morale: 'MOR', team: 'TEAM', form: 'FORM' };
+const SHORT: Record<ModifierKey, string> = { morale: 'MOR', team: 'TEAM', form: 'FORM' };
 
 /** Why each modifier is what it is, for tooltips and screen readers. */
 export function modifierReasons(state: GameState, p: Player, status: TeamStatus = teamStatus(state, p.clubId)): Record<ModifierKey, string> {
   const pep = pepTalkBoost(state, p);
   return {
-    fitness: p.isPitcher ? `Rest: ${restText(p)}` : `Fitness ${p.fitness}%`,
     morale: `Happiness ${Math.round(p.satisfaction)}`,
     team: `Squad ${signed(status.base)}${status.boost ? `, tactics session ${signed(status.boost)}` : ''}${pep ? `, pep talk ${signed(pep)}` : ''}`,
     form: FORM_LABEL[formModifier(p)],

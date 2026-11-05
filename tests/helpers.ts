@@ -1,3 +1,7 @@
+import { expect } from 'vitest';
+import { BALANCE } from '../src/balance/config';
+import { squadProblem } from '../src/domain/roster';
+import { fitsSlot, playerAt, SQUAD_SLOTS } from '../src/domain/squad';
 import { autoLineup } from '../src/domain/lineup';
 import type { MatchResult } from '../src/domain/types';
 import { buildSimTeam, simulateMatch } from '../src/simulation/match';
@@ -67,4 +71,31 @@ export function simMatch(seed: number): { m: MatchResult; s: ReturnType<typeof n
   const home = buildSimTeam(s, h, autoLineup(s, h));
   const away = buildSimTeam(s, a, autoLineup(s, a));
   return { m: simulateMatch({ id: `m${seed}`, season: 1, round: 1, home, away, rng: createRng(seed) }), s };
+}
+/**
+ * Every club has a valid fixed squad: the fourteen places filled by players
+ * who fit them, nobody twice or on two clubs, roster in step with the places,
+ * and transfer-listed players still under the club but outside the squad.
+ */
+export function expectValidSquads(s: GameState) {
+  const seen = new Map<string, string>();
+  for (const id of s.clubOrder) {
+    const club = s.clubs[id];
+    expect(squadProblem(s, club.roster), id).toBeNull();
+    for (const slot of SQUAD_SLOTS) {
+      const pid = playerAt(s, id, slot);
+      expect(pid, `${id} ${slot} empty`).toBeTruthy();
+      expect(fitsSlot(s.players[pid!], slot), `${id} ${slot} ${pid}`).toBe(true);
+    }
+    expect(club.roster).toHaveLength(BALANCE.squad.hitters + BALANCE.squad.pitchers);
+    for (const pid of club.roster) {
+      expect(seen.has(pid), `player ${pid} on two squads`).toBe(false);
+      seen.set(pid, id);
+      expect(s.players[pid].clubId).toBe(id);
+    }
+    for (const t of club.transferList ?? []) {
+      expect(s.players[t.playerId].clubId).toBe(id);
+      expect(club.roster).not.toContain(t.playerId);
+    }
+  }
 }

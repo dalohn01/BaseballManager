@@ -1,4 +1,4 @@
-import { personalModifier, restLabel, restStage } from './effective';
+import { personalModifier } from './effective';
 import { bestPitching, canPitchIn, emptyBullpen, RELIEF_SLOTS } from './todayPitching';
 import { BALANCE } from '../balance/config';
 import type { GameState } from './state';
@@ -41,8 +41,6 @@ export function validateLineup(state: GameState, clubId: ClubId, lineup: Lineup)
   const pitcher = state.players[lineup.pitcherId];
   if (!pitcher || !roster.has(lineup.pitcherId) || !pitcher.isPitcher) {
     issues.push({ severity: 'error', text: 'Choose a starting pitcher from the roster.' });
-  } else if (restStage(pitcher) < 2) {
-    issues.push({ severity: 'warning', text: `${pitcher.lastName} is ${restLabel(restStage(pitcher)).toLowerCase()} and will pitch much worse today.` });
   }
   return issues;
 }
@@ -75,7 +73,6 @@ export function validateBatters(state: GameState, clubId: ClubId, lineup: Lineup
     if (slot.position !== 'DH' && !p.positions.includes(slot.position)) {
       issues.push({ severity: 'warning', text: `${p.lastName} is out of position at ${slot.position} (fielding −${BALANCE.match.outOfPositionFieldingPenalty}).` });
     }
-    if (p.fitness < BALANCE.fitness.exhaustedBelow) issues.push({ severity: 'warning', text: `${p.lastName} is exhausted (fitness ${p.fitness}%).` });
   }
   for (const pos of LINEUP_POSITIONS) {
     if (!seenPositions.has(pos)) issues.push({ severity: 'error', text: `Nobody is playing ${pos}.` });
@@ -104,7 +101,6 @@ export function validatePitchingPlan(state: GameState, clubId: ClubId, starterId
     if (!pitchers.has(id)) issues.push({ severity: 'error', text: 'A relief pitcher is no longer on the roster.' });
     else if (seen.has(id)) issues.push({ severity: 'error', text: `${p.lastName} has two roles today.` });
     else if (!canPitchIn(p, slot)) issues.push({ severity: 'error', text: `${p.lastName} is a starter and cannot pitch in relief.` });
-    else if (restStage(p) === 0) issues.push({ severity: 'warning', text: `${p.lastName} is exhausted and will pitch much worse in relief.` });
     seen.add(id);
   }
   if (!RELIEF_SLOTS.some((s) => pen[s])) issues.push({ severity: 'warning', text: 'No relief pitcher is set: the strongest available will be used.' });

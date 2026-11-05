@@ -21,11 +21,6 @@ type Tone = 'critical' | 'low' | 'warn' | 'neutral' | 'good' | 'great';
 /** Satisfaction bands → tone: below 50 is bad, 65–84 sits around the neutral 75. */
 const MOOD_TONE: Tone[] = ['critical', 'low', 'warn', 'neutral', 'great'];
 
-function fitnessTone(v: number): Tone {
-  const l = fitnessLabel(v);
-  return l === 'Fresh' ? 'great' : l === 'Ready' ? 'good' : l === 'Tired' ? 'warn' : 'critical';
-}
-
 type RowKey = 'owners' | 'fans' | 'players' | 'fitness';
 
 export function ClubStatus() {
@@ -33,7 +28,6 @@ export function ClubStatus() {
   const club = userClub(s);
   const players = clubPlayers(s, club.id);
   const happy = avg(players.map((p) => p.satisfaction));
-  const fitness = Math.round(avg(players.filter((p) => !p.isPitcher).map((p) => p.fitness)));
   const [open, setOpen] = useState<RowKey | null>(null);
   const toggle = (k: RowKey) => setOpen(open === k ? null : k);
   const mood = (actor: MoodActor, v: number) => ({ tone: MOOD_TONE[moodBand(v)], word: moodLabel(actor, v) });
@@ -41,7 +35,6 @@ export function ClubStatus() {
     { key: 'owners', label: 'Owners', value: club.ownerConfidence, display: String(Math.round(club.ownerConfidence)), ...mood('owners', club.ownerConfidence), neutral: true, icon: <OwnersArt /> },
     { key: 'fans', label: 'Fans', value: club.fanSupport, display: String(Math.round(club.fanSupport)), ...mood('fans', club.fanSupport), neutral: true, icon: <FansArt /> },
     { key: 'players', label: 'Player happiness', value: happy, display: String(Math.round(happy)), ...mood('player', happy), neutral: true, icon: <PlayerArt band={moodBand(happy)} /> },
-    { key: 'fitness', label: 'Fitness', value: fitness, display: `${fitness}%`, tone: fitnessTone(fitness), word: fitness >= 95 ? 'Match ready' : fitnessLabel(fitness), neutral: false, icon: <FitnessArt /> },
   ];
   return (
     <Panel title="Club status" className="club-status">
@@ -176,11 +169,3 @@ function PlayerArt({ band }: { band: number }) {
   );
 }
 
-function FitnessArt() {
-  return (
-    <svg viewBox="0 0 48 48">
-      <path d="M24 42S6 31 6 18a9 9 0 0 1 18-3 9 9 0 0 1 18 3c0 13-18 24-18 24z" className="cs-heart" />
-      <path d="M8 24h9l3-6 4 12 3-8 2 2h11" fill="none" stroke="#fff" strokeWidth="2.4" strokeLinejoin="round" strokeLinecap="round" />
-    </svg>
-  );
-}

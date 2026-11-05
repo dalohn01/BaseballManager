@@ -2,51 +2,55 @@ import { BALANCE } from '../../balance/config';
 import { ballparkName } from '../../content/ballparks';
 import { createPlayer, marketSalary } from '../../content/playerFactory';
 import type { Rng } from '../../domain/rng';
-import { joinClub, positionNeeds, repairLineup, squadProblem } from '../../domain/roster';
-import type { EventInstance, EventOption, GameState } from '../../domain/state';
+import { positionNeeds } from '../../domain/roster';
+import { replacementFor, signInto, SQUAD_SLOT_LABEL } from '../../domain/squad';
+import type { EventOption, GameState } from '../../domain/state';
 import { absoluteRound, nextId, playerName, userClub } from '../../domain/state';
 import type { LineupPosition, Player } from '../../domain/types';
 import { computeStandings } from '../../simulation/standings';
+import { overall } from '../../domain/ratings';
 import type { EventTemplate, ResolveContext } from '../types';
 import { competitionReaction, cost, describeCandidate, fmt, neg, neutral, passOption } from './helpers';
 
 const R = BALANCE.recruitment;
 
-function candidateOption(p: Player, fee: number, extra: Partial<EventOption> = {}): EventOption {
+/** Who a newcomer would replace in the fixed squad (he goes to the transfer list). */
+function replaceNote(state: GameState, p: Player) {
+  const { slot, outId } = replacementFor(state, state.userClubId, p);
+  const out = outId ? state.players[outId] : null;
+  return neutral(out ? `Takes ${SQUAD_SLOT_LABEL[slot]} from ${playerName(out)} (to the transfer list)` : `Takes the empty ${SQUAD_SLOT_LABEL[slot]} place`);
+}
+
+function candidateOption(state: GameState, p: Player, fee: number, extra: Partial<EventOption> = {}): EventOption {
   return {
     id: `sign:${p.id}`,
     candidateId: p.id,
     label: `Sign ${playerName(p)}`,
     summary: describeCandidate(p),
-    certain: [neg(`Salary ${fmt(p.contract.salary)}/season × ${p.contract.seasonsLeft}`), neutral('Paid from next round')],
+    certain: [replaceNote(state, p), neg(`Salary ${fmt(p.contract.salary)}/season × ${p.contract.seasonsLeft}`), neutral('Paid from next round')],
     uncertain: [neutral(`Potential ${p.potentialEstimate.low}–${p.potentialEstimate.high} (scouted)`)],
     cost: cost(fee),
     ...extra,
   };
 }
 
-function rosterBlocker(state: GameState, event: EventInstance, optionId: string): string | null {
-  const option = event.options.find((o) => o.id === optionId);
-  if (!option?.candidateId) return null;
-  const club = userClub(state);
-  const p = event.candidates.find((c) => c.id === option.candidateId)!;
-  const tmp = { ...state, players: { ...state.players, [p.id]: p } };
-  return squadProblem(tmp, [...club.roster, p.id]);
+/** A newcomer always has a place: he takes it from the player there, who goes to the transfer list. */
+function rosterBlocker(): string | null {
+  return null;
 }
 
 function signCandidate({ state, sink, event, option }: ResolveContext, fee: number) {
   const p = structuredClone(event.candidates.find((c) => c.id === option.candidateId)!);
   const club = userClub(state);
-  const sizeBefore = club.roster.length;
-  joinClub(state, p, club.id);
-  sink.record({ targetKind: 'club', targetId: club.id, targetLabel: 'Roster', stat: 'roster', statLabel: 'Players', before: sizeBefore, after: club.roster.length });
+  const { slot } = replacementFor(state, club.id, p);
   competitionReaction(state, sink, p);
-  const repaired = repairLineup(state, club.id);
+  const outId = signInto(state, club.id, p, slot);
+  const out = outId ? state.players[outId] : null;
   return {
     p,
     narrative: [
-      `${playerName(p)} (${describeCandidate(p)}) joins on ${fmt(p.contract.salary)} per season${fee ? ` after a ${fmt(fee)} signing fee` : ''}.`,
-      ...(repaired ? ['The lineup was rebuilt to stay valid.'] : []),
+      `${playerName(p)} (${describeCandidate(p)}) joins on ${fmt(p.contract.salary)} per season${fee ? ` after a ${fmt(fee)} signing fee` : ''} and takes ${SQUAD_SLOT_LABEL[slot]}.`,
+      ...(out ? [`${playerName(out)} goes to the transfer list: other clubs can buy him for ${BALANCE.transfer.listRounds} rounds, then he is released.`] : []),
     ],
   };
 }
@@ -67,10 +71,10 @@ function freeAgentCandidates(state: GameState, rng: Rng): Player[] {
   ];
 }
 
-function freeAgentOptions(cands: Player[]): EventOption[] {
+function freeAgentOptions(state: GameState, cands: Player[]): EventOption[] {
   const labels = ['Proven quality', 'Affordable depth', 'Young upside'];
   return [
-    ...cands.map((p, i) => candidateOption(p, Math.round(p.contract.salary * R.freeAgentFeeShare), { summary: `${labels[i]} · ${describeCandidate(p)}`, primary: i === 0 })),
+    ...cands.map((p, i) => candidateOption(state, p, Math.round(p.contract.salary * R.freeAgentFeeShare), { summary: `${labels[i]} · ${describeCandidate(p)}`, primary: i === 0 })),
     passOption('Pass', 'Save the money.'),
   ];
 }
@@ -81,17 +85,17 @@ export const freeAgent: EventTemplate = {
   type: 'freeAgent',
   slot: 'management',
   cooldownRounds: 5,
-  weight: (s) => (userClub(s).roster.length < BALANCE.roster.max ? 2 : 0),
+  weight: () => 2,
   build: ({ state, rng }) => {
     const candidates = freeAgentCandidates(state, rng);
     return {
       kicker: 'Free Agent Signing',
       title: 'Free Agents Available',
-      context: `Three players are looking for a club. Your thinnest spots: ${positionNeeds(state, state.userClubId).slice(0, 3).join(', ')}.`,
+      context: `Three players are looking for a club. Your weakest places: ${positionNeeds(state, state.userClubId).slice(0, 3).join(', ')}. A signing takes a place; the player there goes to the transfer list.`,
       prompt: 'Make an offer?',
       subjects: { playerIds: [], clubIds: [] },
       data: {},
-      options: freeAgentOptions(candidates),
+      options: freeAgentOptions(state, candidates),
       boosts: [],
       candidates,
       rerollCost: BALANCE.influence.rerollCost,
@@ -99,7 +103,7 @@ export const freeAgent: EventTemplate = {
   },
   reroll: ({ state, rng }) => {
     const candidates = freeAgentCandidates(state, rng);
-    return { candidates, options: freeAgentOptions(candidates), context: 'Your scouts dug up a different set of free agents.' };
+    return { candidates, options: freeAgentOptions(state, candidates), context: 'Your scouts dug up a different set of free agents.' };
   },
   optionBlocker: rosterBlocker,
   resolve: (ctx) => {
@@ -136,8 +140,8 @@ function tryoutCandidates(state: GameState, rng: Rng): Player[] {
   );
 }
 
-const tryoutOptions = (cands: Player[]) => [
-  ...cands.map((p) => candidateOption(p, R.tryoutFee, { summary: `Raw talent · ${describeCandidate(p)}` })),
+const tryoutOptions = (state: GameState, cands: Player[]) => [
+  ...cands.map((p) => candidateOption(state, p, R.tryoutFee, { summary: `Raw talent · ${describeCandidate(p)}` })),
   passOption('Thank them and pass', 'Nobody convinced you.'),
 ];
 
@@ -147,7 +151,7 @@ export const tryouts: EventTemplate = {
   type: 'tryouts',
   slot: 'management',
   cooldownRounds: 6,
-  weight: (s) => (userClub(s).roster.length < BALANCE.roster.max ? 2 : 0),
+  weight: () => 2,
   build: ({ state, rng }) => {
     const candidates = tryoutCandidates(state, rng);
     return {
@@ -157,7 +161,7 @@ export const tryouts: EventTemplate = {
       prompt: 'Offer someone a contract?',
       subjects: { playerIds: [], clubIds: [] },
       data: {},
-      options: tryoutOptions(candidates),
+      options: tryoutOptions(state, candidates),
       boosts: [],
       candidates,
       rerollCost: BALANCE.influence.rerollCost,
@@ -165,7 +169,7 @@ export const tryouts: EventTemplate = {
   },
   reroll: ({ state, rng }) => {
     const candidates = tryoutCandidates(state, rng);
-    return { candidates, options: tryoutOptions(candidates), context: 'A second group went through the drills.' };
+    return { candidates, options: tryoutOptions(state, candidates), context: 'A second group went through the drills.' };
   },
   optionBlocker: rosterBlocker,
   resolve: (ctx) => {
@@ -232,13 +236,13 @@ export const draft: EventTemplate = {
       data: { aiPicks: aiPicks.join(','), userPick },
       options: [
         ...choices.map((p, i) =>
-          candidateOption(p, R.draftBonus, {
+          candidateOption(state, p, R.draftBonus, {
             summary: `${i === 0 ? 'Best available' : 'Prospect'} · ${describeCandidate(p)}`,
             certain: [neg(`Salary ${fmt(p.contract.salary)}/season from next season`), neutral('3-season contract')],
             primary: i === 0,
           }),
         ),
-        passOption('Pass on the pick', 'Keep the roster spot and the bonus money.'),
+        passOption('Pass on the pick', 'Keep the squad as it is and the bonus money.'),
       ],
       boosts: [],
       candidates: pool,
@@ -251,10 +255,11 @@ export const draft: EventTemplate = {
     // AI picks happen regardless of the user's choice; players keep one identity each.
     for (const pair of String(event.data.aiPicks).split(',').filter(Boolean)) {
       const [pid, cid] = pair.split(':');
-      // A club with a full roster passes on its pick.
-      if (state.clubs[cid].roster.length >= BALANCE.roster.max) continue;
+      // An AI club only signs its pick if he is better than the player in his place.
       const p = structuredClone(event.candidates.find((c) => c.id === pid)!);
-      joinClub(state, p, cid);
+      const { slot, outId } = replacementFor(state, cid, p);
+      if (outId && overall(state.players[outId]) >= overall(p)) continue;
+      signInto(state, cid, p, slot);
     }
     if (option.id === 'pass') return { headline: 'You pass on your pick.', narrative: ['The bonus money stays in the bank.'] };
     const { p, narrative } = signCandidate(ctx, option.cost.cash);

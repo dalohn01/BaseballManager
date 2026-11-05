@@ -41,7 +41,7 @@ describe('match simulation', () => {
     expect(avg).toBeLessThan(7);
   });
 
-  it('fatigue and ability measurably change outcomes over many games', () => {
+  it('morale, form and ability measurably change outcomes over many games', () => {
     const wins = (tweak?: (s: ReturnType<typeof newGame>) => void) => {
       let w = 0;
       for (let seed = 1; seed <= 400; seed++) {
@@ -51,8 +51,12 @@ describe('match simulation', () => {
       return w;
     };
     const base = wins();
+    // Fitness is not carried between games; low morale and a cold spell are what weigh on a squad.
     const exhausted = wins((s) => {
-      for (const id of s.clubs[s.clubOrder[0]].roster) s.players[id].fitness = 60;
+      for (const id of s.clubs[s.clubOrder[0]].roster) {
+        s.players[id].satisfaction = 10;
+        s.players[id].form = -2.5;
+      }
     });
     const boosted = wins((s) => {
       for (const id of s.clubs[s.clubOrder[0]].roster) {

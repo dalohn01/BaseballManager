@@ -81,17 +81,6 @@ export function leagueGameOptionNotes(state: GameState, choice: LeagueGameChoice
     }
   }
 
-  if (choice === 'rest') {
-    const tired = saved.battingOrder
-      .map((s) => state.players[s.playerId])
-      .filter((p) => p && p.fitness < BALANCE.fitness.restBelow);
-    const rested = tired.filter((p) => !inLineup(lineup, p.id));
-    if (tired.length === 0) notes.push({ text: `Everyone at ${BALANCE.fitness.restBelow}%+ fitness`, tone: 'neutral' });
-    else if (rested.length === 0) notes.push({ text: 'No replacement for the tired players', tone: 'neutral' });
-    else notes.push({ text: `${rested.map((p) => p.lastName).join(', ')} rest${rested.length === 1 ? 's' : ''} (+${BALANCE.fitness.benchRecoveryPerGame - BALANCE.fitness.lineupPerGame}% fitness vs playing)`, tone: 'positive' });
-  }
-
-  notes.push({ text: `Playing costs starters ${-BALANCE.fitness.lineupPerGame}% fitness`, tone: 'negative' });
 
   // Promises whose window includes this game.
   const now = absoluteRound(state.calendar.season, state.calendar.round);
@@ -163,16 +152,8 @@ export const leagueGame: EventTemplate = {
         {
           id: 'strongest',
           label: 'Strongest available',
-          summary: 'Best nine and the strongest pitching by effective value (OVR with fitness, morale, team and form). Becomes your saved lineup.',
+          summary: 'Your squad in its places with the batting order suggested by the coaches. Becomes your saved lineup.',
           certain: leagueGameOptionNotes(state, 'strongest'),
-          uncertain: [],
-          cost: { time: BALANCE.time.costPerEvent, cash: 0, influence: 0 },
-        },
-        {
-          id: 'rest',
-          label: 'Rest tired players',
-          summary: `Like strongest, but anyone below ${BALANCE.fitness.restBelow}% fitness sits if a replacement exists. Becomes your saved lineup.`,
-          certain: leagueGameOptionNotes(state, 'rest'),
           uncertain: [],
           cost: { time: BALANCE.time.costPerEvent, cash: 0, influence: 0 },
         },

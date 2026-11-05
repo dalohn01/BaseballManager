@@ -3,12 +3,12 @@ import { BALANCE } from '../src/balance/config';
 import { execute, optionBlocker } from '../src/application/engine';
 import { migrate } from '../src/application/migrations';
 import { createRng } from '../src/domain/rng';
-import { squadProblem } from '../src/domain/roster';
+import { listForTransfer, playerAt, putInSlot, replacementFor, settleTransferList, slotOf } from '../src/domain/squad';
 import type { GameState } from '../src/domain/state';
 import { absoluteRound, SCHEMA_VERSION } from '../src/domain/state';
 import { getTemplate, TEMPLATES } from '../src/events/registry';
 import { roundShare, salaryDue } from '../src/simulation/economy';
-import { newGame, playSeason, run, step, T0 } from './helpers';
+import { newGame, playSeason, run, step, T0 , expectValidSquads } from './helpers';
 
 /**
  * Replaces the current event with a fresh instance of the given template,
@@ -40,17 +40,7 @@ function resolve(s: GameState, optionId: string, boostId: string | null = null) 
   return run(s, { type: 'resolveEvent', eventId: ev.id, revision: s.revision, optionId, boostId });
 }
 
-function checkInvariants(s: GameState) {
-  const seen = new Map<string, string>();
-  for (const id of s.clubOrder) {
-    for (const pid of s.clubs[id].roster) {
-      expect(seen.has(pid), `player ${pid} on two rosters`).toBe(false);
-      seen.set(pid, id);
-      expect(s.players[pid].clubId).toBe(id);
-    }
-    expect(squadProblem(s, s.clubs[id].roster)).toBeNull();
-  }
-}
+const checkInvariants = (s: GameState) => expectValidSquads(s);
 
 describe('content coverage', () => {
   it('has all 12 original event types and at least 18 templates', () => {
@@ -70,8 +60,9 @@ describe('content coverage', () => {
     }
     // Conditional templates (low moods, off-track goals) are covered by forced tests in step3.test.ts.
     const conditional = ['board_ultimatum', 'trade_request', 'fans_protest', 'board_course_change'];
-    // facility_expansion is legacy (weight 0): kept only for proposals already in older saves.
-    const expected = TEMPLATES.filter((t) => t.slot === 'management' && !t.urgent && !conditional.includes(t.id) && t.id !== 'facility_expansion').map((t) => t.id);
+    // Legacy templates (weight 0), kept only for events already in older saves: facility_expansion,
+    // and individual_training_prospect (a benched prospect; the fixed squad has no bench).
+    const expected = TEMPLATES.filter((t) => t.slot === 'management' && !t.urgent && !conditional.includes(t.id) && !['facility_expansion', 'individual_training_prospect'].includes(t.id)).map((t) => t.id);
     for (const id of expected) expect(seen.has(id), id).toBe(true);
     expect(seen.has('draft')).toBe(true);
   }, 120_000);
@@ -91,13 +82,18 @@ describe('recruitment', () => {
     expect(again.ok).toBe(false);
   });
 
-  it('a signed player joins once and is paid from the next round', () => {
+  it('a signed player joins once, takes a place and is paid from the next round; the replaced player is listed', () => {
     let s = force(newGame(2), 'free_agent');
     const opt = s.currentEvent!.options.find((o) => o.candidateId)!;
     const cash = s.clubs.hfx.cash;
+    const cand = s.currentEvent!.candidates.find((c) => c.id === opt.candidateId)!;
+    const { slot, outId } = replacementFor(s, 'hfx', cand);
     s = resolve(s, opt.id);
     const p = s.players[opt.candidateId!];
     expect(s.clubs.hfx.roster.filter((id) => id === p.id)).toHaveLength(1);
+    expect(playerAt(s, 'hfx', slot)).toBe(p.id);
+    expect(s.clubs.hfx.transferList?.map((x) => x.playerId)).toContain(outId);
+    expect(s.players[outId!].clubId).toBe('hfx');
     expect(s.clubs.hfx.cash).toBe(cash - opt.cost.cash);
     const r = s.calendar.round;
     expect(salaryDue(s, p.id, 1, r)).toBe(0);
@@ -105,20 +101,23 @@ describe('recruitment', () => {
     checkInvariants(s);
   });
 
-  it('the roster cap blocks signings with a reason', () => {
-    let s = newGame(3);
-    s = structuredClone(s);
-    // Fill the roster with copies of a bench player to hit the cap.
-    for (let i = s.clubs.hfx.roster.length; i < BALANCE.roster.max; i++) {
-      const id = `filler${i}`;
-      s.players[id] = { ...structuredClone(s.players.p11), id };
-      s.clubs.hfx.roster.push(id);
+  it('a listed player is sold to an AI club for a fee or released when the listing runs out', () => {
+    let s = structuredClone(newGame(3));
+    const out = s.clubs.hfx.lineup.battingOrder[0].playerId;
+    listForTransfer(s, 'hfx', out);
+    putInSlot(s, 'hfx', slotOf(s, 'hfx', out)!, null);
+    const cash = s.clubs.hfx.cash;
+    const rng = createRng(1);
+    for (let i = 0; i <= BALANCE.transfer.listRounds && (s.clubs.hfx.transferList ?? []).length; i++) {
+      s.calendar = { ...s.calendar, round: s.calendar.round + 1 };
+      settleTransferList(s, rng);
     }
-    s = force(s, 'tryouts');
-    const ev = s.currentEvent!;
-    const sign = ev.options.find((o) => o.candidateId)!;
-    expect(optionBlocker(s, ev, sign, null, T0)).toMatch(/exceed/);
-    expect(optionBlocker(s, ev, ev.options.find((o) => o.id === 'pass')!, null, T0)).toBeNull();
+    const p = s.players[out];
+    expect((s.clubs.hfx.transferList ?? []).length).toBe(0);
+    if (p.clubId) {
+      expect(p.clubId).not.toBe('hfx');
+      expect(s.clubs.hfx.cash).toBeGreaterThan(cash);
+    } else expect(s.clubs.hfx.cash).toBe(cash);
   });
 });
 
@@ -161,18 +160,17 @@ describe('economy safety net', () => {
     expect(absoluteRound(s.calendar.season, s.calendar.round)).toBeGreaterThanOrEqual(done);
   });
 
-  it('releasing a player pays a buyout and keeps the squad valid', () => {
-    const s = newGame(7);
-    const r = execute(s, { type: 'releasePlayer', playerId: 'p11' }, T0);
+  it('only a transfer-listed player can be released early, with a buyout; squad players cannot', () => {
+    const s = structuredClone(newGame(7));
+    const squad = s.clubs.hfx.roster[0];
+    expect(execute(s, { type: 'releasePlayer', playerId: squad }, T0).ok).toBe(false);
+    listForTransfer(s, 'hfx', squad);
+    const r = execute(s, { type: 'releasePlayer', playerId: squad }, T0);
     expect(r.ok).toBe(true);
     if (r.ok) {
-      expect(r.state.clubs.hfx.roster).not.toContain('p11');
+      expect(r.state.players[squad].clubId).toBe('');
       expect(r.state.clubs.hfx.cash).toBeLessThan(s.clubs.hfx.cash);
-      checkInvariants(r.state);
     }
-    // The only catchers cannot both go.
-    const r2 = execute(s, { type: 'releasePlayer', playerId: 'p10' }, T0);
-    expect(r2.ok && execute(r2.state, { type: 'releasePlayer', playerId: 'p11' }, T0).ok).toBe(false);
   });
 });
 

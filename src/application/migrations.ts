@@ -1,4 +1,4 @@
-import { withPitchingRatings } from '../domain/pitching';
+import { fixPitcherRole, withPitchingRatings } from '../domain/pitching';
 import { createPlayer, marketSalary } from '../content/playerFactory';
 import { defaultStaff, nextStarter, normalizeStaff } from '../domain/staff';
 import { hashSeed } from '../domain/rng';
@@ -14,6 +14,7 @@ import { createRng } from '../domain/rng';
 import { SCHEMA_VERSION, type GameState } from '../domain/state';
 import { buildEvent, planPreseason } from '../events/planner';
 import { startNextSeason } from '../simulation/season';
+import { buildSquad } from '../domain/squad';
 
 type AnyState = Record<string, unknown> & { schemaVersion: number };
 
@@ -287,6 +288,27 @@ export function migrate(input: AnyState): GameState {
     for (const p of Object.values(s.players)) trim(p);
     for (const ev of [s.currentEvent, s.nextEvent]) for (const c of ev?.candidates ?? []) trim(c);
     s.schemaVersion = 17;
+  }
+  if (s.schemaVersion === 17) {
+    // The fixed squad: each club keeps nine hitters in their places (its saved lineup when valid)
+    // and five pitchers in their roles. The user's other players go to the transfer list, AI
+    // clubs release theirs; empty places get replacements (fixed per-club seed). Fitness is
+    // no longer carried between games, and start promises no longer apply.
+    for (const p of Object.values(s.players)) {
+      p.fitness = 100;
+      fixPitcherRole(p);
+    }
+    for (const ev of [s.currentEvent, s.nextEvent]) for (const c of ev?.candidates ?? []) fixPitcherRole(c);
+    for (const clubId of s.clubOrder) {
+      const rng = createRng(hashSeed(`v18:${s.seed}:${clubId}`));
+      buildSquad(s, clubId, rng, s.clubs[clubId].isUser ? 'list' : 'release');
+    }
+    for (const pr of s.promises) {
+      if (pr.status !== 'active') continue;
+      pr.status = 'void';
+      pr.closeReason = 'Everyone in the squad now plays every game.';
+    }
+    s.schemaVersion = 18;
   }
   if (s.schemaVersion !== SCHEMA_VERSION) throw new Error(`Cannot migrate save v${s.schemaVersion}`);
   return s;

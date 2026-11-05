@@ -1,4 +1,4 @@
-import { effectiveValue, restStage, teamStatus, type TeamStatus } from './effective';
+import { effectiveValue, teamStatus, type TeamStatus } from './effective';
 import { pitcherPosition } from './pitching';
 import type { GameState } from './state';
 import type { ClubId, PitchingBullpen, Player, PlayerId } from './types';
@@ -42,18 +42,28 @@ const slotScore = (state: GameState, p: Player, slot: PitchingSlot, status: Team
  * one kind falls back to the other (so a game can always be played).
  */
 export function bestPitching(state: GameState, clubId: ClubId, starterId?: PlayerId): { starterId: PlayerId; bullpen: PitchingBullpen } {
+  // A fixed squad keeps its roles: the starter and the relief roles are the pitchers in those places.
+  const fixed = fixedPitching(state, clubId);
+  if (fixed && (!starterId || starterId === fixed.starterId)) return fixed;
   const status = teamStatus(state, clubId);
   const all = pitchersOf(state, clubId);
   const rank = (list: Player[], slot: PitchingSlot) => [...list].sort((a, b) => slotScore(state, b, slot, status) - slotScore(state, a, slot, status) || a.id.localeCompare(b.id));
   const sp = all.filter((p) => canPitchIn(p, 'starter'));
-  // A starter on short rest (Tired or Exhausted) is only picked when no rested starter is left,
-  // so the rotation keeps turning instead of the ace going on one game's rest.
-  const rested = sp.filter((p) => restStage(p) >= 2);
-  const starter = (starterId && all.find((p) => p.id === starterId)) || rank(rested.length ? rested : sp.length ? sp : all, 'starter')[0];
+  const starter = (starterId && all.find((p) => p.id === starterId)) || rank(sp.length ? sp : all, 'starter')[0];
   if (!starter) return { starterId: '', bullpen: emptyBullpen() };
   const others = all.filter((p) => p.id !== starter.id);
   const pen = [...rank(others.filter((p) => canPitchIn(p, 'closer')), 'closer'), ...rank(others.filter((p) => !canPitchIn(p, 'closer')), 'closer')];
   return { starterId: starter.id, bullpen: { closer: pen[0]?.id ?? null, setup: pen[1]?.id ?? null, middle: pen[2]?.id ?? null, long: pen[3]?.id ?? null } };
+}
+
+/** The club's fixed pitching places when every one is filled by one of its pitchers, else null. */
+export function fixedPitching(state: GameState, clubId: ClubId): { starterId: PlayerId; bullpen: PitchingBullpen } | null {
+  const club = state.clubs[clubId];
+  const own = new Set(pitchersOf(state, clubId).map((p) => p.id));
+  const pen = { ...emptyBullpen(), ...club.pitchingPlan.bullpen };
+  const ids = [club.lineup.pitcherId, ...RELIEF_SLOTS.map((s) => pen[s])];
+  if (ids.some((id) => !id || !own.has(id)) || new Set(ids).size !== ids.length) return null;
+  return { starterId: club.lineup.pitcherId, bullpen: pen };
 }
 
 /**

@@ -1,5 +1,4 @@
-import { BALANCE } from '../balance/config';
-import { restLabel, restStage, teamStatus } from '../domain/effective';
+import { teamStatus } from '../domain/effective';
 import { fieldingAt } from '../domain/lineup';
 import { bullpenToday } from '../domain/todayPitching';
 import type { GameState } from '../domain/state';
@@ -46,14 +45,11 @@ export function opponentReport(state: GameState, gameId: GameId): { opponentId: 
     const pit = sp.ratings.pitching;
     if (pit >= 64) obs.push({ kind: 'Trait', text: `Probable starter ${sp.lastName} gets a lot of strikeouts (pitching ${Math.round(pit)}).`, hint: { area: 'batting', value: 'contact', text: 'A contact approach cuts strikeouts.' }, weight: pit - 50 });
     else if (pit <= 46) obs.push({ kind: 'Trait', text: `Probable starter ${sp.lastName} is hittable (pitching ${Math.round(pit)}).`, hint: { area: 'batting', value: 'power', text: 'Strong hitters could swing for power.' }, weight: 55 - pit });
-    const stage = restStage(sp);
-    if (stage < 2) obs.push({ kind: 'Status', text: `${sp.lastName} starts on short rest (${restLabel(stage)}, ${BALANCE.modifiers.restStages[stage].modifier} today).`, hint: { area: 'batting', value: 'power', text: 'A tired arm leaves pitches up.' }, weight: 40 - stage * 10 });
   }
 
-  // Status: today's relief slots, by rest stage.
-  const pen = Object.values(bullpenToday(state, oppId, lineup.pitcherId, opp.pitchingPlan.bullpen)).filter((p) => !!p);
-  const tired = pen.filter((p) => restStage(p!) < 2);
-  if (tired.length >= 2) obs.push({ kind: 'Status', text: `Their bullpen is worn: ${tired.map((p) => p!.lastName).join(' and ')} pitched recently.`, hint: { area: 'pitching', value: 'attack', text: 'Their relievers may be vulnerable late.' }, weight: 15 + tired.length * 6 });
+  // Trait: the closer.
+  const closer = bullpenToday(state, oppId, lineup.pitcherId, opp.pitchingPlan.bullpen).closer;
+  if (closer && closer.ratings.pitching >= 66) obs.push({ kind: 'Trait', text: `Their closer ${closer.lastName} is tough to score against late (pitching ${closer.ratings.pitching}).`, hint: { area: 'batting', value: 'contact', text: 'Get the lead before the 9th.' }, weight: closer.ratings.pitching - 52 });
 
   // Status: the squad's Team state (morale, hot and cold players, fans).
   const team = teamStatus(state, oppId);

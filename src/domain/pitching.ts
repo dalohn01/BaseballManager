@@ -15,7 +15,17 @@ export const HITTER_KEYS: RatingKey[] = ['contact', 'power', 'speed', 'fielding'
 
 export type PitcherPosition = 'SP' | 'RP';
 
-export const pitcherPosition = (p: Player): PitcherPosition => (p.ratings.stamina >= BALANCE.pitching.starterStaminaFrom ? 'SP' : 'RP');
+/**
+ * A pitcher's kind: fixed on the player once set (so training or ageing that
+ * moves his stamina never turns a reliever into a starter mid-squad), else
+ * from stamina.
+ */
+export const pitcherPosition = (p: Player): PitcherPosition => p.pitcherRole ?? (p.ratings.stamina >= BALANCE.pitching.starterStaminaFrom ? 'SP' : 'RP');
+
+/** Fixes the pitcher's kind from his current stamina (new players, older saves). */
+export function fixPitcherRole(p: Player) {
+  if (p.isPitcher && !p.pitcherRole) p.pitcherRole = p.ratings.stamina >= BALANCE.pitching.starterStaminaFrom ? 'SP' : 'RP';
+}
 
 /** Display position: SP/RP for pitchers, the primary field position for hitters. */
 export const positionLabel = (p: Player): string => (p.isPitcher ? pitcherPosition(p) : p.positions.join('/'));

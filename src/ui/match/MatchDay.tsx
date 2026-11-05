@@ -1,5 +1,5 @@
 import { pitcherPosition } from '../../domain/pitching';
-import { effectiveValue, restText } from '../../domain/effective';
+import { effectiveValue } from '../../domain/effective';
 import { draftFromClub } from '../../domain/lineupDraft';
 import { useSyncExternalStore } from 'react';
 import { ballparkName } from '../../content/ballparks';
@@ -100,7 +100,7 @@ export function MatchDayCard({ ev }: { ev: EventInstance }) {
               <small>Probable starter</small>
               <strong>{playerName(starter)}</strong>
               <small className="muted">
-                {pitcherPosition(starter)} · OVR {sv!.ovr} · EFF {sv!.effective} · {restText(starter)}
+                {pitcherPosition(starter)} · OVR {sv!.ovr} · EFF {sv!.effective} · Stamina {starter.ratings.stamina}
               </small>
             </span>
           </div>

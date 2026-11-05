@@ -3,14 +3,13 @@ import { BALANCE } from '../src/balance/config';
 import { execute, optionBlocker } from '../src/application/engine';
 import { migrate } from '../src/application/migrations';
 import { createRng } from '../src/domain/rng';
-import { squadProblem } from '../src/domain/roster';
 import type { GameState } from '../src/domain/state';
 import { absoluteRound, SCHEMA_VERSION } from '../src/domain/state';
 import { getTemplate } from '../src/events/registry';
 import { describeLineupChange, leagueGameOptionNotes, lineupForChoice } from '../src/events/templates/leagueGame';
 import { lossExpectation } from '../src/simulation/round';
 import { expiringPlayers, renewalTerms, startNextSeason } from '../src/simulation/season';
-import { newGame, playSeason, run, T0, toNextEvent } from './helpers';
+import { newGame, playSeason, run, T0, toNextEvent, expectValidSquads } from './helpers';
 
 function force(s: GameState, templateId: string): GameState {
   const next = structuredClone(toNextEvent(s));
@@ -45,17 +44,8 @@ function toRound1(s: GameState): GameState {
 }
 
 function checkInvariants(s: GameState) {
-  const seen = new Set<string>();
-  for (const id of s.clubOrder) {
-    for (const pid of s.clubs[id].roster) {
-      expect(seen.has(pid)).toBe(false);
-      seen.add(pid);
-      expect(s.players[pid].clubId).toBe(id);
-      expect(s.players[pid].contract.seasonsLeft).toBeGreaterThan(0);
-    }
-    expect(squadProblem(s, s.clubs[id].roster)).toBeNull();
-    expect(s.clubs[id].roster.length).toBeGreaterThanOrEqual(BALANCE.offseason.minRosterSize);
-  }
+  expectValidSquads(s);
+  for (const id of s.clubOrder) for (const pid of s.clubs[id].roster) expect(s.players[pid].contract.seasonsLeft).toBeGreaterThan(0);
 }
 
 describe('two consecutive seasons', () => {
@@ -74,69 +64,22 @@ describe('two consecutive seasons', () => {
   }, 300_000);
 });
 
-describe('chain 1: promise of starts', () => {
-  function withPromise(seed: number) {
-    let s = toRound1(newGame(seed));
-    s = force(s, 'individual_training_prospect');
-    const ev = s.currentEvent!;
-    s = ack(resolve(s, 'promise'));
-    const pr = s.promises[s.promises.length - 1];
-    expect(pr.originEventId).toBe(ev.id);
-    return { s, pr };
-  }
-
-  it('is kept when he actually starts, and a follow-up event arrives next round', () => {
-    let { s, pr } = withPromise(11);
-    for (let i = 0; i < 60 && s.promises.find((p) => p.id === pr.id)!.status === 'active'; i++) s = calmStep(s);
-    const closed = s.promises.find((p) => p.id === pr.id)!;
-    expect(closed.status).toBe('kept');
-    expect(closed.progress).toBeGreaterThanOrEqual(closed.threshold);
-    const roundKept = closed.closedAt!.round;
-    for (let i = 0; i < 15 && s.currentEvent!.templateId !== 'promise_followup'; i++) s = calmStep(s);
-    expect(s.currentEvent!.templateId).toBe('promise_followup');
-    expect(s.currentEvent!.round).toBeLessThanOrEqual(roundKept + 1);
-    expect(s.currentEvent!.context).toContain(`round ${pr.madeAt.round}`);
-  });
-
-  it('is broken when he is benched, with a real consequence', () => {
-    let { s, pr } = withPromise(12);
-    const bench = (st: GameState) => {
-      const club = st.clubs[st.userClubId];
-      if (!club.lineup.battingOrder.some((x) => x.playerId === pr.playerId)) return st;
-      const lineup = structuredClone(club.lineup);
-      lineup.battingOrder.find((x) => x.playerId === pr.playerId)!.playerId = pr.rivalId!;
-      return run(st, { type: 'setLineup', lineup });
-    };
-    const satBefore = s.players[pr.playerId].satisfaction;
-    for (let i = 0; i < 20 && s.promises.find((p) => p.id === pr.id)!.status === 'active'; i++) s = calmStep(s, bench);
-    const closed = s.promises.find((p) => p.id === pr.id)!;
-    expect(closed.status).toBe('broken');
-    const lastGame = s.history.filter((h) => h.type === 'leagueGame').pop()!;
-    expect(lastGame.effects.some((e) => e.targetId === pr.playerId && e.stat === 'satisfaction' && e.after - e.before <= BALANCE.promises.broken)).toBe(true);
-    expect(s.players[pr.playerId].satisfaction).toBeLessThan(satBefore);
-    expect(s.followUps.some((f) => f.data.promiseId === pr.id) || s.currentEvent!.templateId === 'promise_followup' || s.nextEvent?.templateId === 'promise_followup').toBe(true);
+describe('no start promises in a fixed squad', () => {
+  it('everyone plays every game, so the benched-prospect event and start promises do not arise', () => {
+    const s = structuredClone(toRound1(newGame(11)));
+    expect(getTemplate('individual_training_prospect').weight(s)).toBe(0);
+    const unhappy = s.clubs.hfx.roster[0];
+    s.players[unhappy].satisfaction = 20;
+    s.cycle.lowStreak.players[unhappy] = 2;
+    const f = force(s, 'trade_request');
+    expect(f.currentEvent!.options.some((o) => o.id === 'promise')).toBe(false);
   });
 });
 
 describe('pre-match choices explain themselves', () => {
-  it('shows concrete lineup changes, real resting and promise warnings', () => {
-    let s = structuredClone(toRound1(newGame(21)));
-    s = run(s, { type: 'autoLineup', mode: 'strongest' });
+  it('shows concrete lineup changes', () => {
+    const s = structuredClone(toRound1(newGame(21)));
     expect(leagueGameOptionNotes(s, 'strongest').map((n) => n.text)).toContain('Same as your lineup');
-
-    for (const id of s.clubs.hfx.roster) s.players[id].fitness = 100;
-    expect(leagueGameOptionNotes(s, 'rest').map((n) => n.text)).toContain(`Everyone at ${BALANCE.fitness.restBelow}%+ fitness`);
-
-    // Bench a promised player in the saved lineup: "Your lineup" must warn.
-    s = force(s, 'individual_training_prospect');
-    s = ack(resolve(s, 'promise'));
-    const pr = s.promises[s.promises.length - 1];
-    const lineup = structuredClone(s.clubs.hfx.lineup);
-    lineup.battingOrder.find((x) => x.playerId === pr.playerId)!.playerId = pr.rivalId!;
-    s = run(s, { type: 'setLineup', lineup });
-    const warn = leagueGameOptionNotes(s, 'current').find((n) => n.text.includes(s.players[pr.playerId].lastName));
-    expect(warn?.tone).toBe('negative');
-    expect(warn?.text).toMatch(/misses a promised start|Breaks the promise/);
     // The strongest lineup lists who changes compared with the saved one.
     const diff = describeLineupChange(s, s.clubs.hfx.lineup, lineupForChoice(s, 'strongest'));
     expect(leagueGameOptionNotes(s, 'strongest').some((n) => diff.slice(0, 4).includes(n.text) || n.text === 'Same as your lineup')).toBe(true);
@@ -196,14 +139,15 @@ describe('season plan and owners', () => {
 describe('low values have different, payable consequences', () => {
   it('an unhappy player asks for a trade; unhappy owners impose a freeze; unhappy fans protest', () => {
     let s = structuredClone(toRound1(newGame(17)));
-    s.players.p2.satisfaction = 20;
+    const unhappy = s.clubs.hfx.lineup.battingOrder[1].playerId;
+    s.players[unhappy].satisfaction = 20;
     s.clubs.hfx.ownerConfidence = 30;
     s.clubs.hfx.fanSupport = 30;
     // A single low reading is not enough: serious events need the problem to have lasted.
     expect(getTemplate('trade_request').weight(s)).toBe(0);
     expect(getTemplate('board_ultimatum').weight(s)).toBe(0);
     expect(getTemplate('fans_protest').weight(s)).toBe(0);
-    s.cycle.lowStreak = { owners: 2, fans: 2, players: { p2: 2 } };
+    s.cycle.lowStreak = { owners: 2, fans: 2, players: { [unhappy]: 2 } };
     expect(getTemplate('trade_request').weight(s)).toBeGreaterThan(0);
     expect(getTemplate('board_ultimatum').weight(s)).toBeGreaterThan(0);
     expect(getTemplate('fans_protest').weight(s)).toBeGreaterThan(0);
@@ -250,8 +194,7 @@ describe('off-season squad completion', () => {
     const s = structuredClone(newGame(23));
     for (const id of s.clubs.hfx.roster) s.players[id].contract.seasonsLeft = 1;
     startNextSeason(s, createRng(5));
-    expect(s.clubs.hfx.roster.length).toBeGreaterThanOrEqual(BALANCE.offseason.minRosterSize);
-    expect(squadProblem(s, s.clubs.hfx.roster)).toBeNull();
+    expectValidSquads(s);
   });
 });
 
@@ -266,9 +209,9 @@ describe('migration v3 → v4 (fatigue → fitness)', () => {
     }
     const m = migrate(v3);
     expect(m.schemaVersion).toBe(SCHEMA_VERSION);
-    // Pitchers added by later migrations (fuller staffs) come in fresh; everyone from v3 keeps 88%.
-    for (const p of Object.values(m.players).filter((x) => x.id in v3.players)) {
-      expect(p.fitness).toBe(88);
+    // Fitness is no longer carried between games: everyone ends up fully ready.
+    for (const p of Object.values(m.players)) {
+      expect(p.fitness).toBe(100);
       expect('fatigue' in p).toBe(false);
     }
     expect(execute(m, { type: 'resolveEvent', eventId: m.currentEvent!.id, revision: m.revision, optionId: 'balanced', boostId: null }, T0).ok).toBe(true);
