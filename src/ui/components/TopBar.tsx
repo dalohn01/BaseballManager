@@ -3,7 +3,7 @@ import { userClub } from '../../domain/state';
 import { BALANCE } from '../../balance/config';
 import { viewTime } from '../../domain/time';
 import { duration } from '../format';
-import { CashPill } from './CashPill';
+import { CashPill, InfluencePill } from './CashPill';
 import { href, useGame, useNow, type Route } from '../hooks';
 import { Crest } from './art';
 import { Icon } from './icons';
@@ -58,11 +58,7 @@ export function TopBar({ route }: { route: Route }) {
               </span>
             )}
           </span>
-          <span className="pill" title={`Influence ${Math.floor(s.influence)} / ${BALANCE.influence.cap}`}>
-            <Icon name="influence" className="ico-influence" />
-            <span className="sr-only">Influence</span>
-            {Math.floor(s.influence)}
-          </span>
+          <InfluencePill value={s.influence} cap={BALANCE.influence.cap} />
           <a className="icon-btn" href={href('settings')} aria-label="Settings" aria-current={active === 'settings' ? 'page' : undefined}>
             <Icon name="gear" size={24} />
           </a>

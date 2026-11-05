@@ -1,16 +1,17 @@
 import { useLineupOpen } from '../match/MatchDay';
-import { TeamOvrBadge } from '../components/TeamOvr';
 import { useEffect, useRef } from 'react';
-import { CycleNotice } from './InfluenceView';
 import { BALANCE } from '../../balance/config';
 import { moodLabel } from '../../domain/mood';
 import type { GameState } from '../../domain/state';
-import { absoluteRound, clubName, clubPlayers, shortName } from '../../domain/state';
+import { absoluteRound, clubPlayers, shortName } from '../../domain/state';
 import { dayLabel, daysUntilRound, describeDay, inDays, nextDay } from '../../domain/calendar';
 import { DIRECTION_LABEL, goalProgress } from '../../simulation/goals';
 import { money } from '../format';
 import { computeStandings } from '../../simulation/standings';
 import { Crest } from '../components/art';
+import { ballparkName } from '../../content/ballparks';
+import { ovrDisplay, ovrProfile, teamOvr } from '../../domain/teamOvr';
+import { overallTier, TIER_LABEL } from '../../domain/ratings';
 import { Meter, Panel } from '../components/common';
 import { Icon } from '../components/icons';
 import { href, useGame } from '../hooks';
@@ -60,7 +61,6 @@ export function HomeScreen() {
       <div className="home-grid">
         <div className="home-main" ref={mainRef}>
           <SeasonCalendar />
-          <CycleNotice />
           <DailyEventStack />
         </div>
         <aside className="home-left">
@@ -161,35 +161,79 @@ function NextMatch() {
   const fromRound = s.calendar.phase === 'postseason' ? Infinity : s.calendar.round;
   const g = s.schedule.find((x) => x.season === season && x.round >= fromRound && !x.result && (x.homeId === s.userClubId || x.awayId === s.userClubId));
   if (!g) return <Panel title="Next match"><p className="muted">No games left this season.</p></Panel>;
-  const home = s.clubs[g.homeId];
-  const away = s.clubs[g.awayId];
   const days = daysUntilRound(s.calendar, g.round);
   const upNow = ev?.type === 'leagueGame' && ev.status === 'pending';
+  const table = computeStandings(s);
   return (
-    <Panel title="Next match">
-      <div className="nm-teams">
-        <div>
-          <Crest club={home} size={54} />
-          <span>{clubName(home)}</span>
-          <TeamOvrBadge state={s} clubId={home.id} size="xs" />
-        </div>
-        <span className="vs">VS</span>
-        <div>
-          <Crest club={away} size={54} />
-          <span>{clubName(away)}</span>
-          <TeamOvrBadge state={s} clubId={away.id} size="xs" />
-        </div>
-      </div>
-      <p className="nm-meta">
-        {g.homeId === s.userClubId ? 'Home' : 'Away'} · Round {g.round}
-      </p>
-      <p className={`nm-days ${days === 0 ? 'today' : ''}`}>
-        <Icon name="time" size={16} /> {upNow ? 'Up now' : inDays(days)}
-      </p>
+    <Panel
+      title="Next match"
+      className="next-match"
+      action={
+        <span className={`nm-days ${days === 0 || upNow ? 'today' : ''}`}>
+          <Icon name="time" size={15} /> {upNow ? 'Up now' : inDays(days)}
+        </span>
+      }
+    >
+      <ul className="nm-rows">
+        {[g.homeId, g.awayId].map((id) => (
+          <NextMatchTeam key={id} state={s} clubId={id} home={id === g.homeId} rank={table.findIndex((r) => r.clubId === id)} row={table.find((r) => r.clubId === id)!} />
+        ))}
+      </ul>
+      <p className="nm-meta">Round {g.round} · {ballparkName(s.clubs[g.homeId])}</p>
     </Panel>
   );
 }
 
+const ordinal = (n: number) => `${n}${n % 10 === 1 && n % 100 !== 11 ? 'st' : n % 10 === 2 && n % 100 !== 12 ? 'nd' : n % 10 === 3 && n % 100 !== 13 ? 'rd' : 'th'}`;
+
+/** One side of the next match: crest, name, table position and record, last five results, team OVR. */
+function NextMatchTeam({ state: s, clubId, home, rank, row }: { state: GameState; clubId: string; home: boolean; rank: number; row: { wins: number; losses: number } }) {
+  const club = s.clubs[clubId];
+  const form = s.schedule
+    .filter((x) => x.season === s.calendar.season && x.result && (x.homeId === clubId || x.awayId === clubId))
+    .sort((a, b) => a.round - b.round)
+    .slice(-5)
+    .map((x) => {
+      const r = x.result!;
+      const ours = x.homeId === clubId ? r.homeRuns : r.awayRuns;
+      const theirs = x.homeId === clubId ? r.awayRuns : r.homeRuns;
+      return { won: ours > theirs, text: `${ours}–${theirs} ${x.homeId === clubId ? 'vs' : '@'} ${s.clubs[x.homeId === clubId ? x.awayId : x.homeId].name}` };
+    });
+  const o = teamOvr(s, clubId);
+  const ovr = o ? ovrDisplay(o.overall) : null;
+  const played = row.wins + row.losses;
+  return (
+    <li className={`nm-row ${clubId === s.userClubId ? 'me' : ''}`}>
+      <Crest club={club} size={34} />
+      <span className="nm-id">
+        <strong>
+          {club.name}
+          {home && <span className="nm-home">Home</span>}
+        </strong>
+        <small>{played ? `${ordinal(rank + 1)} · ${row.wins}–${row.losses}` : 'No games yet'}</small>
+      </span>
+      <span className="nm-form" aria-label={form.length ? `Last ${form.length}: ${form.map((f) => (f.won ? 'W' : 'L')).join(' ')}` : 'No results yet'}>
+        {form.length === 0 ? (
+          <small className="muted">–</small>
+        ) : (
+          form.map((f, i) => (
+            <span key={i} className={`nm-res ${f.won ? 'w' : 'l'}`} title={f.text} aria-hidden="true">
+              {f.won ? 'W' : 'L'}
+            </span>
+          ))
+        )}
+      </span>
+      {ovr !== null ? (
+        <span className={`ovr ovr-sm nm-ovr ovr-${overallTier(ovr)}`} title={`Team OVR ${ovr} (${TIER_LABEL[overallTier(ovr)]}) · ${ovrProfile(o!)}. Batting ${ovrDisplay(o!.batting)}, pitching ${ovrDisplay(o!.pitching)}, defense ${ovrDisplay(o!.defense)}.`}>
+          {ovr}
+          <span className="ovr-lbl">OVR</span>
+        </span>
+      ) : (
+        <span className="muted">—</span>
+      )}
+    </li>
+  );
+}
 
 function MiniTable() {
   const s = useGame();

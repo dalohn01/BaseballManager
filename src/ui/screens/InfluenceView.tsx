@@ -4,7 +4,7 @@ import { useState } from 'react';
 import { BALANCE } from '../../balance/config';
 import { moodLabel } from '../../domain/mood';
 import type { CycleRecord } from '../../domain/state';
-import { absoluteRound, clubPlayers, userClub } from '../../domain/state';
+import { clubPlayers, userClub } from '../../domain/state';
 import { boardCheckpoints } from '../../events/planner';
 import { actionPreview } from '../../simulation/actions';
 import { drift, forecast, squadMean } from '../../simulation/cycle';
@@ -228,20 +228,5 @@ function CycleLog({ records }: { records: CycleRecord[] }) {
         </li>
       ))}
     </ol>
-  );
-}
-
-/** The latest refill, shown quietly when the next club phase opens (already saved; nothing to claim). */
-export function CycleNotice() {
-  const s = useGame();
-  const ev = s.currentEvent;
-  const last = s.cycle.log.at(-1);
-  const cal = s.calendar;
-  if (!last || cal.phase !== 'regular' || dayKind(cal) !== 'club' || (ev && ev.phase !== 'club') || absoluteRound(cal.season, cal.round) !== absoluteRound(last.season, last.round) + 1) return null;
-  return (
-    <p className="cycle-notice" role="status">
-      <Icon name="influence" size={16} /> Round {last.round} closed: Influence +{Math.floor(last.credited)}
-      {last.credited < last.income ? ` (cap reached; ${Math.floor(last.income)} earned)` : ''} · Board {Math.round(last.board.after)} · Fans {Math.round(last.fans.after)} · Players {Math.round(last.players.after)}
-    </p>
   );
 }

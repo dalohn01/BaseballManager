@@ -95,3 +95,54 @@ export function CashPill({ state }: { state: GameState }) {
     </span>
   );
 }
+
+/** Influence in the top bar: like Club Cash, it counts to its new value and the change floats in. */
+export function InfluencePill({ value, cap }: { value: number; cap: number }) {
+  const reduced = useReducedMotion();
+  const target = Math.floor(value);
+  const [shown, setShown] = useState(target);
+  const [delta, setDelta] = useState<{ amount: number; key: number } | null>(null);
+  const shownRef = useRef(target);
+  const lastTarget = useRef(target);
+  const raf = useRef(0);
+  useEffect(() => {
+    if (lastTarget.current !== target) {
+      setDelta({ amount: target - lastTarget.current, key: Date.now() });
+      lastTarget.current = target;
+    }
+    const start = shownRef.current;
+    if (start === target) return;
+    if (reduced) {
+      shownRef.current = target;
+      setShown(target);
+      return;
+    }
+    const t0 = performance.now();
+    const tick = (now: number) => {
+      const k = Math.min(1, (now - t0) / COUNT_MS);
+      shownRef.current = Math.round(start + (target - start) * (1 - Math.pow(1 - k, 3)));
+      setShown(shownRef.current);
+      if (k < 1) raf.current = requestAnimationFrame(tick);
+    };
+    raf.current = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf.current);
+  }, [target, reduced]);
+  useEffect(() => {
+    if (!delta) return;
+    const id = window.setTimeout(() => setDelta(null), DELTA_MS);
+    return () => window.clearTimeout(id);
+  }, [delta]);
+  return (
+    <span className="pill cash-pill" title={`Influence ${target} / ${cap}`}>
+      <Icon name="influence" className="ico-influence" />
+      <span className="sr-only">Influence</span>
+      {shown}
+      {delta && (
+        <span key={delta.key} className={`cash-delta ${delta.amount >= 0 ? 'pos' : 'neg'} ${reduced ? 'still' : ''}`} role="status">
+          {delta.amount >= 0 ? '+' : '−'}
+          {Math.abs(delta.amount)}
+        </span>
+      )}
+    </span>
+  );
+}
