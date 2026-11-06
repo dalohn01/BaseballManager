@@ -1,4 +1,4 @@
-import { bestPitching, canPitchIn, emptyBullpen, RELIEF_SLOTS, slotOf, type PitchingSlot } from './todayPitching';
+import { bestPitching, canPitchIn, emptyBullpen, slotOf, type PitchingSlot } from './todayPitching';
 import { autoLineup, isLineupValid, validateLineup, validatePitchingPlan, type LineupIssue } from './lineup';
 import type { GameState } from './state';
 import { userClub } from './state';
@@ -33,23 +33,6 @@ export function draftIssues(state: GameState, d: LineupDraft): LineupIssue[] {
 }
 
 export const draftErrors = (state: GameState, d: LineupDraft) => draftIssues(state, d).filter((i) => i.severity === 'error');
-
-/** Bench player replaces a starter: same position, same batting spot; the starter goes to the bench. */
-export function swapFromBench(d: LineupDraft, slotIndex: number, playerId: PlayerId): LineupDraft {
-  const next = clone(d);
-  next.lineup.battingOrder[slotIndex] = { ...next.lineup.battingOrder[slotIndex], playerId };
-  return next;
-}
-
-/** A starter goes to the bench: his batting spot and position stay, open until someone comes in. */
-export function benchBatter(d: LineupDraft, slotIndex: number): LineupDraft {
-  const next = clone(d);
-  if (next.lineup.battingOrder[slotIndex]) next.lineup.battingOrder[slotIndex] = { ...next.lineup.battingOrder[slotIndex], playerId: '' };
-  return next;
-}
-
-/** The first open batting spot, or -1. */
-export const openSpot = (d: LineupDraft) => d.lineup.battingOrder.findIndex((s) => !s.playerId);
 
 /**
  * A starter takes another defensive position. Whoever had it takes his old
@@ -123,14 +106,6 @@ export function assignPitcher(state: GameState, d: LineupDraft, slot: PitchingSl
   return next;
 }
 
-/** Takes a reliever out of today's staff (the starting slot is never empty). */
-export function benchPitcher(d: LineupDraft, slot: Exclude<PitchingSlot, 'starter'>): LineupDraft {
-  const next = clone(d);
-  put(next, slot, null);
-  return next;
-}
-
-export const filledReliefSlots = (d: LineupDraft) => RELIEF_SLOTS.filter((s) => (d.plan.bullpen ?? emptyBullpen())[s]).length;
 
 export function setHook(d: LineupDraft, hook: PitchingPlan['hook']): LineupDraft {
   const next = clone(d);
@@ -143,13 +118,3 @@ export function setHook(d: LineupDraft, hook: PitchingPlan['hook']): LineupDraft
 export function bestLineup(state: GameState, d: LineupDraft): LineupDraft {
   return { ...clone(d), lineup: autoLineup(state, state.userClubId) };
 }
-
-/** The strongest pitching for today by effective value: starter and the three relief slots. */
-export function suggestPitching(state: GameState, d: LineupDraft): LineupDraft {
-  const next = clone(d);
-  const best = bestPitching(state, state.userClubId);
-  next.lineup.pitcherId = best.starterId;
-  next.plan = { ...next.plan, relieverId: null, rest: [], bullpen: best.bullpen };
-  return next;
-}
-

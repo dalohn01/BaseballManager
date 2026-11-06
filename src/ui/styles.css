@@ -1963,3 +1963,94 @@ button.link { background: none; border: none; padding: 0; min-height: 32px; curs
 .nm-res.l { background: #d23b3b; }
 .nm-ovr { min-width: 34px; height: 32px; }
 .next-match .nm-meta { margin: 8px 0 0; font-size: 0.78rem; text-align: center; }
+
+/* ---------- Pre-match, phone first ----------
+ * One column of cards (nine batters, then five pitchers). On wider screens
+ * the same column is centred and kept narrow, as on a phone.
+ */
+.m-prematch { max-width: 560px; margin-inline: auto; width: 100%; --fit-offset: 0px; }
+.m-prematch .pm-head { padding: 8px 12px; }
+.m-prematch .pm-footer { grid-template-columns: 1fr; gap: 6px; padding: 8px 10px; }
+.m-prematch .pm-quick { justify-content: flex-start; }
+.m-prematch .pm-status { justify-content: flex-start; }
+.m-prematch .pm-status:empty { display: none; }
+.m-prematch .pm-confirm-bar { display: flex; gap: 8px; justify-items: stretch; }
+.m-prematch .pm-confirm { flex: 1; min-height: 52px; font-size: 1.2rem; }
+.m-prematch .pm-blocker { flex-basis: 100%; }
+.m-prematch .pm-confirm-bar { flex-wrap: wrap; }
+
+.m-lineup { display: grid; gap: 6px; }
+.m-hint { margin: 0 2px; }
+.m-rows { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
+.m-row {
+  position: relative; display: grid; align-items: center; gap: 4px 8px;
+  grid-template-columns: 28px 22px auto minmax(0, 1fr) auto;
+  grid-template-areas: 'grip num pos who eff' 'grip sub sub sub sub';
+  background: #fff; border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px 8px 4px;
+  touch-action: pan-y; user-select: none;
+}
+.m-pitch .m-row { grid-template-columns: 28px auto minmax(0, 1fr) auto; grid-template-areas: 'grip pos who eff' 'grip sub sub sub'; }
+.m-row.empty { grid-template-areas: 'grip pos who'; color: var(--muted); }
+.m-grip { grid-area: grip; position: relative; display: grid; place-items: center; align-self: stretch; color: #9aa8bb; cursor: grab; touch-action: none; border-radius: 8px; }
+.m-grip.fixed { cursor: default; color: #c3ccd8; }
+.m-grip:focus-within { outline: 2px solid #3d7bd9; }
+.m-menu { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; min-height: 0; padding: 0; cursor: pointer; }
+/* The grip drags (mouse and touch); the move menu under it is for keyboards and screen readers. */
+.m-menu { pointer-events: none; }
+.m-num { grid-area: num; font-family: var(--display); font-weight: 900; font-size: 1.25rem; color: var(--navy); text-align: center; }
+.m-pos {
+  grid-area: pos; position: relative; display: inline-flex; align-items: center; justify-content: center; gap: 2px;
+  min-width: 42px; height: 30px; padding: 0 6px; border-radius: 7px; background: var(--navy); color: #fff;
+  font-family: var(--display); font-weight: 800; letter-spacing: 0.03em;
+}
+.m-pos.off { background: #fff4e5; color: #8a4b00; border: 1px dashed #e2a33a; }
+.m-pos select { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; min-height: 0; padding: 0; }
+.m-pos:focus-within { outline: 2px solid #3d7bd9; outline-offset: 2px; }
+.m-who { grid-area: who; display: flex; align-items: center; gap: 8px; min-width: 0; }
+.m-id { display: grid; min-width: 0; line-height: 1.2; }
+.m-id strong { font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-id small { color: var(--muted); font-size: 0.8rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.m-row .eff-block { grid-area: eff; grid-auto-flow: column; align-items: center; gap: 5px; }
+.m-row .eff-block strong { font-size: 1.45rem; }
+.m-sub { grid-area: sub; display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; min-width: 0; }
+.m-mods { display: inline-flex; gap: 8px; }
+.m-mod { display: inline-flex; align-items: center; gap: 3px; color: var(--muted); }
+.m-mod .mod-box { min-width: 30px; height: 22px; font-size: 0.8rem; padding: 0 4px; }
+.m-mod.pm-pos > svg:not(.form-icon) { color: #2aa65a; }
+.m-mod.pm-neg > svg:not(.form-icon) { color: #d23b3b; }
+.m-stats { color: var(--muted); font-size: 0.78rem; font-variant-numeric: tabular-nums; white-space: nowrap; }
+
+/* Dragging: the card follows the finger; the target is marked. */
+.m-row.dragging { z-index: 3; opacity: 0.9; box-shadow: 0 10px 24px rgba(15, 34, 72, 0.22); transition: none; }
+.m-row.mark-before::before, .m-row.mark-after::after { content: ''; position: absolute; left: 6px; right: 6px; height: 4px; border-radius: 2px; background: #3d7bd9; }
+.m-row.mark-before::before { top: -5px; }
+.m-row.mark-after::after { bottom: -5px; }
+.m-row.mark-replace { border-color: #3d7bd9; box-shadow: 0 0 0 3px rgba(61, 123, 217, 0.25); }
+
+@media (max-width: 380px) {
+  .m-row { padding-right: 8px; gap: 4px 6px; }
+  .m-id small { font-size: 0.75rem; }
+  .m-stats { font-size: 0.74rem; }
+}
+/* Second line: modifiers left, stats right, from under the number to the edge. */
+.m-row .m-sub { grid-column: 2 / -1; justify-content: space-between; gap: 4px 8px; }
+.m-pitch .m-row .m-sub { grid-column: 2 / -1; }
+.m-mods { gap: 6px; }
+.m-mod { gap: 2px; }
+.m-mod svg { width: 15px; height: 15px; }
+.m-mod .mod-box { min-width: 26px; height: 20px; font-size: 0.75rem; padding: 0 3px; }
+.m-stats { font-size: 0.72rem; }
+.m-row { padding-top: 6px; padding-bottom: 6px; }
+/* Phone banner: way back and title on one line, the matchup under it. */
+@media (max-width: 720px) {
+  .m-prematch { gap: 8px; }
+  .m-prematch .pm-head { gap: 6px; padding: 8px 12px; }
+  .m-prematch .pm-titles { flex-wrap: nowrap; gap: 8px; width: 100%; }
+  .m-prematch .pm-back { flex-basis: auto; font-size: 0.9rem; }
+  .m-prematch .pm-head .ribbon { display: none; }
+  .m-prematch .pm-title { font-size: 1.35rem; margin: 0 0 0 auto; }
+  .m-prematch .pm-matchup { gap: 8px; }
+  .m-prematch .pm-matchup svg { width: 26px; height: 26px; }
+  .m-prematch .pm-matchup strong { font-size: 0.95rem; }
+  .m-prematch .pm-quick .btn { min-height: 34px; padding: 4px 12px; }
+}

@@ -1,23 +1,23 @@
-import { useEffect, useRef, useState, type DragEvent } from 'react';
-import { MODIFIER_KEYS, MODIFIER_LABEL, modifiers, modifierTotal, teamStatus, type TeamStatus } from '../../domain/effective';
-import { benchBatter, moveBatter, openSpot, setPosition, swapFromBench } from '../../domain/lineupDraft';
-import { battingStats, fmtRate, playerNotes, type StatsPeriod } from '../../domain/playerStats';
-import { overall, overallAt } from '../../domain/ratings';
+import { BALANCE } from '../../balance/config';
+import { modifiers, modifierTotal, teamStatus, type TeamStatus } from '../../domain/effective';
+import { moveBatter, setPosition } from '../../domain/lineupDraft';
+import { battingStats, fmtRate, type StatsPeriod } from '../../domain/playerStats';
+import { overallAt } from '../../domain/ratings';
 import type { GameState } from '../../domain/state';
 import { playerName, userClub } from '../../domain/state';
 import type { LineupPosition, Player } from '../../domain/types';
 import { LINEUP_POSITIONS } from '../../domain/types';
-import { BALANCE } from '../../balance/config';
 import { Icon } from '../components/icons';
-import { ModChips, modifierReasons } from '../components/Modifiers';
+import { modifierReasons } from '../components/Modifiers';
 import { instructionSummary } from '../tactics/TacticsControls';
-import { ChangeButton, EffBlock, ModColumns, modIcon, PlayerIdent, StatBlock } from './LineupParts';
+import { EffBlock, ModRow } from './LineupParts';
 import type { DraftApi } from './PreMatchScreen';
-import { Notes, Portrait } from './shared';
+import { Portrait } from './shared';
+import { useRowDrag } from './useRowDrag';
 
-/** Value at a position today: OVR there (out of position costs fielding) plus the four modifiers. */
-function valueAt(state: GameState, p: Player, pos: LineupPosition | null, status: TeamStatus) {
-  const base = pos ? overallAt(p, pos) : overall(p);
+/** Value at his position today: OVR there (out of position costs fielding) plus the modifiers. */
+function valueAt(state: GameState, p: Player, pos: LineupPosition, status: TeamStatus) {
+  const base = overallAt(p, pos);
   const mods = modifiers(state, p, status);
   return { base, mods, effective: base + modifierTotal(mods) };
 }
@@ -25,299 +25,84 @@ function valueAt(state: GameState, p: Player, pos: LineupPosition | null, status
 const natural = (p: Player, pos: LineupPosition) => pos === 'DH' || p.positions.includes(pos);
 const ORDINAL = ['1st', '2nd', '3rd', '4th', '5th', '6th', '7th', '8th', '9th'];
 
-function batterStats(state: GameState, p: Player, period: StatsPeriod): [string, string][] {
+function batterLine(state: GameState, p: Player, period: StatsPeriod): string {
   const b = battingStats(state, p, period);
   const ops = b.obp !== null && b.slg !== null ? b.obp + b.slg : null;
-  return [
-    ['AVG', fmtRate(b.avg)],
-    ['HR', String(b.hr)],
-    ['RBI', String(b.rbi)],
-    ['OPS', fmtRate(ops)],
-  ];
+  return `AVG ${fmtRate(b.avg)} · HR ${b.hr} · RBI ${b.rbi} · OPS ${fmtRate(ops)}`;
 }
 
-type Drag = { kind: 'row'; index: number } | { kind: 'bench'; id: string } | null;
-type Mark = { index: number; mode: 'before' | 'after' | 'replace' } | null;
-
 /**
- * Batters / Fielders for today's game, in the same system as the Pitchers
- * view: the nine in batting order (spot, defensive position, player,
- * Effective, the four modifiers and vertical batting stats) and the bench as
- * a compact comparison. Drag a row up or down to change the batting order;
- * drag a bench player onto a row to bring him in, or a row onto the bench to
- * open that spot. Positions change with their badge (whoever had the
- * position takes the old one, so the defense stays valid).
+ * Step one on the phone: the squad's nine hitters in batting order. Drag a
+ * row by its handle to move him up or down the order (or use the handle's
+ * menu); tap the position badge to change his place, which swaps with whoever
+ * had it. There is no bench: every hitter in the squad plays.
  */
 export function BattersTab({ api }: { api: DraftApi }) {
   const { state: s, draft, update, period } = api;
   const club = userClub(s);
   const status = teamStatus(s, club.id);
   const order = draft.lineup.battingOrder;
-  const playing = new Set(order.map((x) => x.playerId).filter(Boolean));
-  const bench = club.roster
-    .map((id) => s.players[id])
-    .filter((p) => !p.isPitcher && !playing.has(p.id))
-    .map((p) => ({ p, v: valueAt(s, p, null, status) }))
-    .sort((a, b) => b.v.effective - a.v.effective || a.p.id.localeCompare(b.p.id));
-  const [drag, setDrag] = useState<Drag>(null);
-  const [mark, setMark] = useState<Mark>(null);
-  const [overBench, setOverBench] = useState(false);
-  const [picking, setPicking] = useState<number | null>(null);
-  const open = openSpot(draft);
-  // A bench player being dragged: the spots he plays naturally (or DH) light up, the rest fade
-  // (he can still take them, out of position).
-  const incoming = drag?.kind === 'bench' ? s.players[drag.id] : null;
-  const fit = (pos: LineupPosition) => (!incoming ? '' : natural(incoming, pos) ? 'can-drop' : 'off-drop');
-
-  const endDrag = () => {
-    setDrag(null);
-    setMark(null);
-    setOverBench(false);
-  };
-  // A drag that ends anywhere (outside a target, or cancelled) clears the markers.
-  useEffect(() => {
-    window.addEventListener('dragend', endDrag);
-    window.addEventListener('drop', endDrag);
-    return () => {
-      window.removeEventListener('dragend', endDrag);
-      window.removeEventListener('drop', endDrag);
-    };
-  }, []);
-  const rowDragOver = (index: number) => (e: DragEvent<HTMLLIElement>) => {
-    if (!drag) return;
-    e.preventDefault();
-    e.stopPropagation();
-    if (drag.kind === 'bench') {
-      if (mark?.index !== index || mark.mode !== 'replace') setMark({ index, mode: 'replace' });
-      return;
-    }
-    const r = e.currentTarget.getBoundingClientRect();
-    const mode = e.clientY < r.top + r.height / 2 ? 'before' : 'after';
-    if (mark?.index !== index || mark.mode !== mode) setMark({ index, mode });
-  };
-  // The drop reads who was dragged and where from the event itself (not from state set
-  // during the drag), so a quick drag still lands where the marker showed.
-  const rowDrop = (index: number) => (e: DragEvent<HTMLLIElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    const id = e.dataTransfer.getData('text/plain');
-    const from = order.findIndex((x) => x.playerId === id);
-    if (from < 0 && id && s.players[id] && !s.players[id].isPitcher) update(swapFromBench(draft, index, id));
-    else if (from >= 0) {
-      // Insert before or after the target row; the rows in between shift.
-      const r = e.currentTarget.getBoundingClientRect();
-      const insert = e.clientY < r.top + r.height / 2 ? index : index + 1;
-      const to = from < insert ? insert - 1 : insert;
-      if (to !== from) update(moveBatter(draft, from, to));
-    }
-    endDrag();
-  };
-  const lineupDrop = (e: DragEvent) => {
-    e.preventDefault();
-    const id = e.dataTransfer.getData('text/plain');
-    const benchPlayer = !!id && !playing.has(id) && !!s.players[id] && !s.players[id].isPitcher;
-    if (benchPlayer && open >= 0) update(swapFromBench(draft, open, id));
-    endDrag();
-  };
-  const benchDrop = (e: DragEvent) => {
-    e.preventDefault();
-    const from = order.findIndex((x) => x.playerId === e.dataTransfer.getData('text/plain'));
-    if (from >= 0) update(benchBatter(draft, from));
-    endDrag();
-  };
-  const reasons = (p: Player) => modifierReasons(s, p, status);
+  const { listRef, handle, rowProps } = useRowDrag((from, to) => update(moveBatter(draft, from, to)));
 
   return (
-    <div className="pitch-v4 bat-view">
-      <section
-        className="panel ps-staff"
-        onDragOver={(e) => {
-          if (drag?.kind === 'bench' && open >= 0) e.preventDefault();
-        }}
-        onDrop={lineupDrop}
-      >
-        <header className="panel-head">
-          <h2>Starting lineup</h2>
-          <small className="muted">Drag a row to change the batting order, or bring a player in from the bench. Click a position to change it.</small>
-        </header>
-        <ol className="ps-rows bat-rows">
-          {/* Column labels for the compact rows (wide screens): the modifiers' icons live here once. */}
-          <li className="bat-head" aria-hidden="true">
-            <span className="bh-order">#</span>
-            <span className="bh-pos">Pos</span>
-            <span className="bh-player">Player</span>
-            <span className="bh-eff">Effective</span>
-            <span className="pr-mods">
-              {MODIFIER_KEYS.map((k) => (
-                <span key={k} className="pr-mod">
-                  {modIcon(k, 1)}
-                  <small>{MODIFIER_LABEL[k]}</small>
-                </span>
-              ))}
-            </span>
-            <span className="bh-stats">Stats</span>
-          </li>
-          {order.map((slot, i) => {
-            const p = slot.playerId ? s.players[slot.playerId] : null;
-            const v = p ? valueAt(s, p, slot.position, status) : null;
-            const marked = mark?.index === i ? `mark-${mark.mode}` : '';
-            return (
-              <li
-                key={`${i}-${slot.playerId}`}
-                className={`ps-row bat-row ${p ? '' : 'empty'} ${marked} ${fit(slot.position)} ${drag?.kind === 'row' && drag.index === i ? 'dragging' : ''}`}
-                draggable={!!p}
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('text/plain', slot.playerId);
-                  e.dataTransfer.effectAllowed = 'move';
-                  setDrag({ kind: 'row', index: i });
-                }}
-                onDragEnd={endDrag}
-                onDragOver={rowDragOver(i)}
-                onDragLeave={() => setMark(null)}
-                onDrop={rowDrop(i)}
-                aria-label={`Batting ${ORDINAL[i]}: ${slot.position}${p ? `, ${playerName(p)}` : ', open'}`}
-              >
-                <span className="br-grip" title="Drag to move">
-                  <Icon name="grip" size={20} strokeWidth={3.5} />
-                  {p && <MoveMenu index={i} name={p.lastName} onMove={(to) => update(to === 'bench' ? benchBatter(draft, i) : moveBatter(draft, i, to))} />}
-                </span>
-                <span className="pr-num">{i + 1}</span>
-                <PositionBadge slotIndex={i} player={p} draftOrder={order} state={s} onChange={(pos) => update(setPosition(draft, i, pos))} />
-                {p && v ? (
-                  <>
-                    <span className="pr-player">
-                      <PlayerIdent
-                        state={s}
-                        player={p}
-                        size={34}
-                        sub={`#${p.number} · Bats ${p.bats} · ${p.positions.join('/')}`}
-                        badge={<Notes notes={playerNotes(s, p, { starting: true })} max={1} />}
-                        extra={
-                          <button className="pr-instr" onClick={() => api.openTactics(p.id)} title={`Instructions: ${instructionSummary(s, p)}`} aria-label={`Instructions for ${p.lastName}`}>
-                            <Icon name="clipboard" size={14} />
-                          </button>
-                        }
-                      />
-                    </span>
-                    <EffBlock base={v.base} eff={v.effective} label />
-                    <ModColumns mods={v.mods} reasons={reasons(p)} />
-                    <StatBlock stats={batterStats(s, p, period)} />
-                    <ChangeButton label={`Change the ${ORDINAL[i]} batter (${p.lastName})`} onClick={() => setPicking(i)} />
-                  </>
-                ) : (
-                  <button className="rc-assign pr-empty" onClick={() => setPicking(i)}>
-                    + Bring in a player
-                  </button>
-                )}
-              </li>
-            );
-          })}
-        </ol>
-      </section>
-
-      <section
-        className={`panel ps-bench ${overBench ? 'drop' : ''}`}
-        onDragOver={(e) => {
-          if (drag?.kind !== 'row') return;
-          e.preventDefault();
-          if (!overBench) setOverBench(true);
-        }}
-        onDragLeave={() => setOverBench(false)}
-        onDrop={benchDrop}
-      >
-        <header className="panel-head">
-          <h2>Bench</h2>
-          <small className="muted">Drag a player onto a lineup spot, or use the ⋮ handle. Drop a starter here to take him out.</small>
-        </header>
-        {bench.length === 0 ? (
-          <p className="small muted ps-none">Everyone is in the lineup.</p>
-        ) : (
-          <ol className="ps-rows bat-rows bench-rows">
-            <li className="bat-head bench-head" aria-hidden="true">
-              <span className="bh-player">Player</span>
-              <span className="bh-eff">Effective</span>
-              <span className="pr-mods">
-                {MODIFIER_KEYS.map((k) => (
-                  <span key={k} className="pr-mod">
-                    {modIcon(k, 1)}
-                    <small>{MODIFIER_LABEL[k]}</small>
-                  </span>
-                ))}
+    <section className="m-lineup" aria-label="Batting order">
+      <p className="m-hint small muted">Drag ⋮ to change the batting order. Tap a position to move a player.</p>
+      <ol className="m-rows" ref={listRef}>
+        {order.map((slot, i) => {
+          const p = s.players[slot.playerId];
+          if (!p) return null;
+          const v = valueAt(s, p, slot.position, status);
+          const drag = rowProps(i);
+          return (
+            <li key={p.id} data-row className={`m-row ${drag.className}`} style={drag.style} aria-label={`Batting ${ORDINAL[i]}: ${playerName(p)}, ${slot.position}`}>
+              <span className="m-grip" {...handle(i)} title="Drag to move">
+                <Icon name="grip" size={22} strokeWidth={3.5} />
+                <MoveMenu index={i} name={p.lastName} onMove={(to) => update(moveBatter(draft, i, to))} />
               </span>
-              <span className="bh-stats">Stats</span>
+              <span className="m-num">{i + 1}</span>
+              <PositionBadge slotIndex={i} player={p} order={order} state={s} onChange={(pos) => update(setPosition(draft, i, pos))} />
+              <span className="m-who">
+                <Portrait state={s} player={p} size={34} nested />
+                <span className="m-id">
+                  <strong>
+                    {playerName(p)}
+                    <button className="pr-instr" onClick={() => api.openTactics(p.id)} title={`Instructions: ${instructionSummary(s, p)}`} aria-label={`Instructions for ${p.lastName}`}>
+                      <Icon name="clipboard" size={14} />
+                    </button>
+                  </strong>
+                  <small>
+                    Bats {p.bats} · {p.positions.join('/')}
+                  </small>
+                </span>
+              </span>
+              <EffBlock base={v.base} eff={v.effective} />
+              <span className="m-sub">
+                <ModRow mods={v.mods} reasons={modifierReasons(s, p, status)} />
+                <small className="m-stats">{batterLine(s, p, period)}</small>
+              </span>
             </li>
-            {bench.map(({ p, v }) => (
-              <li
-                key={p.id}
-                className={`ps-row bat-row bench-row ${drag?.kind === 'bench' && drag.id === p.id ? 'dragging' : ''}`}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('text/plain', p.id);
-                  e.dataTransfer.effectAllowed = 'move';
-                  setDrag({ kind: 'bench', id: p.id });
-                }}
-                onDragEnd={endDrag}
-                aria-label={`Bench: ${playerName(p)}`}
-              >
-                <span className="br-grip" title="Drag onto a lineup spot">
-                  <Icon name="grip" size={20} strokeWidth={3.5} />
-                  <PutIn state={s} player={p} order={order} onPut={(i) => update(swapFromBench(draft, i, p.id))} />
-                </span>
-                <span className="pr-player">
-                  <PlayerIdent state={s} player={p} size={34} sub={`#${p.number} · Bats ${p.bats} · ${p.positions.join('/')}`} badge={<Notes notes={playerNotes(s, p, { starting: false })} max={1} />} />
-                </span>
-                <EffBlock base={v.base} eff={v.effective} label />
-                <ModColumns mods={v.mods} reasons={reasons(p)} />
-                <StatBlock stats={batterStats(s, p, period)} />
-              </li>
-            ))}
-          </ol>
-        )}
-      </section>
-
-      {picking !== null && order[picking] && (
-        <BenchPicker
-          state={s}
-          status={status}
-          index={picking}
-          position={order[picking].position}
-          current={order[picking].playerId ? s.players[order[picking].playerId] : null}
-          bench={bench.map((b) => b.p)}
-          onPick={(id) => {
-            update(swapFromBench(draft, picking, id));
-            setPicking(null);
-          }}
-          onBench={() => {
-            update(benchBatter(draft, picking));
-            setPicking(null);
-          }}
-          onClose={() => setPicking(null)}
-        />
-      )}
-    </div>
+          );
+        })}
+      </ol>
+    </section>
   );
 }
 
 /** The defensive position as a badge; choosing another swaps with whoever had it. */
-function PositionBadge({ slotIndex, player, draftOrder, state, onChange }: { slotIndex: number; player: Player | null; draftOrder: { playerId: string; position: LineupPosition }[]; state: GameState; onChange: (pos: LineupPosition) => void }) {
-  const pos = draftOrder[slotIndex].position;
-  const off = player && !natural(player, pos);
+function PositionBadge({ slotIndex, player, order, state, onChange }: { slotIndex: number; player: Player; order: { playerId: string; position: LineupPosition }[]; state: GameState; onChange: (pos: LineupPosition) => void }) {
+  const pos = order[slotIndex].position;
+  const off = !natural(player, pos);
   return (
-    <span className={`br-pos ${off ? 'off' : ''}`} title={off ? `Out of position: fielding −${BALANCE.match.outOfPositionFieldingPenalty}` : 'Defensive position'}>
+    <span className={`m-pos ${off ? 'off' : ''}`} title={off ? `Out of position: fielding −${BALANCE.match.outOfPositionFieldingPenalty}` : 'Position: tap to change'}>
       <span aria-hidden="true">{pos}</span>
-      <select
-        aria-label={`Position for the ${ORDINAL[slotIndex]} batter${player ? ` (${player.lastName})` : ''}`}
-        value={pos}
-        onChange={(e) => onChange(e.target.value as LineupPosition)}
-      >
+      <select aria-label={`Position for ${player.lastName}`} value={pos} onChange={(e) => onChange(e.target.value as LineupPosition)}>
         {LINEUP_POSITIONS.map((p) => {
-          const holder = draftOrder.find((x, j) => j !== slotIndex && x.position === p);
-          const holderName = holder?.playerId ? state.players[holder.playerId]?.lastName : null;
+          const holder = order.find((x, j) => j !== slotIndex && x.position === p);
           return (
             <option key={p} value={p}>
               {p}
-              {player && !natural(player, p) ? ' (out of position)' : ''}
-              {holder ? ` · swap with ${holderName ?? 'open spot'}` : ''}
+              {natural(player, p) ? '' : ' (out of position)'}
+              {holder ? ` · swap with ${state.players[holder.playerId]?.lastName ?? '?'}` : ''}
             </option>
           );
         })}
@@ -326,16 +111,16 @@ function PositionBadge({ slotIndex, player, draftOrder, state, onChange }: { slo
   );
 }
 
-/** The row handle as a menu: move to another batting spot or to the bench without dragging. */
-function MoveMenu({ index, name, onMove }: { index: number; name: string; onMove: (to: number | 'bench') => void }) {
+/** The handle's menu: move to another batting spot without dragging (keyboard, screen readers). */
+function MoveMenu({ index, name, onMove }: { index: number; name: string; onMove: (to: number) => void }) {
   return (
     <select
-      className="ps-use"
-      aria-label={`Move ${name}`}
+      className="m-menu"
+      aria-label={`Move ${name} in the batting order`}
       value=""
+      onPointerDown={(e) => e.stopPropagation()}
       onChange={(e) => {
-        const v = e.target.value;
-        if (v) onMove(v === 'bench' ? 'bench' : Number(v));
+        if (e.target.value !== '') onMove(Number(e.target.value));
       }}
     >
       <option value="">Move {name}…</option>
@@ -346,106 +131,6 @@ function MoveMenu({ index, name, onMove }: { index: number; name: string; onMove
           </option>
         ),
       )}
-      <option value="bench">To the bench</option>
     </select>
-  );
-}
-
-/** The bench row handle as a menu: put him in for a lineup spot (he takes that spot's position). */
-function PutIn({ state, player, order, onPut }: { state: GameState; player: Player; order: { playerId: string; position: LineupPosition }[]; onPut: (index: number) => void }) {
-  return (
-    <select
-      className="ps-use"
-      aria-label={`Put ${player.lastName} in`}
-      value=""
-      onChange={(e) => {
-        if (e.target.value !== '') onPut(Number(e.target.value));
-      }}
-    >
-      <option value="">Put {player.lastName} in for…</option>
-      {order.map((slot, i) => (
-        <option key={i} value={i}>
-          {i + 1} · {slot.position} · {slot.playerId ? state.players[slot.playerId]?.lastName : 'open'}
-          {natural(player, slot.position) ? '' : ' (out of position)'}
-        </option>
-      ))}
-    </select>
-  );
-}
-
-/** Choose who bats in a spot: bench players by effective value at that spot's position. */
-function BenchPicker({
-  state,
-  status,
-  index,
-  position,
-  current,
-  bench,
-  onPick,
-  onBench,
-  onClose,
-}: {
-  state: GameState;
-  status: TeamStatus;
-  index: number;
-  position: LineupPosition;
-  current: Player | null;
-  bench: Player[];
-  onPick: (id: string) => void;
-  onBench: () => void;
-  onClose: () => void;
-}) {
-  const ref = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    ref.current?.querySelector<HTMLButtonElement>('.ps-pick-list button')?.focus();
-    const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [onClose]);
-  const rows = bench.map((p) => ({ p, v: valueAt(state, p, position, status) })).sort((a, b) => b.v.effective - a.v.effective || a.p.id.localeCompare(b.p.id));
-  return (
-    <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal role-picker" role="dialog" aria-modal="true" aria-label={`Batting ${ORDINAL[index]}, ${position}`} onClick={(e) => e.stopPropagation()} ref={ref}>
-        <header className="rp-head">
-          <h2>
-            Batting {ORDINAL[index]} · {position}
-          </h2>
-          <button className="icon-btn small" onClick={onClose} aria-label="Close">
-            ✕
-          </button>
-        </header>
-        <p className="small muted">
-          Values are at {position}{position === 'DH' ? '' : ` (out of position costs ${BALANCE.match.outOfPositionFieldingPenalty} fielding)`}. {current ? `${current.lastName} goes to the bench.` : 'The spot is open.'}
-        </p>
-        {rows.length === 0 ? (
-          <p className="muted">Nobody on the bench.</p>
-        ) : (
-          <ul className="ps-pick-list">
-            {rows.map(({ p, v }) => (
-              <li key={p.id}>
-                <Portrait state={state} player={p} size={40} nested />
-                <span className="pr-id">
-                  <strong>{playerName(p)}</strong>
-                  <small>
-                    {p.positions.join('/')} · Bats {p.bats}
-                    {natural(p, position) ? '' : ' · out of position'}
-                  </small>
-                </span>
-                <EffBlock base={v.base} eff={v.effective} />
-                <ModChips mods={v.mods} reasons={modifierReasons(state, p, status)} compact />
-                <button className="btn btn-small btn-secondary" onClick={() => onPick(p.id)}>
-                  Select
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
-        {current && (
-          <button className="link" onClick={onBench}>
-            Take {current.lastName} out (leave the spot open)
-          </button>
-        )}
-      </div>
-    </div>
   );
 }

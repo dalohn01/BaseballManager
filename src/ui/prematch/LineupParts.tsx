@@ -95,3 +95,20 @@ export function ChangeButton({ label, onClick }: { label: string; onClick: () =>
     </button>
   );
 }
+
+/** The modifiers in one compact line for the phone cards: icon and value each, the name in the tooltip. */
+export function ModRow({ mods, reasons }: { mods: Modifiers; reasons: Record<ModifierKey, string> }) {
+  return (
+    <span className="m-mods">
+      {MODIFIER_KEYS.map((k) => (
+        <span key={k} className={`m-mod pm-${tone(mods[k])}`} title={`${MODIFIER_LABEL[k]} ${signed(mods[k])} · ${reasons[k]}`}>
+          {modIcon(k, mods[k])}
+          <ModBox value={mods[k]} />
+          <span className="sr-only">
+            {MODIFIER_LABEL[k]}: {reasons[k]}
+          </span>
+        </span>
+      ))}
+    </span>
+  );
+}

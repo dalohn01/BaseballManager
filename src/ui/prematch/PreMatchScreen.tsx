@@ -1,8 +1,8 @@
 import { closeLineup } from '../match/MatchDay';
 import { useState } from 'react';
 import { optionBlocker } from '../../application/engine';
-import { draftErrors, draftFromClub, draftIssues, suggestPitching, type LineupDraft } from '../../domain/lineupDraft';
-import { playerNotes, type StatsPeriod } from '../../domain/playerStats';
+import { draftErrors, draftFromClub, draftIssues, type LineupDraft } from '../../domain/lineupDraft';
+import type { StatsPeriod } from '../../domain/playerStats';
 import type { EventInstance, GameState } from '../../domain/state';
 import { clubName, userClub } from '../../domain/state';
 import { Crest } from '../components/art';
@@ -51,8 +51,8 @@ function saveDraft(eventId: string, d: LineupDraft | null) {
   }
 }
 /**
- * Pre-match team selection: Field, Batting order and Pitchers edit one shared
- * draft. Confirm sends the draft together with the league game decision, so the
+ * Pre-match team selection, phone first: the nine batters, then the five
+ * pitchers, edit one shared draft. Confirm sends the draft together with the league game decision, so the
  * lineup and the game are applied as one unit (one Time charge, no double game).
  */
 export function PreMatchScreen({ ev }: { ev: EventInstance }) {
@@ -101,9 +101,6 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
     window.scrollTo({ top: 0 });
   };
 
-  const starters = draft.lineup.battingOrder.map((x) => s.players[x.playerId]).filter(Boolean);
-  const needRest = starters.filter((p) => playerNotes(s, p, { starting: true }).some((n) => n.text === 'Needs rest')).length;
-  const promisedOut = s.promises.filter((pr) => pr.status === 'active' && !starters.some((p) => p.id === pr.playerId)).length;
 
   const confirm = () => {
     void c
@@ -112,7 +109,7 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
   };
 
   return (
-    <div className="prematch">
+    <div className="prematch m-prematch">
       {/* One compact bar: the way back, the title and the matchup; the lineup gets the height. */}
       <header className="pm-head">
         <div className="pm-titles">
@@ -167,20 +164,12 @@ export function PreMatchScreen({ ev }: { ev: EventInstance }) {
           )}
           {tab === 'pitchers' && (
             <>
-              <QuickButton icon="trophy" label="Suggest setup" onClick={() => quick('Suggest setup', suggestPitching(s, draft))} />
               <QuickButton icon="back" label="Reset" onClick={() => quick('Reset', { ...draft, lineup: { ...draft.lineup, pitcherId: opened.lineup.pitcherId }, plan: { ...draft.plan, bullpen: opened.plan.bullpen } })} />
             </>
           )}
         </div>
         <div className="pm-status" aria-live="polite">
-          {(tab === 'batters' ? batterErrors : errors).length ? (
-            <span className="note-chip note-warn">! {(tab === 'batters' ? batterErrors : errors)[0].text}</span>
-          ) : (
-            <>
-              {needRest > 0 && <span className="note-chip note-warn">! {needRest} starter{needRest > 1 ? 's' : ''} need{needRest > 1 ? '' : 's'} rest</span>}
-              {promisedOut > 0 && <span className="note-chip note-warn">! {promisedOut} promised player{promisedOut > 1 ? 's are' : ' is'} on the bench</span>}
-            </>
-          )}
+          {(tab === 'batters' ? batterErrors : errors).length > 0 && <span className="note-chip note-warn">! {(tab === 'batters' ? batterErrors : errors)[0].text}</span>}
         </div>
         <div className="pm-confirm-bar">
           {tab === 'batters' ? (

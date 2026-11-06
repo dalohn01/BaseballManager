@@ -33,7 +33,8 @@ type IconName =
   | 'snow'
   | 'shoe'
   | 'smile'
-  | 'grip';
+  | 'grip'
+  | 'lock';
 
 const PATHS: Record<IconName, string> = {
   cash: 'M3 7h18v10H3z M12 9.5a2.5 2.5 0 1 0 0 5a2.5 2.5 0 1 0 0-5 M6 9.5v5 M18 9.5v5',
@@ -69,6 +70,7 @@ const PATHS: Record<IconName, string> = {
   shoe: 'M3 17v-5.5l4.5-1.5 2-4h3l1.5 4.5c2.5 1 5.5 1.2 7 3V17z M3 17h18v2H3z',
   smile: 'M12 3a9 9 0 1 0 0 18a9 9 0 1 0 0-18 M8.5 14.5c1 1.4 2.2 2 3.5 2s2.5-.6 3.5-2 M9 9.5h.01 M15 9.5h.01',
   grip: 'M12 5h.01 M12 12h.01 M12 19h.01',
+  lock: 'M6 11h12v9H6z M8.5 11V8a3.5 3.5 0 0 1 7 0v3',
 };
 
 const FILLED: Partial<Record<IconName, boolean>> = { influence: true, play: true, forward: true, crown: true, star: true, flame: true, shoe: true };
