@@ -26,7 +26,7 @@ export function FacilitiesView() {
   const select = (id: FacilityId) => {
     setSelected(id);
     // On narrow screens the detail panel sits below the cards.
-    if (window.matchMedia?.('(max-width: 900px)').matches) detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if ((document.getElementById('main')?.clientWidth ?? window.innerWidth) <= 900) detailRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
   return (
